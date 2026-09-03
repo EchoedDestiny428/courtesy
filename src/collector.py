@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import os
 import re
 import shutil
+import socket
 import subprocess
 import time
 from typing import Dict, Any, List, Optional
@@ -10,6 +12,9 @@ import httpx
 from src.config import get_servers, load_config
 
 logger = logging.getLogger("courtesy.collector")
+
+# Detect if running directly on the cst gateway
+IS_ON_CST = socket.gethostname().lower() in ("cst", "cst.local") or os.path.exists("/opt/courtesy")
 
 # In-memory metrics cache: server_id -> metrics dict
 _metrics_cache: Dict[str, Dict[str, Any]] = {}
@@ -73,9 +78,6 @@ async def fetch_ssh_metrics(server: Dict[str, Any]) -> Dict[str, Any]:
     ssh_host = server.get("ssh_host")
     ssh_user = server.get("ssh_user")
     
-    if not ssh_host:
-        return {}
-
     # Command to run on the target host
     cmd_str = (
         "nvidia-smi --query-gpu=index,name,temperature.gpu,utilization.gpu,memory.total,memory.used,fan.speed "
@@ -84,34 +86,51 @@ async def fetch_ssh_metrics(server: Dict[str, Any]) -> Dict[str, Any]:
         "echo '---CPU---'; grep 'cpu ' /proc/stat"
     )
 
-    # Determine command based on whether we are already on cst or need to hop
-    # Check if we have ssh command available
-    if not shutil.which("ssh"):
-        return {}
-
     try:
-        # If the target is 'cst' (Raspberry Pi gateway)
-        if server_id == "cst":
-            target_ssh = f"{ssh_user}@{ssh_host}" if ssh_user else ssh_host
-            proc = await asyncio.create_subprocess_exec(
-                "ssh", "-o", "ConnectTimeout=3", "-o", "BatchMode=yes", target_ssh,
-                "echo '---MEM---'; free -m; echo '---CPU---'; grep 'cpu ' /proc/stat",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
+        out_text = ""
+        if IS_ON_CST:
+            # We are running on the cst gateway node directly
+            if server_id == "cst":
+                proc = await asyncio.create_subprocess_shell(
+                    "free -m; echo '---CPU---'; grep 'cpu ' /proc/stat",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=3.0)
+                out_text = "---MEM---\n" + stdout.decode("utf-8", errors="ignore")
+            elif ssh_host:
+                proc = await asyncio.create_subprocess_exec(
+                    "ssh", "-o", "ConnectTimeout=3", "-o", "BatchMode=yes", ssh_host,
+                    cmd_str,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=4.0)
+                out_text = stdout.decode("utf-8", errors="ignore")
         else:
-            # Connect via cst jump host
-            remote_cmd = f"ssh -o ConnectTimeout=3 -o BatchMode=yes {ssh_host} \"{cmd_str}\""
-            proc = await asyncio.create_subprocess_exec(
-                "ssh", "-o", "ConnectTimeout=4", "-o", "BatchMode=yes", "cst@cst",
-                remote_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
+            # External runner (e.g. Windows dev machine): hop through cst gateway via SSH
+            if not shutil.which("ssh"):
+                return {}
+            if server_id == "cst":
+                proc = await asyncio.create_subprocess_exec(
+                    "ssh", "-o", "ConnectTimeout=3", "-o", "BatchMode=yes", "cst@cst",
+                    "free -m; echo '---CPU---'; grep 'cpu ' /proc/stat",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=4.0)
+                out_text = "---MEM---\n" + stdout.decode("utf-8", errors="ignore")
+            elif ssh_host:
+                remote_cmd = f"ssh -o ConnectTimeout=3 -o BatchMode=yes {ssh_host} \"{cmd_str}\""
+                proc = await asyncio.create_subprocess_exec(
+                    "ssh", "-o", "ConnectTimeout=4", "-o", "BatchMode=yes", "cst@cst",
+                    remote_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+                out_text = stdout.decode("utf-8", errors="ignore")
 
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-        out_text = stdout.decode("utf-8", errors="ignore")
-        
         gpu_part = out_text.split("---MEM---")[0] if "---MEM---" in out_text else out_text
         mem_part = ""
         if "---MEM---" in out_text:

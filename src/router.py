@@ -104,28 +104,60 @@ def resolve_route(model_query: str = "auto", preferred_server: Optional[str] = N
 
     # 2. Check if a specific model was requested across servers
     if clean_model not in ("auto", "default", "codex", "claude", "claude-3-5-sonnet", "coder", ""):
-        # Find which server hosts this exact model
+        # Normalize search tokens
+        is_7b_req = any(tok in clean_model.lower() for tok in ("7b", "fast"))
+        is_14b_req = any(tok in clean_model.lower() for tok in ("14b", "heavy", "reasoning"))
+        
+        matching_candidates = []
         for s in servers:
             s_id = s.get("id")
             s_metrics = metrics.get(s_id, {})
-            s_models = [m.get("name") for m in s_metrics.get("models", [])]
-            if clean_model in s_models:
-                return RouteTarget(
-                    server_id=s_id,
-                    server_name=s.get("name", s_id),
-                    host=s.get("host", "127.0.0.1"),
-                    port=s.get("port", 11434),
-                    model_name=clean_model,
-                    server_type=s.get("type", "ollama")
-                )
+            if not s_metrics.get("online", True):
+                continue
 
-    # 3. Modular Auto Load-Balancing & Routing
-    # Evaluate all online candidate servers
+            s_models = [m.get("name") for m in s_metrics.get("models", [])]
+            found_model = None
+
+            # Exact match
+            if clean_model in s_models:
+                found_model = clean_model
+            else:
+                # Fuzzy / tag match
+                for m_name in s_models:
+                    if clean_model.lower() in m_name.lower():
+                        found_model = m_name
+                        break
+                    if is_14b_req and "14b" in m_name.lower():
+                        found_model = m_name
+                        break
+                    if is_7b_req and "7b" in m_name.lower():
+                        found_model = m_name
+                        break
+
+            if found_model:
+                active_jobs = get_active_request_count(s_id)
+                latency = s_metrics.get("latency_ms", 50.0) or 50.0
+                score = active_jobs * 100 + latency
+                matching_candidates.append((score, s, found_model))
+
+        if matching_candidates:
+            matching_candidates.sort(key=lambda c: c[0])
+            best_match = matching_candidates[0]
+            srv = best_match[1]
+            return RouteTarget(
+                server_id=srv["id"],
+                server_name=srv.get("name", srv["id"]),
+                host=srv.get("host", "127.0.0.1"),
+                port=srv.get("port", 11434),
+                model_name=best_match[2],
+                server_type=srv.get("type", "ollama")
+            )
+
+    # 3. Modular Auto Load-Balancing & Routing across all online nodes
     candidates = []
     for s in servers:
         s_id = s.get("id")
         s_metric = metrics.get(s_id, {})
-        # Check if online (or assume online if not yet polled)
         is_online = s_metric.get("online", True)
         if not is_online:
             continue
@@ -138,7 +170,7 @@ def resolve_route(model_query: str = "auto", preferred_server: Optional[str] = N
         if not chosen_model and s_metric.get("models"):
             chosen_model = s_metric["models"][0].get("name")
         if not chosen_model:
-            chosen_model = "qwen2.5-coder:7b-instruct-q4_K_M"
+            chosen_model = "qwen2.5-coder:7b"
 
         score = active_jobs * 100 + latency
         candidates.append((score, s, chosen_model))
@@ -163,7 +195,7 @@ def resolve_route(model_query: str = "auto", preferred_server: Optional[str] = N
         server_name=default_srv.get("name", default_srv["id"]),
         host=default_srv.get("host", "127.0.0.1"),
         port=default_srv.get("port", 11434),
-        model_name=default_srv.get("preferred_model", "qwen2.5-coder:7b-instruct-q4_K_M"),
+        model_name=default_srv.get("preferred_model", "qwen2.5-coder:7b"),
         server_type=default_srv.get("type", "ollama")
     )
 

@@ -1,14 +1,14 @@
-// Courtesy Luxury Codex & AI Cluster Fleet Desktop Client
+// Courtesy Luxury Codex & AI Cluster Fleet - Antigravity IDE Client
 
-let currentTab = 'fleet';
+let currentTab = 'codex';
 let chatHistory = [];
 let ws = null;
 let currentServers = [];
 let isStreaming = false;
 
-// API Base URL (defaults to current host in web browser, or 100.107.249.92:8000 in desktop Electron)
-let apiBaseUrl = (window.location.protocol === 'file:' || !window.location.host) 
-  ? 'http://100.107.249.92:8000' 
+// API Base URL (defaults to Pi gateway 100.107.249.92:8000, or local if hosted there)
+let apiBaseUrl = (window.location.protocol === 'file:' || !window.location.host || window.location.hostname === 'localhost')
+  ? 'http://100.107.249.92:8000'
   : window.location.origin;
 
 // Presets for the Codex Assistant
@@ -16,7 +16,22 @@ const PROMPT_PRESETS = {
   coder: "You are Courtesy Codex, a world-class autonomous AI coding assistant. You write production-ready, clean, well-tested, robust code. Follow modern best practices, handle edge cases, and provide concise, insightful explanations.",
   bughunter: "You are an elite software auditor and bug hunter. Analyze the code, identify edge cases, vulnerabilities, race conditions, and logic errors. Provide precise code fixes and explanations.",
   refactor: "You are an expert software architect. Refactor the given code for maximum readability, maintainability, modularity, and high performance while preserving exact functional correctness.",
-  tests: "You are a senior test automation engineer. Write comprehensive unit and integration tests covering edge cases, happy paths, boundary conditions, and mocks where necessary."
+  tests: "You are a senior test automation engineer. Write comprehensive unit and integration tests covering edge cases, happy paths, boundary conditions, and mocks where necessary.",
+  explainer: "You are a senior codebase analyst and mentor. Explain the architectural decisions, mechanics, and patterns of the given code with clear examples."
+};
+
+// Language extensions map
+const EXT_MAP = {
+  python: 'py',
+  javascript: 'js',
+  typescript: 'ts',
+  rust: 'rs',
+  go: 'go',
+  cpp: 'cpp',
+  html: 'html',
+  sql: 'sql',
+  bash: 'sh',
+  json: 'json'
 };
 
 // Initialize Marked.js
@@ -92,9 +107,11 @@ function setApiEndpoint(url) {
   apiBaseUrl = url;
   const label = document.getElementById('current-endpoint-label');
   if (label) {
-    label.innerText = url.includes('100.107.249.92') ? 'Pi: 100.107.249.92' : 'Local: 8000';
+    label.innerText = url.includes('100.107.249.92') ? 'Pi: 100.107.249.92:8000' : 'Local: 8000';
   }
-  if (ws) ws.close();
+  if (ws) {
+    try { ws.close(); } catch (e) {}
+  }
   initWebSocket();
   fetchServersRest();
 }
@@ -102,16 +119,18 @@ function setApiEndpoint(url) {
 // ================= Tab Switching =================
 function switchTab(tabId) {
   currentTab = tabId;
-  const tabs = ['fleet', 'codex', 'ide'];
+  const tabs = ['codex', 'fleet', 'ide'];
   tabs.forEach(t => {
     const sec = document.getElementById(`tab-${t}`);
     const btn = document.getElementById(`tab-btn-${t}`);
-    if (t === tabId) {
-      sec.classList.remove('hidden');
-      btn.className = "tab-btn px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all bg-gold-gradient text-slate-950 shadow-sm";
-    } else {
-      sec.classList.add('hidden');
-      btn.className = "tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all text-[var(--text-muted)] hover:text-[var(--text-main)]";
+    if (sec && btn) {
+      if (t === tabId) {
+        sec.classList.remove('hidden');
+        btn.className = "tab-btn px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all bg-gold-gradient text-slate-950 shadow-sm";
+      } else {
+        sec.classList.add('hidden');
+        btn.className = "tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all text-[var(--text-muted)] hover:text-[var(--text-main)]";
+      }
     }
   });
 
@@ -136,6 +155,7 @@ function initWebSocket() {
         if (data.metrics && data.summary) {
           renderClusterSummary(data.summary, data.metrics);
           renderServers(data.metrics);
+          renderGpuActivityStrip(data.metrics);
         }
       } catch (e) {
         console.error("Error parsing telemetry message:", e);
@@ -147,10 +167,10 @@ function initWebSocket() {
     };
 
     ws.onerror = () => {
-      ws.close();
+      try { ws.close(); } catch (e) {}
     };
   } catch (e) {
-    setInterval(fetchServersRest, 4000);
+    setInterval(fetchServersRest, 3500);
   }
 }
 
@@ -160,14 +180,23 @@ async function fetchServersRest() {
     const servers = await res.json();
     const summaryRes = await fetch(`${apiBaseUrl}/api/cluster`);
     const summary = await summaryRes.json();
+    currentServers = servers;
+
     renderClusterSummary(summary);
     renderServersFromRest(servers);
 
     const map = {};
     servers.forEach(s => {
-      map[s.id] = { id: s.id, online: s.status?.online, models: s.status?.models || [] };
+      map[s.id] = { 
+        id: s.id, 
+        name: s.name,
+        online: s.status?.online, 
+        models: s.status?.models || [],
+        gpus: s.status?.gpus || []
+      };
     });
     updateModelDropdown(map);
+    renderGpuActivityStrip(map);
   } catch (e) {
     console.debug("REST polling failed:", e);
   }
@@ -187,16 +216,21 @@ function triggerManualRefresh() {
 function renderClusterSummary(summary, metricsMap = null) {
   const titleNodesEl = document.getElementById('titlebar-nodes');
   const titleGpusEl = document.getElementById('titlebar-gpus');
+  const fleetCountEl = document.getElementById('tab-fleet-count');
 
   if (titleNodesEl) {
     titleNodesEl.innerText = `${summary.online_nodes} / ${summary.total_nodes} Nodes Active`;
   }
   if (titleGpusEl) {
-    titleGpusEl.innerText = `${summary.total_gpus}x GPUs (${summary.total_vram_gb} GB VRAM)`;
+    titleGpusEl.innerText = `${summary.total_gpus}x Quadro P2000 (${summary.total_vram_gb}GB)`;
+  }
+  if (fleetCountEl) {
+    fleetCountEl.innerText = summary.online_nodes;
   }
 
   if (metricsMap) {
     updateModelDropdown(metricsMap);
+    renderGpuActivityStrip(metricsMap);
   }
 }
 
@@ -205,13 +239,20 @@ function updateModelDropdown(metricsMap) {
   if (!select) return;
 
   const currentVal = select.value;
-  let optionsHtml = `<option value="auto">✨ Auto Load-Balance (Best Node)</option>`;
+  let optionsHtml = `
+    <option value="auto">✨ Auto Load-Balance (Best Node)</option>
+    <option value="qwen2.5-coder:7b">🚀 Cluster: Qwen 2.5 Coder 7B (Fastest)</option>
+    <option value="qwen2.5-coder:14b">🧠 Cluster: Qwen 2.5 Coder 14B (Heavy Reasoning)</option>
+  `;
 
+  const nodeGroups = {};
   Object.values(metricsMap).forEach(s => {
     if (s.online && s.models && s.models.length > 0) {
       s.models.forEach(m => {
         const val = `${s.id}/${m.name}`;
-        const label = `[${s.id}] ${m.name} (${m.size_gb}GB)`;
+        const is14b = m.name.includes('14b');
+        const icon = is14b ? '🧠' : '⚡';
+        const label = `${icon} [${s.id}] ${m.name} (${m.size_gb || '4.7'}GB)`;
         optionsHtml += `<option value="${val}">${label}</option>`;
       });
     }
@@ -220,6 +261,33 @@ function updateModelDropdown(metricsMap) {
   select.innerHTML = optionsHtml;
   if (select.querySelector(`option[value="${currentVal}"]`)) {
     select.value = currentVal;
+  }
+}
+
+function renderGpuActivityStrip(metricsMap) {
+  const container = document.getElementById('gpu-activity-meters');
+  if (!container) return;
+
+  const items = [];
+  Object.values(metricsMap).forEach(s => {
+    if (s.online && s.gpus && s.gpus.length > 0) {
+      s.gpus.forEach(g => {
+        const pct = g.vram_percent || Math.round((g.vram_used_mb / (g.vram_total_mb || 5120)) * 100);
+        items.push(`
+          <div class="flex items-center gap-2 px-2 py-0.5 rounded-lg bg-[var(--bg-muted)] border border-[var(--border-app)]">
+            <span class="text-[var(--text-secondary)] font-semibold">${s.id}/GPU${g.index}</span>
+            <div class="w-12 bg-[var(--bg-input)] h-1.5 rounded-full overflow-hidden">
+              <div class="gold-progress-bar h-full rounded-full" style="width: ${Math.max(4, pct)}%"></div>
+            </div>
+            <span class="text-[10px] text-gold-500 font-bold">${g.temp_c || 30}°C</span>
+          </div>
+        `);
+      });
+    }
+  });
+
+  if (items.length > 0) {
+    container.innerHTML = items.join('');
   }
 }
 
@@ -275,7 +343,7 @@ function createServerCardHtml(s) {
   const gpus = s.gpus || [];
 
   return `
-    <div class="luxury-card rounded-2xl p-5 flex flex-col justify-between gap-4">
+    <div class="luxury-card rounded-2xl p-5 flex flex-col justify-between gap-4 animate-fade-up">
       
       <!-- Card Header -->
       <div class="flex items-start justify-between gap-3">
@@ -286,7 +354,7 @@ function createServerCardHtml(s) {
           </div>
           <div class="flex items-center gap-2 mt-1">
             <span class="font-mono text-[11px] text-[var(--text-dim)]">${s.host}:${s.port}</span>
-            ${s.latency_ms ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-mono border border-gold text-gold-500 bg-[var(--gold-subtle)]">${s.latency_ms} ms</span>` : ''}
+            ${s.latency_ms ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-mono border border-gold text-gold-500 bg-[var(--gold-subtle)] font-bold">${s.latency_ms} ms</span>` : ''}
           </div>
         </div>
 
@@ -294,7 +362,7 @@ function createServerCardHtml(s) {
           <span class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${isGateway ? 'bg-[var(--gold-subtle)] border border-gold text-gold-500' : 'bg-[var(--bg-muted)] border border-[var(--border-app)] text-[var(--text-muted)]'}">
             ${s.role || 'node'}
           </span>
-          <button onclick="toggleServer('${s.id}')" title="Toggle Node" class="p-1 rounded-lg bg-[var(--bg-muted)] hover:border-gold border border-[var(--border-app)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition">
+          <button onclick="toggleServer('${s.id}')" title="Toggle Node Power" class="p-1 rounded-lg bg-[var(--bg-muted)] hover:border-gold border border-[var(--border-app)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition">
             <i data-lucide="${s.enabled ? 'power' : 'power-off'}" class="w-3.5 h-3.5 ${s.enabled ? 'text-emerald-400' : 'text-slate-500'}"></i>
           </button>
         </div>
@@ -354,14 +422,14 @@ function createServerCardHtml(s) {
               ${s.models.map(m => `
                 <span class="px-2 py-0.5 rounded-md bg-[var(--bg-surface)] text-gold-500 text-[10px] font-mono border border-gold flex items-center gap-1 shadow-sm font-medium">
                   <span>${m.name}</span>
-                  <span class="text-[var(--text-dim)] text-[9px]">(${m.size_gb}GB)</span>
+                  <span class="text-[var(--text-dim)] text-[9px]">(${m.size_gb || '4.7'}GB)</span>
                 </span>
               `).join('')}
             </div>
           </div>
         ` : (isGateway ? `
           <div class="text-[11px] text-[var(--text-muted)] bg-[var(--bg-surface)] p-2 rounded-xl border border-[var(--border-app)]">
-            Role: Gateway & Tailscale Orchestrator.
+            Role: Gateway & Tailscale Mesh Orchestrator.
           </div>
         ` : `
           <div class="text-[11px] text-[var(--text-dim)] italic">No models detected on node.</div>
@@ -440,13 +508,89 @@ async function deleteServer(serverId) {
   }
 }
 
+// ================= Antigravity Code Workbench / Scratchpad =================
+function handleLanguageChange() {
+  const lang = document.getElementById('editor-language').value;
+  const ext = EXT_MAP[lang] || 'txt';
+  const nameInput = document.getElementById('editor-filename');
+  const parts = nameInput.value.split('.');
+  if (parts.length > 1) {
+    parts.pop();
+    nameInput.value = `${parts.join('.')}.${ext}`;
+  } else {
+    nameInput.value = `${nameInput.value}.${ext}`;
+  }
+}
+
+function handleEditorTabKey(event) {
+  if (event.key === 'Tab') {
+    event.preventDefault();
+    const textarea = event.target;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = start + 2;
+  }
+}
+
+function copyEditorCode() {
+  const code = document.getElementById('ide-code-area').value;
+  navigator.clipboard.writeText(code);
+  const status = document.getElementById('editor-line-col');
+  const original = status.innerText;
+  status.innerText = "✓ Copied to clipboard!";
+  setTimeout(() => { status.innerText = original; }, 1500);
+}
+
+function clearEditor() {
+  document.getElementById('ide-code-area').value = '';
+}
+
+function insertCodeIntoEditor(code, lang = 'python') {
+  const editor = document.getElementById('ide-code-area');
+  const langSelect = document.getElementById('editor-language');
+  if (editor) {
+    editor.value = code;
+    if (lang && EXT_MAP[lang.toLowerCase()]) {
+      langSelect.value = lang.toLowerCase();
+      handleLanguageChange();
+    }
+    editor.focus();
+    const status = document.getElementById('editor-line-col');
+    status.innerText = "✓ Loaded from Codex!";
+    setTimeout(() => { status.innerText = "UTF-8 • 2 Spaces"; }, 2000);
+  }
+}
+
+function sendEditorCodeToCodex(action) {
+  const code = document.getElementById('ide-code-area').value.trim();
+  const lang = document.getElementById('editor-language').value;
+  if (!code) {
+    alert("The scratchpad editor is empty. Write or paste code first!");
+    return;
+  }
+
+  let promptText = "";
+  if (action === 'refactor') {
+    promptText = `Please refactor the following ${lang} code for clean architecture, readability, performance, and best practices:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
+  } else if (action === 'bugs') {
+    promptText = `Please perform a security and bug audit on this ${lang} code. Identify race conditions, edge cases, vulnerabilities, and provide corrected code:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
+  } else if (action === 'tests') {
+    promptText = `Please generate comprehensive unit and integration tests with edge cases for this ${lang} code:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
+  }
+
+  const input = document.getElementById('chat-input');
+  input.value = promptText;
+  handleChatSubmit(new Event('submit'));
+}
+
 // ================= Codex Chat Playground =================
 function applyPromptPreset() {
   const presetKey = document.getElementById('prompt-preset-select').value;
   const sys = PROMPT_PRESETS[presetKey] || PROMPT_PRESETS.coder;
   const infoEl = document.getElementById('chat-route-detail');
   if (infoEl) {
-    infoEl.innerText = `Mode: ${presetKey.toUpperCase()} • ${sys.substring(0, 70)}...`;
+    infoEl.innerText = `${presetKey.toUpperCase()} • Multi-GPU Cluster`;
   }
 }
 
@@ -467,8 +611,8 @@ function clearChatHistory() {
   chatHistory = [];
   const container = document.getElementById('chat-messages');
   container.innerHTML = `
-    <div class="flex items-start gap-3.5 max-w-2xl">
-      <div class="h-8 w-8 rounded-xl bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-sm shrink-0 shadow-sm">⚡</div>
+    <div class="flex items-start gap-3 max-w-2xl animate-fade-up">
+      <div class="h-8 w-8 rounded-xl bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-sm shrink-0 shadow-sm shadow-gold-glow">⚡</div>
       <div class="bg-[var(--bg-surface)] border border-[var(--border-app)] rounded-2xl rounded-tl-sm p-4 text-sm text-[var(--text-main)] shadow-sm">
         Conversation cleared. Ready for your next coding task.
       </div>
@@ -487,7 +631,7 @@ async function handleChatSubmit(event) {
   inputEl.value = '';
   isStreaming = true;
   document.getElementById('chat-send-btn').disabled = true;
-  document.getElementById('chat-status-msg').innerText = "Streaming response from cluster...";
+  document.getElementById('chat-status-msg').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-gold-500 animate-ping"></span> Consulting GPU cluster...`;
 
   appendMessage('user', userText);
   chatHistory.push({ role: 'user', content: userText });
@@ -496,7 +640,6 @@ async function handleChatSubmit(event) {
   const presetKey = document.getElementById('prompt-preset-select').value;
   const systemPrompt = PROMPT_PRESETS[presetKey] || PROMPT_PRESETS.coder;
   const temp = parseFloat(document.getElementById('chat-temp').value) || 0.2;
-  const maxTokens = parseInt(document.getElementById('chat-max-tokens').value, 10) || 4096;
 
   const messagesPayload = [
     { role: 'system', content: systemPrompt },
@@ -522,11 +665,11 @@ async function handleChatSubmit(event) {
         messages: messagesPayload,
         stream: true,
         temperature: temp,
-        max_tokens: maxTokens
+        max_tokens: 4096
       })
     });
 
-    const targetServerHeader = response.headers.get('X-Courtesy-Server') || 'cluster';
+    const targetServerHeader = response.headers.get('X-Courtesy-Server') || 'auto';
     const targetModelHeader = response.headers.get('X-Courtesy-Model') || chosenModel;
 
     const reader = response.body.getReader();
@@ -577,7 +720,7 @@ async function handleChatSubmit(event) {
       `;
     }
 
-    attachCopyButtons(contentEl);
+    attachCodeBlockHeaders(contentEl);
     chatHistory.push({ role: 'assistant', content: fullResponseText });
 
   } catch (e) {
@@ -585,7 +728,7 @@ async function handleChatSubmit(event) {
   } finally {
     isStreaming = false;
     document.getElementById('chat-send-btn').disabled = false;
-    document.getElementById('chat-status-msg').innerText = "Ready for coding tasks.";
+    document.getElementById('chat-status-msg').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Ready for coding tasks.`;
     scrollToBottom();
   }
 }
@@ -596,7 +739,7 @@ function appendMessage(role, text) {
   
   const msgHtml = `
     <div class="flex items-start gap-3.5 ${isUser ? 'justify-end' : 'justify-start'} animate-fade-up">
-      ${!isUser ? `<div class="h-8 w-8 rounded-xl bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-sm shrink-0 shadow-sm">⚡</div>` : ''}
+      ${!isUser ? `<div class="h-8 w-8 rounded-xl bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-sm shrink-0 shadow-sm shadow-gold-glow">⚡</div>` : ''}
       <div class="${isUser ? 'bg-gold-gradient text-slate-950 font-medium rounded-2xl rounded-tr-sm max-w-xl p-3.5 text-sm shadow-md' : 'bg-[var(--bg-surface)] border border-[var(--border-app)] rounded-2xl rounded-tl-sm p-4 text-sm text-[var(--text-main)] max-w-2xl leading-relaxed shadow-sm'}">
         ${isUser ? `<p class="whitespace-pre-wrap">${escapeHtml(text)}</p>` : marked.parse(text)}
       </div>
@@ -610,8 +753,8 @@ function appendMessage(role, text) {
 function appendAssistantPlaceholder(id) {
   const container = document.getElementById('chat-messages');
   const msgHtml = `
-    <div class="flex items-start gap-3.5 justify-start animate-fade-up">
-      <div class="h-8 w-8 rounded-xl bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-sm shrink-0 shadow-sm">⚡</div>
+    <div class="flex items-start gap-3 justify-start animate-fade-up">
+      <div class="h-8 w-8 rounded-xl bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-sm shrink-0 shadow-sm shadow-gold-glow">⚡</div>
       <div class="bg-[var(--bg-surface)] border border-[var(--border-app)] rounded-2xl rounded-tl-sm p-4 text-sm text-[var(--text-main)] max-w-3xl w-full leading-relaxed shadow-md space-y-2">
         <div id="${id}-content" class="chat-markdown streaming-cursor">
           <span class="text-[var(--text-dim)] text-xs italic">Consulting GPU cluster...</span>
@@ -624,20 +767,46 @@ function appendAssistantPlaceholder(id) {
   scrollToBottom();
 }
 
-function attachCopyButtons(containerEl) {
+function attachCodeBlockHeaders(containerEl) {
   const codeBlocks = containerEl.querySelectorAll('pre');
   codeBlocks.forEach(pre => {
-    if (pre.querySelector('.copy-code-btn')) return;
-    const btn = document.createElement('button');
-    btn.className = 'copy-code-btn';
-    btn.innerText = 'Copy';
-    btn.onclick = () => {
-      const code = pre.querySelector('code')?.innerText || pre.innerText;
-      navigator.clipboard.writeText(code);
-      btn.innerText = 'Copied!';
-      setTimeout(() => { btn.innerText = 'Copy'; }, 1500);
+    if (pre.querySelector('.code-block-header')) return;
+
+    const codeEl = pre.querySelector('code');
+    const fullCode = codeEl ? codeEl.innerText : pre.innerText;
+    
+    // Detect language from class
+    let lang = 'code';
+    if (codeEl && codeEl.className) {
+      const match = codeEl.className.match(/language-([a-zA-Z0-9_-]+)/);
+      if (match) lang = match[1];
+    }
+
+    const header = document.createElement('div');
+    header.className = 'code-block-header';
+
+    // "Send to Scratchpad" button
+    const scratchpadBtn = document.createElement('button');
+    scratchpadBtn.className = 'code-header-btn';
+    scratchpadBtn.innerHTML = `<span>⚡ Scratchpad</span>`;
+    scratchpadBtn.title = "Open this code snippet in the Antigravity Scratchpad editor";
+    scratchpadBtn.onclick = () => {
+      insertCodeIntoEditor(fullCode, lang);
     };
-    pre.appendChild(btn);
+
+    // "Copy" button
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'code-header-btn';
+    copyBtn.innerHTML = `<span>Copy</span>`;
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(fullCode);
+      copyBtn.innerHTML = `<span>✓ Copied!</span>`;
+      setTimeout(() => { copyBtn.innerHTML = `<span>Copy</span>`; }, 1500);
+    };
+
+    header.appendChild(scratchpadBtn);
+    header.appendChild(copyBtn);
+    pre.appendChild(header);
   });
 }
 
@@ -663,6 +832,10 @@ function escapeHtml(string) {
 // Start on page load
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
+  if (!window.electronAPI) {
+    const winControls = document.getElementById('window-controls');
+    if (winControls) winControls.classList.add('hidden');
+  }
   initWebSocket();
   fetchServersRest();
   if (window.lucide) lucide.createIcons();

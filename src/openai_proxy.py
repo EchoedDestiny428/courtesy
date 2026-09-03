@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import os
+import socket
 import time
 from typing import Dict, Any, List, Optional, AsyncGenerator
 from fastapi import APIRouter, Request, HTTPException
@@ -13,6 +15,8 @@ from src.config import get_servers
 
 logger = logging.getLogger("courtesy.proxy")
 router = APIRouter()
+
+IS_ON_CST = socket.gethostname().lower() in ("cst", "cst.local") or os.path.exists("/opt/courtesy")
 
 
 @router.get("/v1/models")
@@ -89,15 +93,23 @@ async def stream_ollama_openai(target: RouteTarget, payload: Dict[str, Any]) -> 
         # If direct HTTP cannot reach the LAN node (e.g. from outside subnet), proxy through cst gateway
         if can_direct:
             json_input = json.dumps(req_payload)
-            # Use curl over ssh to stream SSE response
-            curl_cmd = f"curl -s -N -H 'Content-Type: application/json' {endpoint} -d @-"
-            proc = await asyncio.create_subprocess_exec(
-                "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes", "cst@cst",
-                curl_cmd,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
+            if IS_ON_CST:
+                cmd = ["curl", "-s", "-N", "-H", "Content-Type: application/json", endpoint, "-d", "@-"]
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+            else:
+                curl_cmd = f"curl -s -N -H 'Content-Type: application/json' {endpoint} -d @-"
+                proc = await asyncio.create_subprocess_exec(
+                    "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes", "cst@cst",
+                    curl_cmd,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
             
             # Write body and close stdin
             if proc.stdin:
@@ -179,14 +191,23 @@ async def chat_completions(request: Request):
 
         # Fallback via cst gateway
         json_input = json.dumps(req_payload)
-        curl_cmd = f"curl -s -H 'Content-Type: application/json' {endpoint} -d @-"
-        proc = await asyncio.create_subprocess_exec(
-            "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes", "cst@cst",
-            curl_cmd,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
+        if IS_ON_CST:
+            cmd = ["curl", "-s", "-H", "Content-Type: application/json", endpoint, "-d", "@-"]
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+        else:
+            curl_cmd = f"curl -s -H 'Content-Type: application/json' {endpoint} -d @-"
+            proc = await asyncio.create_subprocess_exec(
+                "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes", "cst@cst",
+                curl_cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
         stdout, _ = await proc.communicate(input=json_input.encode("utf-8"))
         res_data = json.loads(stdout.decode("utf-8"))
         return JSONResponse(content=res_data, headers={
