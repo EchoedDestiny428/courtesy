@@ -1,0 +1,83 @@
+{
+  "gateway": {
+    "id": "cst",
+    "name": "Raspberry Pi Gateway",
+    "host": "cst",
+    "tailscale_ip": "100.107.249.92",
+    "user": "cst",
+    "role": "gateway",
+    "specs": "Raspberry Pi 4 • Cortex-A72 • 8GB RAM"
+  },
+  "servers": [
+    {
+      "id": "cst",
+      "name": "cst (Gateway Node)",
+      "role": "gateway",
+      "type": "system_only",
+      "host": "127.0.0.1",
+      "port": 22,
+      "ssh_host": "cst",
+      "ssh_user": "cst",
+      "enabled": true,
+      "specs": {
+        "cpu": "Cortex-A72 (4 Cores)",
+        "ram": "8 GB",
+        "gpus": []
+      },
+      "tags": ["gateway", "tailscale", "arm64"]
+    },
+    {
+      "id": "kraken",
+      "name": "kraken (cst1 - Fast Inference)",
+      "role": "inference",
+      "type": "ollama",
+      "host": "10.11.16.28",
+      "port": 11434,
+      "ssh_host": "cst1.local",
+      "ssh_user": "kraken",
+      "enabled": true,
+      "preferred_model": "qwen2.5-coder:7b-instruct-q4_K_M",
+      "specs": {
+        "cpu": "12 Cores",
+        "ram": "32 GB",
+        "gpus": [
+          {"index": 0, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120},
+          {"index": 1, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120}
+        ]
+      },
+      "tags": ["compute", "gpu", "dual-p2000", "fast-coder"]
+    },
+    {
+      "id": "cst7",
+      "name": "cst7 (Heavy Reasoning Node)",
+      "role": "inference",
+      "type": "ollama",
+      "host": "10.11.2.12",
+      "port": 11434,
+      "ssh_host": "10.11.2.12",
+      "ssh_user": "cst7",
+      "enabled": true,
+      "preferred_model": "qwen2.5-coder:14b-instruct",
+      "specs": {
+        "cpu": "12 Cores",
+        "ram": "32 GB",
+        "gpus": [
+          {"index": 0, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120},
+          {"index": 1, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120}
+        ]
+      },
+      "tags": ["compute", "gpu", "dual-p2000", "heavy-reasoning"]
+    }
+  ],
+  "routing": {
+    "default_strategy": "auto",
+    "fallback_enabled": true,
+    "timeout_seconds": 120
+  },
+  "settings": {
+    "poll_interval_seconds": 4,
+    "temperature_default": 0.2,
+    "max_tokens_default": 4096,
+    "system_prompt_default": "You are Courtesy Codex, a world-class autonomous AI coding assistant. You write production-ready, clean, well-tested, robust code. Follow modern best practices, handle edge cases, and provide concise, insightful explanations."
+  }
+}
