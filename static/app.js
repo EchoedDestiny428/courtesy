@@ -210,7 +210,7 @@ function setApiEndpoint(url) {
 // ================= Tab Switching =================
 function switchTab(tabId) {
   currentTab = tabId;
-  const tabs = ['codex', 'fleet', 'ide'];
+  const tabs = ['codex', 'swarm', 'fleet', 'ide'];
   tabs.forEach(t => {
     const sec = document.getElementById(`tab-${t}`);
     const btn = document.getElementById(`tab-btn-${t}`);
@@ -226,6 +226,206 @@ function switchTab(tabId) {
   });
 
   if (window.lucide) lucide.createIcons();
+}
+
+// ================= Autonomous Swarm Orchestrator Client =================
+let currentSwarmTaskId = null;
+let currentSwarmFinalCode = "";
+let swarmWs = null;
+
+function setSwarmPrompt(text) {
+  const input = document.getElementById('swarm-objective-input');
+  if (input) input.value = text;
+}
+
+function clearSwarmFeed() {
+  const feed = document.getElementById('swarm-feed');
+  if (feed) {
+    feed.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)] italic text-xs">Feed cleared.</div>`;
+  }
+}
+
+function initSwarmWebSocket() {
+  let wsUrl;
+  if (apiBaseUrl.startsWith('https://')) {
+    wsUrl = apiBaseUrl.replace('https://', 'wss://') + '/ws/swarm';
+  } else {
+    wsUrl = apiBaseUrl.replace('http://', 'ws://') + '/ws/swarm';
+  }
+
+  try {
+    swarmWs = new WebSocket(wsUrl);
+    swarmWs.onmessage = (event) => {
+      try {
+        const ev = JSON.parse(event.data);
+        handleSwarmEvent(ev);
+      } catch (e) {}
+    };
+  } catch (e) {}
+}
+
+function handleSwarmEvent(ev) {
+  const feed = document.getElementById('swarm-feed');
+  if (!feed) return;
+
+  const type = ev.type;
+
+  if (type === 'init') {
+    feed.innerHTML = '';
+    appendSwarmLog('System', ev.message || 'Swarm initialized', 'text-gold-500 font-bold');
+    setNodeStatus('leader', 'thinking', 'Active: Decomposing architecture');
+    setNodeStatus('w1', 'idle', 'Standby');
+    setNodeStatus('w2', 'idle', 'Standby');
+  } else if (type === 'iteration_start') {
+    const counter = document.getElementById('swarm-iteration-counter');
+    if (counter) counter.innerText = `Iteration ${ev.iteration}/${ev.max_iterations}`;
+    appendSwarmLog('System', `--- Starting Iteration ${ev.iteration} of ${ev.max_iterations} ---`, 'text-gold-400 font-bold');
+  } else if (type === 'agent_thinking') {
+    appendSwarmLog(ev.role, `[${ev.node}] ${ev.step_name}...`, 'text-[var(--text-dim)] italic');
+    if (ev.role.includes('Leader')) {
+      setNodeStatus('leader', 'thinking', ev.step_name);
+    } else if (ev.role.includes('Worker 1')) {
+      setNodeStatus('w1', 'thinking', ev.step_name);
+    } else if (ev.role.includes('Worker 2')) {
+      setNodeStatus('w2', 'thinking', ev.step_name);
+    }
+  } else if (type === 'agent_message') {
+    appendSwarmAgentMessage(ev.role, ev.node, ev.model, ev.content);
+    if (ev.role.includes('Leader')) {
+      setNodeStatus('leader', 'idle', 'Completed plan');
+    } else if (ev.role.includes('Worker 1')) {
+      setNodeStatus('w1', 'idle', 'Completed implementation');
+    } else if (ev.role.includes('Worker 2')) {
+      setNodeStatus('w2', 'idle', 'Completed review');
+    }
+  } else if (type === 'completed') {
+    setSwarmRunningUI(false);
+    currentSwarmFinalCode = ev.final_code || '';
+    const finalBox = document.getElementById('swarm-final-box');
+    if (finalBox) finalBox.classList.remove('hidden');
+    appendSwarmLog('System', `✓ Autonomous Task Completed with status: ${ev.status}`, 'text-emerald-400 font-bold');
+    showToast("Autonomous Swarm Completed Task!", "🤖");
+  } else if (type === 'error') {
+    setSwarmRunningUI(false);
+    appendSwarmLog('Error', ev.error, 'text-rose-500 font-bold');
+  }
+}
+
+function appendSwarmLog(sender, text, css = 'text-[var(--text-secondary)]') {
+  const feed = document.getElementById('swarm-feed');
+  if (!feed) return;
+  const item = document.createElement('div');
+  item.className = `p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-app)] ${css}`;
+  item.innerHTML = `<span class="font-bold mr-1.5">[${sender}]</span>${escapeHtml(text)}`;
+  feed.appendChild(item);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function appendSwarmAgentMessage(role, node, model, content) {
+  const feed = document.getElementById('swarm-feed');
+  if (!feed) return;
+  const item = document.createElement('div');
+  item.className = 'p-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-app)] space-y-2';
+  item.innerHTML = `
+    <div class="flex items-center justify-between border-b border-[var(--border-app)] pb-1 text-[10px]">
+      <span class="font-bold text-gold-500 flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> ${role}
+      </span>
+      <span class="text-[var(--text-dim)]">${node} • ${model}</span>
+    </div>
+    <div class="text-[11px] text-[var(--text-main)] chat-markdown leading-relaxed">
+      ${marked.parse(content)}
+    </div>
+  `;
+  feed.appendChild(item);
+  attachCodeBlockHeaders(item);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function setNodeStatus(roleKey, state, text) {
+  const dot = document.getElementById(`${roleKey}-dot`);
+  const statusEl = document.getElementById(`${roleKey}-status-text`);
+  if (dot) {
+    if (state === 'thinking') {
+      dot.className = "w-2 h-2 rounded-full bg-gold-400 animate-ping";
+    } else if (state === 'idle') {
+      dot.className = "w-2 h-2 rounded-full bg-emerald-400";
+    } else {
+      dot.className = "w-2 h-2 rounded-full bg-slate-500";
+    }
+  }
+  if (statusEl) statusEl.innerText = text;
+}
+
+async function launchSwarmTask() {
+  const input = document.getElementById('swarm-objective-input');
+  const objective = input ? input.value.trim() : '';
+  if (!objective) {
+    showToast("Please enter an objective for the swarm", "⚠");
+    return;
+  }
+
+  const iterSelect = document.getElementById('swarm-iterations-select');
+  const maxIters = iterSelect ? parseInt(iterSelect.value, 10) : 3;
+
+  setSwarmRunningUI(true);
+  initSwarmWebSocket();
+
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/swarm/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ objective, max_iterations: maxIters })
+    });
+    const data = await res.json();
+    currentSwarmTaskId = data.task_id;
+    showToast(`Swarm Launched [ID: ${currentSwarmTaskId}]`, "🚀");
+  } catch (e) {
+    setSwarmRunningUI(false);
+    showToast("Failed to launch swarm", "⚠");
+  }
+}
+
+async function stopCurrentSwarm() {
+  if (currentSwarmTaskId) {
+    try {
+      await fetch(`${apiBaseUrl}/api/swarm/stop/${currentSwarmTaskId}`, { method: 'POST' });
+      showToast("Swarm task stopped");
+    } catch (e) {}
+  }
+  setSwarmRunningUI(false);
+}
+
+function setSwarmRunningUI(running) {
+  const startBtn = document.getElementById('swarm-start-btn');
+  const stopBtn = document.getElementById('swarm-stop-btn');
+  const badge = document.getElementById('swarm-status-badge');
+  const text = document.getElementById('swarm-status-text');
+
+  if (startBtn && stopBtn) {
+    if (running) {
+      startBtn.classList.add('hidden');
+      stopBtn.classList.remove('hidden');
+      if (badge) badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-gold bg-[var(--gold-subtle)] text-gold-500 flex items-center gap-1.5";
+      if (text) text.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Active`;
+    } else {
+      startBtn.classList.remove('hidden');
+      stopBtn.classList.add('hidden');
+      if (badge) badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-dim)] flex items-center gap-1.5";
+      if (text) text.innerText = "Idle";
+      setNodeStatus('leader', 'off', 'Standby');
+      setNodeStatus('w1', 'off', 'Standby');
+      setNodeStatus('w2', 'off', 'Standby');
+    }
+  }
+}
+
+function sendSwarmCodeToScratchpad() {
+  if (currentSwarmFinalCode) {
+    insertCodeIntoEditor(currentSwarmFinalCode, 'python');
+    switchTab('codex');
+    showToast("Swarm code loaded into Scratchpad!", "⚡");
+  }
 }
 
 // ================= WebSocket Telemetry =================
@@ -627,6 +827,25 @@ function sendEditorCodeToCodex(action) {
 }
 
 // ================= Codex Chat Playground =================
+let webAccessEnabled = true;
+
+function toggleWebAccess() {
+  webAccessEnabled = !webAccessEnabled;
+  const btn = document.getElementById('web-access-btn');
+  const label = document.getElementById('web-access-label');
+  if (btn && label) {
+    if (webAccessEnabled) {
+      btn.className = "px-2 py-0.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20";
+      label.innerText = "Web Docs: ON";
+      showToast("Live Web Access & Docs Enabled", "🌐");
+    } else {
+      btn.className = "px-2 py-0.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition bg-[var(--bg-input)] border border-[var(--border-app)] text-[var(--text-dim)] hover:text-[var(--text-secondary)]";
+      label.innerText = "Web Docs: OFF";
+      showToast("Live Web Access Disabled", "⚪");
+    }
+  }
+}
+
 function applyPromptPreset() {
   const presetKey = document.getElementById('prompt-preset-select').value;
   showToast(`Persona: ${presetKey.toUpperCase()}`);
@@ -727,6 +946,7 @@ async function handleChatSubmit(event) {
         model: chosenModel,
         messages: messagesPayload,
         stream: true,
+        web_access: webAccessEnabled,
         temperature: temp,
         max_tokens: 4096
       })
@@ -734,6 +954,11 @@ async function handleChatSubmit(event) {
 
     const targetServerHeader = response.headers.get('X-Courtesy-Server') || 'cluster';
     const targetModelHeader = response.headers.get('X-Courtesy-Model') || chosenModel;
+    const webSourcesHeader = response.headers.get('X-Courtesy-Web-Sources');
+    let webSources = [];
+    if (webSourcesHeader) {
+      try { webSources = JSON.parse(webSourcesHeader); } catch (e) {}
+    }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
@@ -771,6 +996,18 @@ async function handleChatSubmit(event) {
     
     const metaEl = document.getElementById(`${assistantMsgId}-meta`);
     if (metaEl) {
+      let sourcesHtml = '';
+      if (webSources && webSources.length > 0) {
+        const sourceTitles = webSources.map(s => `• ${s.title}`).join('\n');
+        sourcesHtml = `
+          <span>•</span>
+          <span class="flex items-center gap-1 text-emerald-400 font-semibold cursor-help" title="${escapeHtml(sourceTitles)}">
+            <i data-lucide="globe" class="w-3 h-3"></i>
+            <span>${webSources.length} Web Docs</span>
+          </span>
+        `;
+      }
+
       metaEl.innerHTML = `
         <span class="flex items-center gap-1 text-gold-500 font-bold">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
@@ -780,7 +1017,9 @@ async function handleChatSubmit(event) {
         <span><code class="text-[var(--text-main)] font-mono">${targetModelHeader}</code></span>
         <span>•</span>
         <span>${elapsedSeconds}s</span>
+        ${sourcesHtml}
       `;
+      if (window.lucide) lucide.createIcons();
     }
 
     attachCodeBlockHeaders(contentEl);

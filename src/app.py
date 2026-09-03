@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Any, List
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -17,6 +17,8 @@ from src.config import (
 from src.collector import update_all_metrics, get_cached_metrics, get_cluster_summary
 from src.openai_proxy import router as openai_router
 from src.router import offload_server_models
+from src.web_agent import search_web, fetch_webpage, generate_grounded_context
+from src.swarm import start_swarm_task, stop_swarm_task, get_swarm_status, register_swarm_subscriber, unregister_swarm_subscriber
 
 logging.basicConfig(
     level=logging.INFO,
@@ -235,6 +237,75 @@ async def api_server_offload(server_id: str):
     unloaded = await offload_server_models(srv)
     asyncio.create_task(update_all_metrics())
     return {"status": "success", "server_id": server_id, "unloaded": unloaded}
+
+
+# --- Web Access & Live Documentation Tool Endpoints ---
+
+@app.get("/api/tools/search")
+async def api_web_search(q: str = Query(..., description="Web search query for documentation or APIs")):
+    """Executes live web search and returns relevant documentation links and snippets."""
+    results = await search_web(q, max_results=5)
+    return {"query": q, "results": results}
+
+
+@app.get("/api/tools/fetch")
+async def api_web_fetch(url: str = Query(..., description="URL to fetch documentation from")):
+    """Scrapes clean text and code blocks from any documentation webpage."""
+    text = await fetch_webpage(url)
+    return {"url": url, "content": text}
+
+
+@app.post("/api/tools/ground")
+async def api_web_ground(payload: Dict[str, Any]):
+    """Accepts a prompt or query, searches relevant docs, and returns grounded context."""
+    prompt = payload.get("prompt", "")
+    force = payload.get("force", True)
+    context, sources = await generate_grounded_context(prompt, force=force)
+    return {"context": context, "sources": sources}
+
+
+# --- Autonomous Multi-Agent Swarm Endpoints ---
+
+@app.post("/api/swarm/start")
+async def api_swarm_start(payload: Dict[str, Any]):
+    """Launches an autonomous multi-node swarm task."""
+    objective = payload.get("objective", "").strip()
+    if not objective:
+        raise HTTPException(status_code=400, detail="Objective is required.")
+    max_iterations = int(payload.get("max_iterations", 3))
+    task_id = start_swarm_task(objective, max_iterations=max_iterations)
+    return {"status": "started", "task_id": task_id}
+
+
+@app.get("/api/swarm/status/{task_id}")
+async def api_swarm_status(task_id: str):
+    """Fetches status and final artifacts of a swarm task."""
+    st = get_swarm_status(task_id)
+    if not st:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found.")
+    return st
+
+
+@app.post("/api/swarm/stop/{task_id}")
+async def api_swarm_stop(task_id: str):
+    """Stops an active swarm workflow."""
+    success = stop_swarm_task(task_id)
+    return {"status": "stopped" if success else "not_found", "task_id": task_id}
+
+
+@app.websocket("/ws/swarm")
+async def websocket_swarm_endpoint(websocket: WebSocket):
+    """Streams live multi-agent swarm dialogue and step events to the GUI."""
+    await websocket.accept()
+    queue = register_swarm_subscriber()
+    try:
+        while True:
+            event = await queue.get()
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        unregister_swarm_subscriber(queue)
+    except Exception:
+        unregister_swarm_subscriber(queue)
 
 
 # --- WebSocket for Real-time Dashboard Telemetry ---

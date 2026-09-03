@@ -56,6 +56,10 @@
           <i data-lucide="terminal" class="w-3.5 h-3.5"></i>
           <span>Codex</span>
         </button>
+        <button onclick="switchTab('swarm')" id="tab-btn-swarm" class="px-3 py-1 rounded-lg font-medium flex items-center gap-1.5 transition text-[var(--text-muted)] hover:text-[var(--text-main)]">
+          <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+          <span>Swarm</span>
+        </button>
         <button onclick="switchTab('fleet')" id="tab-btn-fleet" class="px-3 py-1 rounded-lg font-medium flex items-center gap-1.5 transition text-[var(--text-muted)] hover:text-[var(--text-main)]">
           <i data-lucide="server" class="w-3.5 h-3.5"></i>
           <span>Fleet (<span id="tab-fleet-count">3</span>)</span>
@@ -216,6 +220,12 @@
                   <input type="range" id="chat-temp" min="0" max="1" step="0.05" value="0.2" oninput="document.getElementById('temp-val').innerText = this.value" class="w-16 accent-gold-500 cursor-pointer">
                   <span id="temp-val" class="text-gold-500 font-mono text-[10px]">0.2</span>
                 </div>
+
+                <!-- Web Docs Access Toggle -->
+                <button type="button" id="web-access-btn" onclick="toggleWebAccess()" class="px-2 py-0.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20" title="Toggle Live Web Search & Documentation Grounding">
+                  <i data-lucide="globe" class="w-3 h-3"></i>
+                  <span id="web-access-label">Web Docs: ON</span>
+                </button>
               </div>
 
               <span id="chat-status-msg" class="flex items-center gap-1">
@@ -312,6 +322,145 @@
           <span>Fleet Details</span>
           <i data-lucide="chevron-right" class="w-3 h-3"></i>
         </button>
+      </div>
+
+    </section>
+
+
+    <!-- ================= TAB: AUTONOMOUS MULTI-AGENT SWARM ================= -->
+    <section id="tab-swarm" class="hidden space-y-4 max-w-5xl mx-auto animate-fade-up">
+      
+      <!-- Swarm Header & Objective Launcher -->
+      <div class="p-4 rounded-2xl luxury-card space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="h-6 w-6 rounded-lg bg-gold-gradient flex items-center justify-center text-slate-950 font-black text-xs shadow-sm">
+              🤖
+            </div>
+            <div>
+              <h2 class="text-xs font-bold text-[var(--text-main)]">Autonomous 3-Node Agent Swarm</h2>
+              <p class="text-[10px] text-[var(--text-dim)]">7B Leader plans & coordinates two 14B Worker nodes continuously until the task is complete.</p>
+            </div>
+          </div>
+          
+          <div id="swarm-status-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-dim)] flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+            <span id="swarm-status-text">Idle</span>
+          </div>
+        </div>
+
+        <!-- Objective Input -->
+        <div class="space-y-2">
+          <textarea id="swarm-objective-input" rows="2" placeholder="Describe the complex task for the autonomous swarm to solve continuously (e.g. Build an FRC WPILib autonomous routine with PID controllers and test suite)..." class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-xs text-[var(--text-main)] focus:outline-none focus:border-gold resize-none transition font-sans"></textarea>
+          
+          <div class="flex flex-wrap items-center justify-between gap-2 text-[10px]">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button onclick="setSwarmPrompt('Build an FRC RobotPy SwerveDrive subsystem with PathPlanner trajectory following and unit tests.')" class="px-2 py-0.5 rounded-lg bg-[var(--bg-muted)] hover:border-gold text-gold-500 border border-[var(--border-app)] transition">
+                🤖 FRC Swerve & PathPlanner
+              </button>
+              <button onclick="setSwarmPrompt('Write a high-performance Python FastAPI service with Redis caching, JWT auth, and pytest suite.')" class="px-2 py-0.5 rounded-lg bg-[var(--bg-muted)] hover:border-gold text-gold-500 border border-[var(--border-app)] transition">
+                🚀 FastAPI & Redis Service
+              </button>
+              <button onclick="setSwarmPrompt('Implement a lock-free ring buffer in Rust with concurrency benchmarks.')" class="px-2 py-0.5 rounded-lg bg-[var(--bg-muted)] hover:border-gold text-gold-500 border border-[var(--border-app)] transition">
+                🦀 Rust Concurrency Buffer
+              </button>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-1 text-[var(--text-dim)]">
+                <span>Max Iterations:</span>
+                <select id="swarm-iterations-select" class="bg-[var(--bg-input)] border border-[var(--border-app)] rounded px-1.5 py-0.5 text-gold-500 font-mono">
+                  <option value="2">2</option>
+                  <option value="3" selected>3</option>
+                  <option value="5">5</option>
+                  <option value="8">8</option>
+                </select>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button id="swarm-stop-btn" onclick="stopCurrentSwarm()" class="hidden px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 font-bold text-xs flex items-center gap-1 transition border border-rose-700/50">
+                  <i data-lucide="square" class="w-3 h-3 fill-current"></i> Stop Swarm
+                </button>
+                <button id="swarm-start-btn" onclick="launchSwarmTask()" class="px-3.5 py-1.5 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-sm shadow-gold-glow transition">
+                  <i data-lucide="play" class="w-3 h-3 stroke-[3]"></i> Start Autonomous Swarm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-Time Cluster Pipeline Node Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+        
+        <!-- Node 1: Leader -->
+        <div id="swarm-card-leader" class="p-3 rounded-xl luxury-card space-y-1.5 transition-all">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-[var(--text-main)] flex items-center gap-1.5">
+              <span id="leader-dot" class="w-2 h-2 rounded-full bg-slate-500"></span> Leader (7B)
+            </span>
+            <span class="text-[9px] font-mono text-gold-500 px-1.5 py-0.5 rounded bg-[var(--gold-subtle)] border border-gold">Planner / Auditor</span>
+          </div>
+          <p class="text-[10px] text-[var(--text-dim)]">Decomposes objectives, coordinates workers, verifies acceptance criteria.</p>
+          <div id="leader-status-text" class="text-[10px] text-[var(--text-muted)] italic font-mono pt-1">Awaiting assignment...</div>
+        </div>
+
+        <!-- Node 2: Worker 1 -->
+        <div id="swarm-card-w1" class="p-3 rounded-xl luxury-card space-y-1.5 transition-all">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-[var(--text-main)] flex items-center gap-1.5">
+              <span id="w1-dot" class="w-2 h-2 rounded-full bg-slate-500"></span> Worker 1 (14B)
+            </span>
+            <span class="text-[9px] font-mono text-cyan-400 px-1.5 py-0.5 rounded bg-cyan-950/30 border border-cyan-500/30">Implementer</span>
+          </div>
+          <p class="text-[10px] text-[var(--text-dim)]">Executes core architecture, algorithms, methods, and implementation.</p>
+          <div id="w1-status-text" class="text-[10px] text-[var(--text-muted)] italic font-mono pt-1">Standby...</div>
+        </div>
+
+        <!-- Node 3: Worker 2 -->
+        <div id="swarm-card-w2" class="p-3 rounded-xl luxury-card space-y-1.5 transition-all">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-[var(--text-main)] flex items-center gap-1.5">
+              <span id="w2-dot" class="w-2 h-2 rounded-full bg-slate-500"></span> Worker 2 (14B)
+            </span>
+            <span class="text-[9px] font-mono text-emerald-400 px-1.5 py-0.5 rounded bg-emerald-950/30 border border-emerald-500/30">QA & Test Specialist</span>
+          </div>
+          <p class="text-[10px] text-[var(--text-dim)]">Audits code, catches edge cases, memory leaks, and writes tests.</p>
+          <div id="w2-status-text" class="text-[10px] text-[var(--text-muted)] italic font-mono pt-1">Standby...</div>
+        </div>
+
+      </div>
+
+      <!-- Swarm Timeline / Live Streaming Dialogue -->
+      <div class="p-4 rounded-2xl luxury-card space-y-3">
+        <div class="flex items-center justify-between border-b border-[var(--border-app)] pb-2 text-xs">
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-[var(--text-main)]">Live Swarm Feed</span>
+            <span id="swarm-iteration-counter" class="text-[10px] font-mono text-gold-500">Iteration 0/0</span>
+          </div>
+          <button onclick="clearSwarmFeed()" class="text-[var(--text-dim)] hover:text-rose-400 text-[10px] p-1">Clear</button>
+        </div>
+
+        <div id="swarm-feed" class="space-y-3 max-h-[420px] overflow-y-auto font-mono text-xs pr-1">
+          <div class="text-center py-8 text-[var(--text-dim)] italic text-xs">
+            Enter an objective above and click 'Start Autonomous Swarm' to initiate 3-node cluster collaboration.
+          </div>
+        </div>
+
+        <!-- Final Code Container (Hidden until complete) -->
+        <div id="swarm-final-box" class="hidden pt-3 border-t border-[var(--border-app)] space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-xs text-gold-500 flex items-center gap-1.5">
+              <i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-400"></i> Swarm Output Ready
+            </span>
+            <div class="flex items-center gap-2">
+              <button onclick="sendSwarmCodeToScratchpad()" class="px-2.5 py-1 rounded-lg bg-gold-gradient text-slate-950 font-bold text-xs flex items-center gap-1 shadow-sm">
+                <i data-lucide="terminal" class="w-3 h-3"></i> Open in Scratchpad
+              </button>
+            </div>
+          </div>
+        </div>
+
       </div>
 
     </section>
