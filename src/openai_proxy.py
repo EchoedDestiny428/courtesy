@@ -12,6 +12,8 @@ import httpx
 from src.router import resolve_route, track_request_start, track_request_end, RouteTarget, ensure_vram_headroom
 from src.collector import get_cached_metrics
 from src.config import get_servers
+from src.web_agent import generate_grounded_context, OPENAI_SEARCH_TOOLS
+from src.miner_manager import record_inference_start
 
 logger = logging.getLogger("courtesy.proxy")
 router = APIRouter()
@@ -146,16 +148,49 @@ async def chat_completions(request: Request):
     OpenAI-compatible Chat Completions endpoint.
     Compatible with VS Code (Continue / Cline / Roo Code / Copilot alternatives) & Courtesy GUI.
     """
+    record_inference_start()
     body = await request.json()
     model_req = body.get("model", "auto")
     stream = body.get("stream", False)
+    web_access = body.get("web_access", True)
+
+    # Perform live web & documentation grounding if requested or detected
+    sources = []
+    if web_access is not False:
+        messages = body.get("messages", [])
+        last_user_idx = None
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i].get("role") == "user":
+                last_user_idx = i
+                break
+        
+        if last_user_idx is not None:
+            user_content = messages[last_user_idx].get("content", "")
+            if isinstance(user_content, str) and user_content.strip():
+                try:
+                    grounded_ctx, sources = await generate_grounded_context(
+                        user_content,
+                        force=(web_access is True)
+                    )
+                    if grounded_ctx:
+                        messages[last_user_idx]["content"] = user_content + grounded_ctx
+                        body["messages"] = messages
+                except Exception as e:
+                    logger.warning(f"Web grounding failed: {e}")
     
     try:
         target = resolve_route(model_query=model_req)
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
 
-    logger.info(f"Routing request for '{model_req}' -> {target.server_id} ({target.server_name}) using '{target.model_name}'")
+    logger.info(f"Routing request for '{model_req}' -> {target.server_id} ({target.server_name}) using '{target.model_name}' (web sources: {len(sources)})")
+
+    resp_headers = {
+        "X-Courtesy-Server": target.server_id,
+        "X-Courtesy-Model": target.model_name,
+        "X-Courtesy-Web-Sources": json.dumps(sources),
+        "Access-Control-Expose-Headers": "X-Courtesy-Server, X-Courtesy-Model, X-Courtesy-Web-Sources"
+    }
 
     if stream:
         return StreamingResponse(
@@ -164,8 +199,7 @@ async def chat_completions(request: Request):
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
-                "X-Courtesy-Server": target.server_id,
-                "X-Courtesy-Model": target.model_name
+                **resp_headers
             }
         )
 
@@ -183,10 +217,7 @@ async def chat_completions(request: Request):
                 resp = await client.post(endpoint, json=req_payload)
                 if resp.status_code == 200:
                     data = resp.json()
-                    return JSONResponse(content=data, headers={
-                        "X-Courtesy-Server": target.server_id,
-                        "X-Courtesy-Model": target.model_name
-                    })
+                    return JSONResponse(content=data, headers=resp_headers)
         except Exception:
             pass
 

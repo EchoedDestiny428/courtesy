@@ -1,0 +1,11 @@
+{
+  "enabled": false,
+  "coin": "ERG",
+  "wallet": "9f4UferhxTzQPBGv1Qf9uYhB9E6fM3Y7Q1e8zK4v2u9a8b7c6d5",
+  "pool": "de.ergo.herominers.com:1180",
+  "algo": "autolykos2",
+  "power_limit_watts": 60,
+  "idle_threshold_seconds": 180,
+  "temp_limit_celsius": 68,
+  "nodes": ["kraken", "cst6", "cst7"]
+}

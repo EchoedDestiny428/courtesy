@@ -1137,6 +1137,109 @@ function escapeHtml(string) {
   }[s]));
 }
 
+// ================= Autonomous Idle GPU Crypto Mining UI =================
+let miningPollInterval = null;
+let initialMiningLoaded = false;
+
+async function fetchMiningStatus() {
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/mining/status`);
+    if (!res.ok) return;
+    const data = await res.json();
+    updateMiningUI(data);
+  } catch (e) {}
+}
+
+function updateMiningUI(data) {
+  const badge = document.getElementById('mining-status-badge');
+  const dot = document.getElementById('mining-dot');
+  const text = document.getElementById('mining-status-text');
+  const toggleBtn = document.getElementById('mining-toggle-btn');
+  const toggleLabel = document.getElementById('mining-toggle-label');
+  const hashrateVal = document.getElementById('mining-hashrate-val');
+  const idleVal = document.getElementById('mining-idle-val');
+  const gpusVal = document.getElementById('mining-gpus-val');
+  const walletInput = document.getElementById('mining-wallet-input');
+  const coinSelect = document.getElementById('mining-coin-select');
+
+  if (!initialMiningLoaded) {
+    if (walletInput && data.wallet) walletInput.value = data.wallet;
+    if (coinSelect && data.coin) coinSelect.value = data.coin;
+    initialMiningLoaded = true;
+  }
+
+  if (hashrateVal) hashrateVal.innerText = `${(data.estimated_hashrate_mhs || 0).toFixed(1)} MH/s`;
+  if (idleVal) idleVal.innerText = `${data.idle_seconds || 0}s / ${data.idle_threshold || 180}s`;
+  if (gpusVal) gpusVal.innerText = `${data.active_miners || 0} / 3 Nodes (${(data.active_miners || 0) * 2} P2000s)`;
+
+  if (data.state === 'mining') {
+    if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping";
+    if (text) text.innerText = "Mining Active";
+    if (badge) badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-emerald-500/40 bg-emerald-950/30 text-emerald-400 flex items-center gap-1.5";
+    if (toggleLabel) toggleLabel.innerText = "Disable Mining";
+    if (toggleBtn) toggleBtn.className = "px-3 py-1 rounded-xl text-xs font-bold transition border border-rose-800/50 bg-rose-950/40 text-rose-300 hover:bg-rose-900/60";
+  } else if (data.state === 'preempted_inference') {
+    if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse";
+    if (text) text.innerText = "Preempted (AI Active)";
+    if (badge) badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-amber-500/40 bg-amber-950/30 text-amber-400 flex items-center gap-1.5";
+    if (toggleLabel) toggleLabel.innerText = "Disable Mining";
+    if (toggleBtn) toggleBtn.className = "px-3 py-1 rounded-xl text-xs font-bold transition border border-rose-800/50 bg-rose-950/40 text-rose-300 hover:bg-rose-900/60";
+  } else if (data.state === 'idle_waiting') {
+    if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-cyan-400";
+    if (text) text.innerText = `Idle Waiting (${data.idle_seconds}s)`;
+    if (badge) badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-cyan-500/40 bg-cyan-950/30 text-cyan-300 flex items-center gap-1.5";
+    if (toggleLabel) toggleLabel.innerText = "Disable Mining";
+    if (toggleBtn) toggleBtn.className = "px-3 py-1 rounded-xl text-xs font-bold transition border border-rose-800/50 bg-rose-950/40 text-rose-300 hover:bg-rose-900/60";
+  } else {
+    if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-slate-500";
+    if (text) text.innerText = "Disabled";
+    if (badge) badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-dim)] flex items-center gap-1.5";
+    if (toggleLabel) toggleLabel.innerText = "Enable Mining";
+    if (toggleBtn) toggleBtn.className = "px-3 py-1 rounded-xl text-xs font-bold transition border border-gold bg-gold-gradient text-slate-950 shadow-sm hover:brightness-110";
+  }
+}
+
+async function toggleIdleMining() {
+  try {
+    const statusRes = await fetch(`${apiBaseUrl}/api/mining/status`);
+    const status = await statusRes.json();
+    const endpoint = status.enabled ? '/api/mining/stop' : '/api/mining/start';
+    const res = await fetch(`${apiBaseUrl}${endpoint}`, { method: 'POST' });
+    if (res.ok) {
+      showToast(status.enabled ? "Idle mining disabled" : "Idle mining enabled!", "⛏️");
+      await fetchMiningStatus();
+    }
+  } catch (e) {
+    showToast("Failed to toggle mining", "⚠");
+  }
+}
+
+async function saveMiningSettings() {
+  const walletInput = document.getElementById('mining-wallet-input');
+  const coinSelect = document.getElementById('mining-coin-select');
+  const wallet = walletInput ? walletInput.value.trim() : '';
+  const coin = coinSelect ? coinSelect.value : 'ERG';
+
+  if (!wallet) {
+    showToast("Please enter a wallet address", "⚠");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/mining/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallet, coin })
+    });
+    if (res.ok) {
+      showToast("Mining settings saved!", "💾");
+      await fetchMiningStatus();
+    }
+  } catch (e) {
+    showToast("Failed to save mining settings", "⚠");
+  }
+}
+
 // Global Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && isStreaming) {
@@ -1154,5 +1257,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initWebSocket();
   fetchServersRest();
   syncEditorGutter();
+  fetchMiningStatus();
+  setInterval(fetchMiningStatus, 6000);
   if (window.lucide) lucide.createIcons();
 });

@@ -19,6 +19,8 @@ from src.openai_proxy import router as openai_router
 from src.router import offload_server_models
 from src.web_agent import search_web, fetch_webpage, generate_grounded_context
 from src.swarm import start_swarm_task, stop_swarm_task, get_swarm_status, register_swarm_subscriber, unregister_swarm_subscriber
+from src.miner_manager import load_mining_config, save_mining_config, get_cluster_mining_status, start_mining_cluster, preempt_mining, idle_mining_watcher_loop
+from src.router import _active_requests
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,6 +55,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 background_task: asyncio.Task = None
+mining_task: asyncio.Task = None
 
 
 async def metrics_poller_task():
@@ -79,11 +82,14 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Courtesy Cluster Manager & Codex Gateway...")
     # Initial metrics fetch
     await update_all_metrics()
-    global background_task
+    global background_task, mining_task
     background_task = asyncio.create_task(metrics_poller_task())
+    mining_task = asyncio.create_task(idle_mining_watcher_loop(lambda: sum(_active_requests.values())))
     yield
     if background_task:
         background_task.cancel()
+    if mining_task:
+        mining_task.cancel()
     logger.info("Courtesy service shut down.")
 
 
@@ -306,6 +312,45 @@ async def websocket_swarm_endpoint(websocket: WebSocket):
         unregister_swarm_subscriber(queue)
     except Exception:
         unregister_swarm_subscriber(queue)
+
+
+# --- Autonomous Idle GPU Crypto Mining Endpoints ---
+
+@app.get("/api/mining/status")
+async def api_mining_status():
+    """Returns current status of cluster idle mining."""
+    return await get_cluster_mining_status()
+
+
+@app.post("/api/mining/config")
+async def api_mining_config(payload: Dict[str, Any]):
+    """Updates mining configuration (wallet, coin, pool, idle threshold, power limit)."""
+    cfg = load_mining_config()
+    for k, v in payload.items():
+        if k in cfg:
+            cfg[k] = v
+    save_mining_config(cfg)
+    return {"status": "success", "config": cfg}
+
+
+@app.post("/api/mining/start")
+async def api_mining_start():
+    """Manually triggers mining across the cluster."""
+    cfg = load_mining_config()
+    cfg["enabled"] = True
+    save_mining_config(cfg)
+    await start_mining_cluster()
+    return {"status": "started"}
+
+
+@app.post("/api/mining/stop")
+async def api_mining_stop():
+    """Manually stops/preempts mining across the cluster."""
+    cfg = load_mining_config()
+    cfg["enabled"] = False
+    save_mining_config(cfg)
+    await preempt_mining()
+    return {"status": "stopped"}
 
 
 # --- WebSocket for Real-time Dashboard Telemetry ---
