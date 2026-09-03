@@ -3,12 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Courtesy Codex & AI Cluster Fleet</title>
+  <title>Courtesy • Autonomous Codex & AI Cluster</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            gold: {
+              300: '#FDE68A',
+              400: '#F5D061',
+              500: '#D4AF37',
+              600: '#B89225',
+              700: '#947216',
+            }
+          }
+        }
+      }
+    }
+  </script>
   <!-- Highlight.js for code syntax highlighting -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" id="hljs-theme">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <!-- Marked.js for markdown rendering -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -16,83 +34,113 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-slate-950">
+<body class="min-h-screen flex flex-col antialiased select-none">
 
-  <!-- Top Navigation Bar -->
-  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-40 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
-    <div class="flex items-center gap-3">
-      <div class="h-9 w-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 text-slate-950 font-black text-xl">
+  <!-- ================= DESKTOP CUSTOM TITLEBAR ================= -->
+  <div id="electron-titlebar" class="titlebar-drag-region h-10 px-4 flex items-center justify-between border-b border-[var(--border-app)] bg-[var(--titlebar-bg)] backdrop-blur-md sticky top-0 z-50 transition-colors">
+    <!-- App Brand -->
+    <div class="flex items-center gap-2.5 no-drag">
+      <div class="h-6 w-6 rounded-lg bg-gold-gradient flex items-center justify-center text-slate-950 font-black text-xs shadow-sm">
         ⚡
       </div>
-      <div>
-        <div class="flex items-center gap-2">
-          <h1 class="font-bold tracking-tight text-lg text-white">COURTESY</h1>
-          <span class="text-xs px-2 py-0.5 rounded-full font-mono bg-cyan-950/80 text-cyan-400 border border-cyan-800/50">v1.0 • Codex Engine</span>
-        </div>
-        <p class="text-xs text-slate-400">Autonomous AI Cluster & LLM Inference Gateway</p>
+      <div class="flex items-center gap-2">
+        <span class="font-extrabold tracking-wider text-xs text-[var(--text-main)]">COURTESY</span>
+        <span class="text-[10px] px-1.5 py-0.2 rounded font-mono border border-gold text-gold-500 bg-[var(--gold-subtle)] font-medium">CODEX DESKTOP</span>
       </div>
     </div>
 
-    <!-- Live Cluster Overview Chips -->
-    <div class="hidden lg:flex items-center gap-3">
-      <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50 text-xs">
+    <!-- Center Drag Area / Cluster Quick Status -->
+    <div class="flex items-center gap-3 no-drag text-xs">
+      <div class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-[var(--bg-muted)] border border-[var(--border-app)]">
         <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-        <span class="text-slate-300">Cluster:</span>
-        <span id="header-nodes-count" class="font-semibold text-emerald-400">3 Nodes</span>
-      </div>
-      <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50 text-xs">
-        <span class="text-indigo-400">🎮</span>
-        <span class="text-slate-300">GPUs:</span>
-        <span id="header-gpu-stat" class="font-semibold text-indigo-400">4x Quadro P2000 (20 GB)</span>
-      </div>
-      <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50 text-xs">
-        <span class="text-cyan-400">🌐</span>
-        <span class="text-slate-300">Gateway:</span>
-        <span class="font-mono text-cyan-300">cst (100.107.249.92)</span>
+        <span id="titlebar-nodes" class="text-[11px] font-medium text-[var(--text-muted)]">3 Nodes Active</span>
+        <span class="text-[var(--border-app)]">|</span>
+        <span id="titlebar-gpus" class="text-[11px] font-semibold text-gold-500">4x Quadro P2000 (20GB)</span>
       </div>
     </div>
 
-    <!-- Navigation Tabs -->
-    <div class="flex items-center gap-1.5 bg-slate-800/70 p-1 rounded-xl border border-slate-700/60">
-      <button onclick="switchTab('fleet')" id="tab-btn-fleet" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all bg-cyan-600 text-white shadow-sm">
+    <!-- Right Controls: Theme Toggle & Window Buttons -->
+    <div class="flex items-center gap-2 no-drag">
+      <!-- Endpoint Indicator / Config -->
+      <button onclick="toggleEndpointSelector()" id="endpoint-badge" class="px-2 py-0.5 rounded-lg text-[10px] font-mono border border-[var(--border-app)] bg-[var(--bg-muted)] hover:border-gold text-[var(--text-muted)] transition flex items-center gap-1.5" title="Cluster Hub Target">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        <span id="current-endpoint-label">Pi: 100.107.249.92</span>
+      </button>
+
+      <!-- Dark / Light Mode Switcher -->
+      <button onclick="toggleTheme()" id="theme-toggle-btn" class="p-1.5 rounded-lg border border-[var(--border-app)] hover:border-gold text-[var(--text-muted)] hover:text-gold-500 bg-[var(--bg-muted)] transition-all" title="Toggle Dark / Light Mode">
+        <i data-lucide="sun" id="theme-icon-sun" class="w-3.5 h-3.5 hidden"></i>
+        <i data-lucide="moon" id="theme-icon-moon" class="w-3.5 h-3.5"></i>
+      </button>
+
+      <!-- Electron Window Control Buttons -->
+      <div id="window-controls" class="flex items-center gap-1 ml-1">
+        <button onclick="windowMinimize()" class="p-1.5 rounded hover:bg-[var(--bg-muted)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition">
+          <i data-lucide="minus" class="w-3.5 h-3.5"></i>
+        </button>
+        <button onclick="windowMaximize()" class="p-1.5 rounded hover:bg-[var(--bg-muted)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition">
+          <i data-lucide="square" class="w-3.5 h-3.5"></i>
+        </button>
+        <button onclick="windowClose()" class="p-1.5 rounded hover:bg-rose-500/20 text-[var(--text-muted)] hover:text-rose-500 transition">
+          <i data-lucide="x" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ================= SUBHEADER & TABS ================= -->
+  <div class="px-8 py-4 border-b border-[var(--border-app)] bg-[var(--bg-surface)] flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-lg font-bold text-[var(--text-main)] flex items-center gap-2">
+        <span>AI Cluster Control Center</span>
+        <span class="text-xs px-2 py-0.5 rounded-full font-mono bg-gold-gradient text-slate-950 font-bold shadow-sm">Free Codex</span>
+      </h1>
+      <p class="text-xs text-[var(--text-muted)] mt-0.5">Dual Quadro P2000 cluster orchestration and OpenAI-compatible inference gateway.</p>
+    </div>
+
+    <!-- Navigation Pills -->
+    <div class="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--bg-muted)] border border-[var(--border-app)]">
+      <button onclick="switchTab('fleet')" id="tab-btn-fleet" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all bg-gold-gradient text-slate-950 shadow-sm font-bold">
         <i data-lucide="server" class="w-3.5 h-3.5"></i>
         <span>Server Fleet</span>
       </button>
-      <button onclick="switchTab('codex')" id="tab-btn-codex" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all text-slate-300 hover:text-white hover:bg-slate-700/50">
+      <button onclick="switchTab('codex')" id="tab-btn-codex" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all text-[var(--text-muted)] hover:text-[var(--text-main)]">
         <i data-lucide="terminal" class="w-3.5 h-3.5"></i>
         <span>Codex Assistant</span>
       </button>
-      <button onclick="switchTab('ide')" id="tab-btn-ide" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all text-slate-300 hover:text-white hover:bg-slate-700/50">
+      <button onclick="switchTab('ide')" id="tab-btn-ide" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all text-[var(--text-muted)] hover:text-[var(--text-main)]">
         <i data-lucide="plug" class="w-3.5 h-3.5"></i>
         <span>IDE Setup</span>
       </button>
     </div>
-  </header>
+  </div>
 
-  <!-- Main Content Area -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-6">
 
-    <!-- ================= TAB 1: FLEET & SERVERS ================= -->
-    <section id="tab-fleet" class="space-y-6">
-      <!-- Action Toolbar -->
-      <div class="flex flex-wrap items-center justify-between gap-4 bg-slate-900/40 p-4 rounded-2xl border border-slate-800">
+  <!-- ================= MAIN CONTENT ================= -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-8 overflow-y-auto">
+
+    <!-- ================= TAB 1: FLEET & MODULAR SERVERS ================= -->
+    <section id="tab-fleet" class="space-y-6 animate-fade-up">
+      <!-- Toolbar -->
+      <div class="flex flex-wrap items-center justify-between gap-4 p-5 rounded-2xl luxury-card">
         <div>
-          <h2 class="text-base font-bold text-white flex items-center gap-2">
-            <span>Modular Cluster Fleet</span>
-            <span id="fleet-live-indicator" class="text-xs font-normal text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full flex items-center gap-1.5">
+          <h2 class="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+            <span>Active Server Nodes</span>
+            <span class="text-[10px] text-gold-500 bg-[var(--gold-subtle)] border border-gold px-2 py-0.5 rounded-full flex items-center gap-1.5 font-mono">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Live WebSocket Telemetry
             </span>
           </h2>
-          <p class="text-xs text-slate-400 mt-0.5">Real-time GPU VRAM, compute loads, and modular node management.</p>
+          <p class="text-xs text-[var(--text-muted)] mt-0.5">Real-time VRAM, compute loads, and modular cluster registry.</p>
         </div>
 
         <div class="flex items-center gap-3">
-          <button onclick="triggerManualRefresh()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 flex items-center gap-2 transition border border-slate-700">
-            <i data-lucide="refresh-cw" id="refresh-icon" class="w-3.5 h-3.5"></i>
-            <span>Poll Now</span>
+          <button onclick="triggerManualRefresh()" class="px-3.5 py-2 rounded-xl bg-[var(--bg-muted)] hover:border-gold text-xs font-medium text-[var(--text-main)] flex items-center gap-2 transition border border-[var(--border-app)]">
+            <i data-lucide="refresh-cw" id="refresh-icon" class="w-3.5 h-3.5 text-gold-500"></i>
+            <span>Refresh</span>
           </button>
-          <button onclick="openAddServerModal()" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-xs font-semibold text-slate-950 flex items-center gap-2 shadow-md shadow-cyan-500/10 transition">
-            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+          <button onclick="openAddServerModal()" class="px-4 py-2 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-xs font-bold text-slate-950 flex items-center gap-2 shadow-md shadow-gold-glow transition">
+            <i data-lucide="plus" class="w-3.5 h-3.5 stroke-[3]"></i>
             <span>Add Server</span>
           </button>
         </div>
@@ -100,9 +148,8 @@
 
       <!-- Server Cards Grid -->
       <div id="servers-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <!-- Dynamically rendered via app.js -->
-        <div class="col-span-full py-12 text-center text-slate-500 flex flex-col items-center justify-center gap-3">
-          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+        <div class="col-span-full py-16 text-center text-[var(--text-muted)] flex flex-col items-center justify-center gap-3">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gold-500"></div>
           <p class="text-sm">Connecting to cluster telemetry...</p>
         </div>
       </div>
@@ -110,29 +157,29 @@
 
 
     <!-- ================= TAB 2: CODEX / CLAUDE PLAYGROUND ================= -->
-    <section id="tab-codex" class="hidden space-y-6">
+    <section id="tab-codex" class="hidden space-y-6 animate-fade-up">
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
         
-        <!-- Controls & Model Selection Sidebar -->
+        <!-- Controls & Model Routing Sidebar -->
         <aside class="lg:col-span-1 space-y-4">
-          <div class="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-4">
+          <div class="p-5 rounded-2xl luxury-card space-y-4">
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1.5 flex items-center gap-1.5">
-                <i data-lucide="cpu" class="w-3.5 h-3.5 text-cyan-400"></i> Model & Server Routing
+              <label class="text-xs font-bold text-[var(--text-main)] block mb-1.5 flex items-center gap-1.5">
+                <i data-lucide="cpu" class="w-3.5 h-3.5 text-gold-500"></i> Model & Server Routing
               </label>
-              <select id="chat-model-select" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono">
+              <select id="chat-model-select" class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-xs text-[var(--text-main)] focus:outline-none focus:border-gold font-mono transition">
                 <option value="auto">✨ Auto Load-Balance (Best Node)</option>
                 <option value="kraken/qwen2.5-coder:7b-instruct-q4_K_M">🚀 kraken: Qwen2.5-Coder 7B (Fast)</option>
                 <option value="cst7/qwen2.5-coder:14b-instruct">🧠 cst7: Qwen2.5-Coder 14B (Heavy Reasoning)</option>
               </select>
-              <p class="text-[10px] text-slate-400 mt-1.5">Requests route to chosen node or dynamically load balance.</p>
+              <p class="text-[10px] text-[var(--text-muted)] mt-1.5">Auto routes or pins directly to a node's dual GPUs.</p>
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1.5 flex items-center gap-1.5">
-                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-400"></i> Persona / Mode
+              <label class="text-xs font-bold text-[var(--text-main)] block mb-1.5 flex items-center gap-1.5">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-gold-500"></i> Persona Mode
               </label>
-              <select id="prompt-preset-select" onchange="applyPromptPreset()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+              <select id="prompt-preset-select" onchange="applyPromptPreset()" class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-xs text-[var(--text-main)] focus:outline-none focus:border-gold transition">
                 <option value="coder">Autonomous Full-Stack Engineer</option>
                 <option value="bughunter">Bug Hunter & Security Auditor</option>
                 <option value="refactor">Architectural Refactoring & Clean Code</option>
@@ -142,117 +189,116 @@
 
             <div>
               <div class="flex items-center justify-between mb-1">
-                <label class="text-xs font-semibold text-slate-300">Temperature</label>
-                <span id="temp-val" class="text-xs font-mono text-cyan-400">0.2</span>
+                <label class="text-xs font-medium text-[var(--text-muted)]">Temperature</label>
+                <span id="temp-val" class="text-xs font-mono text-gold-500 font-semibold">0.2</span>
               </div>
-              <input type="range" id="chat-temp" min="0" max="1" step="0.05" value="0.2" oninput="document.getElementById('temp-val').innerText = this.value" class="w-full accent-cyan-500">
+              <input type="range" id="chat-temp" min="0" max="1" step="0.05" value="0.2" oninput="document.getElementById('temp-val').innerText = this.value" class="w-full accent-gold-500 cursor-pointer">
             </div>
 
             <div>
               <div class="flex items-center justify-between mb-1">
-                <label class="text-xs font-semibold text-slate-300">Max Tokens</label>
-                <span id="tokens-val" class="text-xs font-mono text-cyan-400">4096</span>
+                <label class="text-xs font-medium text-[var(--text-muted)]">Max Tokens</label>
+                <span id="tokens-val" class="text-xs font-mono text-gold-500 font-semibold">4096</span>
               </div>
-              <input type="range" id="chat-max-tokens" min="512" max="8192" step="512" value="4096" oninput="document.getElementById('tokens-val').innerText = this.value" class="w-full accent-cyan-500">
+              <input type="range" id="chat-max-tokens" min="512" max="8192" step="512" value="4096" oninput="document.getElementById('tokens-val').innerText = this.value" class="w-full accent-gold-500 cursor-pointer">
             </div>
 
-            <button onclick="clearChatHistory()" class="w-full py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-xs font-medium text-slate-400 hover:text-rose-400 border border-slate-700/60 transition flex items-center justify-center gap-2">
+            <button onclick="clearChatHistory()" class="w-full py-2 rounded-xl bg-[var(--bg-muted)] hover:bg-[var(--border-app)] text-xs font-medium text-[var(--text-muted)] hover:text-rose-500 border border-[var(--border-app)] transition flex items-center justify-center gap-2">
               <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
               <span>Clear Conversation</span>
             </button>
           </div>
 
-          <!-- Target Node Info Badge -->
-          <div id="chat-route-info" class="bg-slate-900/40 p-4 rounded-2xl border border-slate-800/80 text-xs text-slate-400 space-y-1">
-            <div class="font-semibold text-slate-300 flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-cyan-400"></span> Active Codex Router
+          <!-- Router Info Box -->
+          <div class="p-4 rounded-2xl luxury-card text-xs text-[var(--text-muted)] space-y-1.5 border border-gold">
+            <div class="font-bold text-[var(--text-main)] flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-gold-500"></span> Active Codex Router
             </div>
-            <p id="chat-route-detail" class="text-[11px] leading-relaxed">Auto routes between kraken (Dual P2000) and cst7 (Dual P2000).</p>
+            <p id="chat-route-detail" class="text-[11px] leading-relaxed">
+              Requests execute freely on your dual Quadro P2000 nodes without external API token costs.
+            </p>
           </div>
         </aside>
 
-        <!-- Chat Transcript & Prompt Area -->
-        <div class="lg:col-span-3 flex flex-col h-[760px] bg-slate-900/60 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl">
-          
-          <!-- Chat Messages Container -->
+        <!-- Chat Area -->
+        <div class="lg:col-span-3 flex flex-col h-[740px] rounded-2xl luxury-card overflow-hidden shadow-2xl">
+          <!-- Messages -->
           <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-6">
-            <!-- Welcome greeting -->
             <div class="flex items-start gap-3.5 max-w-2xl">
-              <div class="h-8 w-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-slate-950 font-bold text-sm shrink-0">
+              <div class="h-8 w-8 rounded-xl bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-sm shrink-0 shadow-sm">
                 ⚡
               </div>
-              <div class="bg-slate-800/80 border border-slate-700/60 rounded-2xl rounded-tl-sm p-4 text-sm text-slate-200 leading-relaxed shadow-sm">
-                <p class="font-semibold text-cyan-400 mb-1">Courtesy Codex is online.</p>
-                <p>I am running completely free on your local GPU cluster (<strong>4x Quadro P2000</strong>). I can generate full-stack applications, refactor code, find bugs, and write unit tests without token fees or external API limits.</p>
+              <div class="bg-[var(--bg-surface)] border border-[var(--border-app)] rounded-2xl rounded-tl-sm p-4 text-sm text-[var(--text-main)] leading-relaxed shadow-sm">
+                <p class="font-bold text-gold-500 mb-1">Courtesy Codex is online.</p>
+                <p>Running self-hosted on your private cluster (**4x NVIDIA Quadro P2000**). Write applications, debug issues, and refactor code without subscription fees or token caps.</p>
                 <div class="mt-3 flex flex-wrap gap-2">
-                  <button onclick="sendQuickPrompt('Write a python function that solves the Knapsack problem with dynamic programming.')" class="px-2.5 py-1 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-xs text-cyan-300 border border-slate-600/50 transition">
-                    💡 Dynamic Programming in Python
+                  <button onclick="sendQuickPrompt('Write a clean Python script that manages background tasks with asyncio and graceful shutdown.')" class="px-2.5 py-1 rounded-lg bg-[var(--bg-muted)] hover:border-gold text-xs text-gold-500 border border-[var(--border-app)] transition">
+                    💡 Asyncio Background Tasks
                   </button>
-                  <button onclick="sendQuickPrompt('Write a production-ready FastAPI endpoint with streaming SSE and JWT validation.')" class="px-2.5 py-1 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-xs text-indigo-300 border border-slate-600/50 transition">
+                  <button onclick="sendQuickPrompt('Write a high-performance REST endpoint in FastAPI with streaming Server-Sent Events.')" class="px-2.5 py-1 rounded-lg bg-[var(--bg-muted)] hover:border-gold text-xs text-gold-500 border border-[var(--border-app)] transition">
                     🚀 FastAPI SSE Endpoint
                   </button>
-                  <button onclick="sendQuickPrompt('Show me how to configure VS Code Continue extension to use this cluster.')" class="px-2.5 py-1 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-xs text-emerald-300 border border-slate-600/50 transition">
-                    🔌 VS Code Continue Setup
+                  <button onclick="sendQuickPrompt('Explain the difference between CUDA stream synchronization and event synchronization.')" class="px-2.5 py-1 rounded-lg bg-[var(--bg-muted)] hover:border-gold text-xs text-gold-500 border border-[var(--border-app)] transition">
+                    🎮 CUDA Synchronization
                   </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Input Area -->
-          <div class="p-4 border-t border-slate-800 bg-slate-900/90">
+          <!-- Chat Input -->
+          <div class="p-4 border-t border-[var(--border-app)] bg-[var(--bg-surface)]">
             <form id="chat-form" onsubmit="handleChatSubmit(event)" class="relative">
               <textarea 
                 id="chat-input" 
                 rows="3" 
-                placeholder="Ask Courtesy Codex anything... (Press Enter to send, Shift+Enter for newline)" 
-                class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none font-sans pr-24"
+                placeholder="Ask Courtesy Codex anything... (Enter to send, Shift+Enter for newline)" 
+                class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-4 py-3 text-sm text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none focus:border-gold resize-none pr-28 transition"
                 onkeydown="handleTextareaKeydown(event)"
               ></textarea>
-              <div class="absolute right-3 bottom-4 flex items-center gap-2">
-                <button type="submit" id="chat-send-btn" class="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition shadow-md shadow-cyan-500/20">
+              <div class="absolute right-3 bottom-3.5 flex items-center gap-2">
+                <button type="submit" id="chat-send-btn" class="px-4 py-2 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-xs flex items-center gap-1.5 transition shadow-md shadow-gold-glow">
                   <span>Send</span>
-                  <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                  <i data-lucide="send" class="w-3.5 h-3.5 stroke-[2.5]"></i>
                 </button>
               </div>
             </form>
-            <div class="mt-2 flex items-center justify-between text-[11px] text-slate-500">
-              <span id="chat-status-msg">Ready for requests.</span>
-              <span>OpenAI API compatible at <code class="text-cyan-400 font-mono">/v1/chat/completions</code></span>
+            <div class="mt-2 flex items-center justify-between text-[11px] text-[var(--text-dim)]">
+              <span id="chat-status-msg">Ready for coding tasks.</span>
+              <span>OpenAI API compatible at <code class="text-gold-500 font-mono">/v1/chat/completions</code></span>
             </div>
           </div>
-
         </div>
 
       </div>
     </section>
 
 
-    <!-- ================= TAB 3: IDE INTEGRATION SETUP ================= -->
-    <section id="tab-ide" class="hidden space-y-6 max-w-4xl mx-auto">
-      <div class="bg-slate-900/60 p-6 rounded-2xl border border-slate-800 space-y-6">
+    <!-- ================= TAB 3: IDE INTEGRATION ================= -->
+    <section id="tab-ide" class="hidden space-y-6 max-w-4xl mx-auto animate-fade-up">
+      <div class="p-8 rounded-2xl luxury-card space-y-6">
         <div>
-          <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <i data-lucide="plug" class="w-5 h-5 text-cyan-400"></i>
-            Connect VS Code, Cline & Coding Agents
+          <h2 class="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
+            <i data-lucide="plug" class="w-5 h-5 text-gold-500"></i>
+            IDE & Agent Integration
           </h2>
-          <p class="text-xs text-slate-400 mt-1">
-            Courtesy serves as a drop-in replacement for OpenAI and Claude. Any tool supporting OpenAI compatible endpoints can hook directly into your local server cluster.
+          <p class="text-xs text-[var(--text-muted)] mt-1">
+            Courtesy implements standard OpenAI endpoints so you can plug your cluster straight into VS Code extensions, Cline, or CLI agents.
           </p>
         </div>
 
-        <!-- Continue.dev Config -->
+        <!-- Continue.dev -->
         <div class="space-y-2">
           <div class="flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-white flex items-center gap-2">
-              <span class="px-2 py-0.5 rounded bg-indigo-950 text-indigo-400 font-mono text-xs">Option 1</span>
-              VS Code Continue.dev Extension (<code class="text-xs text-slate-400">~/.continue/config.json</code>)
+            <h3 class="text-xs font-bold text-[var(--text-main)] flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-[var(--gold-subtle)] border border-gold text-gold-500 font-mono text-[11px]">Option 1</span>
+              VS Code Continue Extension (<code class="text-xs text-[var(--text-muted)] font-mono">~/.continue/config.json</code>)
             </h3>
-            <button onclick="copyCode('config-continue')" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 flex items-center gap-1.5 transition border border-slate-700">
-              <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy JSON
+            <button onclick="copyCode('config-continue')" class="px-2.5 py-1 rounded-lg bg-[var(--bg-muted)] hover:border-gold text-xs text-[var(--text-main)] flex items-center gap-1.5 transition border border-[var(--border-app)]">
+              <i data-lucide="copy" class="w-3.5 h-3.5 text-gold-500"></i> Copy JSON
             </button>
           </div>
-          <pre class="bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-xs text-cyan-300 overflow-x-auto"><code id="config-continue">{
+          <pre class="bg-[var(--code-bg)] p-4 rounded-xl border border-[var(--border-app)] font-mono text-xs text-gold-400 overflow-x-auto"><code id="config-continue">{
   "models": [
     {
       "title": "Courtesy Codex (Auto Cluster)",
@@ -279,89 +325,89 @@
 }</code></pre>
         </div>
 
-        <!-- Cline / Roo Code -->
+        <!-- Cline -->
         <div class="space-y-2">
           <div class="flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-white flex items-center gap-2">
-              <span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-xs">Option 2</span>
+            <h3 class="text-xs font-bold text-[var(--text-main)] flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-[var(--gold-subtle)] border border-gold text-gold-500 font-mono text-[11px]">Option 2</span>
               Cline / Roo Code (VS Code Extension)
             </h3>
-            <button onclick="copyCode('config-cline')" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 flex items-center gap-1.5 transition border border-slate-700">
-              <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy Settings
+            <button onclick="copyCode('config-cline')" class="px-2.5 py-1 rounded-lg bg-[var(--bg-muted)] hover:border-gold text-xs text-[var(--text-main)] flex items-center gap-1.5 transition border border-[var(--border-app)]">
+              <i data-lucide="copy" class="w-3.5 h-3.5 text-gold-500"></i> Copy Settings
             </button>
           </div>
-          <pre class="bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-xs text-emerald-300 overflow-x-auto"><code id="config-cline">API Provider: OpenAI Compatible
+          <pre class="bg-[var(--code-bg)] p-4 rounded-xl border border-[var(--border-app)] font-mono text-xs text-gold-400 overflow-x-auto"><code id="config-cline">API Provider: OpenAI Compatible
 Base URL:     http://100.107.249.92:8000/v1
 API Key:      courtesy
 Model ID:     auto (or qwen2.5-coder:7b-instruct-q4_K_M)</code></pre>
         </div>
 
-        <!-- Aider CLI -->
+        <!-- Aider -->
         <div class="space-y-2">
           <div class="flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-white flex items-center gap-2">
-              <span class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 font-mono text-xs">Option 3</span>
+            <h3 class="text-xs font-bold text-[var(--text-main)] flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-[var(--gold-subtle)] border border-gold text-gold-500 font-mono text-[11px]">Option 3</span>
               Aider CLI (Terminal AI Pair Programmer)
             </h3>
-            <button onclick="copyCode('config-aider')" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 flex items-center gap-1.5 transition border border-slate-700">
-              <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy Command
+            <button onclick="copyCode('config-aider')" class="px-2.5 py-1 rounded-lg bg-[var(--bg-muted)] hover:border-gold text-xs text-[var(--text-main)] flex items-center gap-1.5 transition border border-[var(--border-app)]">
+              <i data-lucide="copy" class="w-3.5 h-3.5 text-gold-500"></i> Copy Command
             </button>
           </div>
-          <pre class="bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-xs text-yellow-300 overflow-x-auto"><code id="config-aider">aider --openai-api-base http://100.107.249.92:8000/v1 --openai-api-key courtesy --model openai/auto</code></pre>
+          <pre class="bg-[var(--code-bg)] p-4 rounded-xl border border-[var(--border-app)] font-mono text-xs text-gold-400 overflow-x-auto"><code id="config-aider">aider --openai-api-base http://100.107.249.92:8000/v1 --openai-api-key courtesy --model openai/auto</code></pre>
         </div>
-
       </div>
     </section>
 
   </main>
 
+
   <!-- ================= ADD SERVER MODAL ================= -->
-  <div id="add-server-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <h3 class="font-bold text-base text-white flex items-center gap-2">
-          <i data-lucide="server" class="w-4 h-4 text-cyan-400"></i>
-          Add New Server to Fleet
+  <div id="add-server-modal" class="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="modal-animate-in bg-[var(--bg-surface)] border border-gold rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-[var(--border-app)] pb-3">
+        <h3 class="font-bold text-sm text-[var(--text-main)] flex items-center gap-2">
+          <div class="h-6 w-6 rounded-lg bg-gold-gradient flex items-center justify-center text-slate-950 font-black text-xs">⚡</div>
+          <span>Add New Server to Fleet</span>
         </h3>
-        <button onclick="closeAddServerModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
-          <i data-lucide="x" class="w-5 h-5"></i>
+        <button onclick="closeAddServerModal()" class="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg">
+          <i data-lucide="x" class="w-4 h-4"></i>
         </button>
       </div>
 
       <form id="add-server-form" onsubmit="handleAddServerSubmit(event)" class="space-y-4 text-xs">
         <div>
-          <label class="block font-semibold text-slate-300 mb-1">Server Unique ID (e.g. node3, cst8)</label>
-          <input type="text" id="new-server-id" required placeholder="cst8" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-500">
+          <label class="block font-semibold text-[var(--text-main)] mb-1">Server Unique ID (e.g. cst8, node3)</label>
+          <input type="text" id="new-server-id" required placeholder="cst8" class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-[var(--text-main)] font-mono focus:outline-none focus:border-gold">
         </div>
 
         <div>
-          <label class="block font-semibold text-slate-300 mb-1">Friendly Display Name</label>
-          <input type="text" id="new-server-name" required placeholder="Compute Node 3 (RTX / Quadro)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500">
+          <label class="block font-semibold text-[var(--text-main)] mb-1">Display Name</label>
+          <input type="text" id="new-server-name" required placeholder="Compute Node 3" class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-gold">
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block font-semibold text-slate-300 mb-1">Host IP / Hostname</label>
-            <input type="text" id="new-server-host" required placeholder="10.11.2.15" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-500">
+            <label class="block font-semibold text-[var(--text-main)] mb-1">Host IP / Hostname</label>
+            <input type="text" id="new-server-host" required placeholder="10.11.2.15" class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-[var(--text-main)] font-mono focus:outline-none focus:border-gold">
           </div>
           <div>
-            <label class="block font-semibold text-slate-300 mb-1">Ollama / Service Port</label>
-            <input type="number" id="new-server-port" value="11434" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-500">
+            <label class="block font-semibold text-[var(--text-main)] mb-1">Port</label>
+            <input type="number" id="new-server-port" value="11434" class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-[var(--text-main)] font-mono focus:outline-none focus:border-gold">
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block font-semibold text-slate-300 mb-1">Role</label>
-            <select id="new-server-role" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500">
+            <label class="block font-semibold text-[var(--text-main)] mb-1">Role</label>
+            <select id="new-server-role" class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-gold">
               <option value="inference">Inference (LLM Engine)</option>
-              <option value="storage">Storage / Database</option>
-              <option value="gateway">Gateway / Proxy</option>
+              <option value="gateway">Gateway / Router</option>
+              <option value="storage">Storage Node</option>
             </select>
           </div>
           <div>
-            <label class="block font-semibold text-slate-300 mb-1">Engine Type</label>
-            <select id="new-server-type" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500">
+            <label class="block font-semibold text-[var(--text-main)] mb-1">Engine</label>
+            <select id="new-server-type" class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-gold">
               <option value="ollama">Ollama</option>
               <option value="vllm">vLLM / Generic OpenAI</option>
               <option value="system_only">System Metrics Only</option>
@@ -369,26 +415,14 @@ Model ID:     auto (or qwen2.5-coder:7b-instruct-q4_K_M)</code></pre>
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">SSH Username (Optional)</label>
-            <input type="text" id="new-server-ssh-user" placeholder="cst" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-500">
-          </div>
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">SSH Host / Jump (Optional)</label>
-            <input type="text" id="new-server-ssh-host" placeholder="10.11.2.15" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-500">
-          </div>
-        </div>
-
-        <div class="flex justify-end gap-3 pt-3 border-t border-slate-800">
-          <button type="button" onclick="closeAddServerModal()" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 font-medium">Cancel</button>
-          <button type="submit" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold shadow-md shadow-cyan-500/20">Register Node</button>
+        <div class="flex justify-end gap-3 pt-3 border-t border-[var(--border-app)]">
+          <button type="button" onclick="closeAddServerModal()" class="px-4 py-2 rounded-xl bg-[var(--bg-muted)] text-[var(--text-muted)] hover:text-[var(--text-main)] font-medium">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold shadow-md shadow-gold-glow">Register Node</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Scripts -->
   <script src="/static/app.js"></script>
 </body>
 </html>

@@ -1,10 +1,15 @@
-// Courtesy AI Fleet & Codex Playground Client
+// Courtesy Luxury Codex & AI Cluster Fleet Desktop Client
 
 let currentTab = 'fleet';
 let chatHistory = [];
 let ws = null;
 let currentServers = [];
 let isStreaming = false;
+
+// API Base URL (defaults to current host in web browser, or 100.107.249.92:8000 in desktop Electron)
+let apiBaseUrl = (window.location.protocol === 'file:' || !window.location.host) 
+  ? 'http://100.107.249.92:8000' 
+  : window.location.origin;
 
 // Presets for the Codex Assistant
 const PROMPT_PRESETS = {
@@ -30,6 +35,70 @@ if (window.marked) {
   });
 }
 
+// ================= Dark / Light Theme Toggle =================
+function initTheme() {
+  const saved = localStorage.getItem('courtesy-theme') || 'dark';
+  applyTheme(saved);
+}
+
+function toggleTheme() {
+  const isDark = document.documentElement.classList.contains('dark');
+  applyTheme(isDark ? 'light' : 'dark');
+}
+
+function applyTheme(theme) {
+  const html = document.documentElement;
+  const sunIcon = document.getElementById('theme-icon-sun');
+  const moonIcon = document.getElementById('theme-icon-moon');
+  const hljsTheme = document.getElementById('hljs-theme');
+
+  if (theme === 'light') {
+    html.classList.remove('dark');
+    html.classList.add('light');
+    if (sunIcon) sunIcon.classList.remove('hidden');
+    if (moonIcon) moonIcon.classList.add('hidden');
+    if (hljsTheme) hljsTheme.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css";
+  } else {
+    html.classList.remove('light');
+    html.classList.add('dark');
+    if (sunIcon) sunIcon.classList.add('hidden');
+    if (moonIcon) moonIcon.classList.remove('hidden');
+    if (hljsTheme) hljsTheme.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css";
+  }
+  localStorage.setItem('courtesy-theme', theme);
+  if (window.lucide) lucide.createIcons();
+}
+
+// ================= Electron Window Controls =================
+function windowMinimize() {
+  if (window.electronAPI) window.electronAPI.minimizeWindow();
+}
+function windowMaximize() {
+  if (window.electronAPI) window.electronAPI.maximizeWindow();
+}
+function windowClose() {
+  if (window.electronAPI) window.electronAPI.closeWindow();
+}
+
+// ================= Endpoint Switcher =================
+function toggleEndpointSelector() {
+  const next = apiBaseUrl.includes('100.107.249.92') 
+    ? 'http://localhost:8000' 
+    : 'http://100.107.249.92:8000';
+  setApiEndpoint(next);
+}
+
+function setApiEndpoint(url) {
+  apiBaseUrl = url;
+  const label = document.getElementById('current-endpoint-label');
+  if (label) {
+    label.innerText = url.includes('100.107.249.92') ? 'Pi: 100.107.249.92' : 'Local: 8000';
+  }
+  if (ws) ws.close();
+  initWebSocket();
+  fetchServersRest();
+}
+
 // ================= Tab Switching =================
 function switchTab(tabId) {
   currentTab = tabId;
@@ -39,10 +108,10 @@ function switchTab(tabId) {
     const btn = document.getElementById(`tab-btn-${t}`);
     if (t === tabId) {
       sec.classList.remove('hidden');
-      btn.className = "tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all bg-cyan-600 text-white shadow-sm";
+      btn.className = "tab-btn px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all bg-gold-gradient text-slate-950 shadow-sm";
     } else {
       sec.classList.add('hidden');
-      btn.className = "tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all text-slate-300 hover:text-white hover:bg-slate-700/50";
+      btn.className = "tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all text-[var(--text-muted)] hover:text-[var(--text-main)]";
     }
   });
 
@@ -51,16 +120,15 @@ function switchTab(tabId) {
 
 // ================= WebSocket Telemetry =================
 function initWebSocket() {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}/ws/metrics`;
+  let wsUrl;
+  if (apiBaseUrl.startsWith('https://')) {
+    wsUrl = apiBaseUrl.replace('https://', 'wss://') + '/ws/metrics';
+  } else {
+    wsUrl = apiBaseUrl.replace('http://', 'ws://') + '/ws/metrics';
+  }
 
   try {
     ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      const ind = document.getElementById('fleet-live-indicator');
-      if (ind) ind.classList.remove('opacity-50');
-    };
 
     ws.onmessage = (event) => {
       try {
@@ -75,7 +143,6 @@ function initWebSocket() {
     };
 
     ws.onclose = () => {
-      // Reconnect after 3s
       setTimeout(initWebSocket, 3000);
     };
 
@@ -83,21 +150,19 @@ function initWebSocket() {
       ws.close();
     };
   } catch (e) {
-    // Fallback to polling
     setInterval(fetchServersRest, 4000);
   }
 }
 
 async function fetchServersRest() {
   try {
-    const res = await fetch('/api/servers');
+    const res = await fetch(`${apiBaseUrl}/api/servers`);
     const servers = await res.json();
-    const summaryRes = await fetch('/api/cluster');
+    const summaryRes = await fetch(`${apiBaseUrl}/api/cluster`);
     const summary = await summaryRes.json();
     renderClusterSummary(summary);
     renderServersFromRest(servers);
-    
-    // Map array to metrics map for dropdown
+
     const map = {};
     servers.forEach(s => {
       map[s.id] = { id: s.id, online: s.status?.online, models: s.status?.models || [] };
@@ -120,17 +185,16 @@ function triggerManualRefresh() {
 
 // ================= Cluster & Server Card Rendering =================
 function renderClusterSummary(summary, metricsMap = null) {
-  const nodeCountEl = document.getElementById('header-nodes-count');
-  const gpuStatEl = document.getElementById('header-gpu-stat');
+  const titleNodesEl = document.getElementById('titlebar-nodes');
+  const titleGpusEl = document.getElementById('titlebar-gpus');
 
-  if (nodeCountEl) {
-    nodeCountEl.innerText = `${summary.online_nodes} / ${summary.total_nodes} Online`;
+  if (titleNodesEl) {
+    titleNodesEl.innerText = `${summary.online_nodes} / ${summary.total_nodes} Nodes Active`;
   }
-  if (gpuStatEl) {
-    gpuStatEl.innerText = `${summary.total_gpus}x GPUs (${summary.total_vram_gb} GB VRAM)`;
+  if (titleGpusEl) {
+    titleGpusEl.innerText = `${summary.total_gpus}x GPUs (${summary.total_vram_gb} GB VRAM)`;
   }
 
-  // Dynamically update model dropdown if metrics provided
   if (metricsMap) {
     updateModelDropdown(metricsMap);
   }
@@ -165,7 +229,7 @@ function renderServers(metricsMap) {
 
   const serverIds = Object.keys(metricsMap);
   if (serverIds.length === 0) {
-    container.innerHTML = `<div class="col-span-full py-8 text-center text-slate-500">No servers configured. Click "+ Add Server" to register a node.</div>`;
+    container.innerHTML = `<div class="col-span-full py-8 text-center text-[var(--text-muted)]">No servers configured. Click "+ Add Server" to register a node.</div>`;
     return;
   }
 
@@ -211,26 +275,26 @@ function createServerCardHtml(s) {
   const gpus = s.gpus || [];
 
   return `
-    <div class="glow-card bg-slate-900/60 rounded-2xl border ${isOnline ? 'border-slate-800 hover:border-cyan-500/40' : 'border-rose-950/40'} p-5 flex flex-col justify-between gap-4 transition shadow-xl backdrop-blur-sm">
+    <div class="luxury-card rounded-2xl p-5 flex flex-col justify-between gap-4">
       
       <!-- Card Header -->
       <div class="flex items-start justify-between gap-3">
         <div>
           <div class="flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full ${isOnline ? 'bg-emerald-400 shadow-sm shadow-emerald-400/80 animate-pulse' : 'bg-rose-500'}"></span>
-            <h3 class="font-bold text-white text-sm">${s.name || s.id}</h3>
+            <span class="h-2.5 w-2.5 rounded-full ${isOnline ? 'bg-emerald-400 pulse-gold' : 'bg-rose-500'}"></span>
+            <h3 class="font-bold text-[var(--text-main)] text-sm tracking-tight">${s.name || s.id}</h3>
           </div>
           <div class="flex items-center gap-2 mt-1">
-            <span class="font-mono text-[11px] text-slate-400">${s.host}:${s.port}</span>
-            ${s.latency_ms ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 font-mono">${s.latency_ms} ms</span>` : ''}
+            <span class="font-mono text-[11px] text-[var(--text-dim)]">${s.host}:${s.port}</span>
+            ${s.latency_ms ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-mono border border-gold text-gold-500 bg-[var(--gold-subtle)]">${s.latency_ms} ms</span>` : ''}
           </div>
         </div>
 
         <div class="flex items-center gap-1.5">
-          <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider ${isGateway ? 'bg-amber-950/60 text-amber-300 border border-amber-800/40' : 'bg-indigo-950/60 text-indigo-300 border border-indigo-800/40'}">
+          <span class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${isGateway ? 'bg-[var(--gold-subtle)] border border-gold text-gold-500' : 'bg-[var(--bg-muted)] border border-[var(--border-app)] text-[var(--text-muted)]'}">
             ${s.role || 'node'}
           </span>
-          <button onclick="toggleServer('${s.id}')" title="Toggle Enable" class="p-1 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-white transition">
+          <button onclick="toggleServer('${s.id}')" title="Toggle Node" class="p-1 rounded-lg bg-[var(--bg-muted)] hover:border-gold border border-[var(--border-app)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition">
             <i data-lucide="${s.enabled ? 'power' : 'power-off'}" class="w-3.5 h-3.5 ${s.enabled ? 'text-emerald-400' : 'text-slate-500'}"></i>
           </button>
         </div>
@@ -242,39 +306,39 @@ function createServerCardHtml(s) {
         <!-- System RAM -->
         <div>
           <div class="flex justify-between text-[11px] mb-1">
-            <span class="text-slate-400 flex items-center gap-1">
-              <i data-lucide="layers" class="w-3 h-3 text-cyan-400"></i> System RAM
+            <span class="text-[var(--text-muted)] flex items-center gap-1">
+              <i data-lucide="layers" class="w-3 h-3 text-gold-500"></i> System RAM
             </span>
-            <span class="font-mono text-slate-200">${s.ram_used_gb || 0} / ${s.ram_total_gb || 0} GB (${s.ram_percent || 0}%)</span>
+            <span class="font-mono text-[var(--text-main)] font-semibold">${s.ram_used_gb || 0} / ${s.ram_total_gb || 0} GB (${s.ram_percent || 0}%)</span>
           </div>
-          <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-            <div class="progress-bar-fill bg-cyan-500 h-full rounded-full" style="width: ${Math.min(100, s.ram_percent || 0)}%"></div>
+          <div class="w-full bg-[var(--bg-muted)] h-1.5 rounded-full overflow-hidden">
+            <div class="gold-progress-bar h-full rounded-full" style="width: ${Math.min(100, s.ram_percent || 0)}%"></div>
           </div>
         </div>
 
-        <!-- GPUs (If present) -->
+        <!-- GPUs -->
         ${gpus.length > 0 ? `
-          <div class="space-y-2 pt-1 border-t border-slate-800/60">
-            <div class="text-[11px] font-semibold text-indigo-300 flex items-center justify-between">
-              <span class="flex items-center gap-1"><i data-lucide="cpu" class="w-3 h-3"></i> NVIDIA Accelerators (${gpus.length})</span>
+          <div class="space-y-2 pt-1 border-t border-[var(--border-app)]">
+            <div class="text-[11px] font-bold text-gold-500 flex items-center justify-between">
+              <span class="flex items-center gap-1"><i data-lucide="cpu" class="w-3 h-3"></i> Dual Accelerators (${gpus.length}x)</span>
             </div>
             ${gpus.map(gpu => `
-              <div class="bg-slate-950/70 p-2 rounded-xl border border-slate-800/80 space-y-1.5">
+              <div class="bg-[var(--bg-surface)] p-2.5 rounded-xl border border-[var(--border-app)] space-y-1.5 shadow-sm">
                 <div class="flex items-center justify-between text-[11px]">
-                  <span class="font-semibold text-slate-200">GPU ${gpu.index}: ${gpu.name.replace('NVIDIA ', '')}</span>
+                  <span class="font-bold text-[var(--text-main)]">GPU ${gpu.index}: ${gpu.name.replace('NVIDIA ', '')}</span>
                   <div class="flex items-center gap-2">
-                    <span class="px-1.5 py-0.2 rounded text-[10px] font-mono ${gpu.temp_c > 65 ? 'bg-rose-950 text-rose-300' : 'bg-slate-800 text-emerald-400'}">${gpu.temp_c}°C</span>
-                    <span class="text-[10px] text-slate-400 font-mono">${gpu.util_percent || 0}% Compute</span>
+                    <span class="px-1.5 py-0.2 rounded text-[10px] font-mono ${gpu.temp_c > 65 ? 'bg-rose-950 text-rose-300' : 'bg-[var(--gold-subtle)] border border-gold text-gold-500 font-bold'}">${gpu.temp_c}°C</span>
+                    <span class="text-[10px] text-[var(--text-muted)] font-mono">${gpu.util_percent || 0}% Compute</span>
                   </div>
                 </div>
                 <!-- VRAM Bar -->
                 <div>
-                  <div class="flex justify-between text-[10px] text-slate-400 font-mono">
-                    <span>VRAM</span>
+                  <div class="flex justify-between text-[10px] text-[var(--text-dim)] font-mono">
+                    <span>VRAM Usage</span>
                     <span>${gpu.vram_used_mb || 0} / ${gpu.vram_total_mb || 5120} MB (${gpu.vram_percent || 0}%)</span>
                   </div>
-                  <div class="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                    <div class="progress-bar-fill bg-indigo-500 h-full rounded-full" style="width: ${Math.min(100, gpu.vram_percent || 0)}%"></div>
+                  <div class="w-full bg-[var(--bg-muted)] h-1 rounded-full overflow-hidden">
+                    <div class="gold-progress-bar h-full rounded-full" style="width: ${Math.min(100, gpu.vram_percent || 0)}%"></div>
                   </div>
                 </div>
               </div>
@@ -282,33 +346,33 @@ function createServerCardHtml(s) {
           </div>
         ` : ''}
 
-        <!-- Downloaded Models on this node -->
+        <!-- Active Models -->
         ${s.models && s.models.length > 0 ? `
-          <div class="pt-2 border-t border-slate-800/60">
-            <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">Active Models (${s.models.length})</span>
+          <div class="pt-2 border-t border-[var(--border-app)]">
+            <span class="text-[10px] font-bold text-gold-500 uppercase tracking-wider block mb-1.5">Loaded Models (${s.models.length})</span>
             <div class="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto pr-1">
               ${s.models.map(m => `
-                <span class="px-2 py-0.5 rounded-md bg-slate-800/90 text-cyan-300 text-[10px] font-mono border border-slate-700/60 flex items-center gap-1">
+                <span class="px-2 py-0.5 rounded-md bg-[var(--bg-surface)] text-gold-500 text-[10px] font-mono border border-gold flex items-center gap-1 shadow-sm font-medium">
                   <span>${m.name}</span>
-                  <span class="text-slate-400 text-[9px]">(${m.size_gb}GB)</span>
+                  <span class="text-[var(--text-dim)] text-[9px]">(${m.size_gb}GB)</span>
                 </span>
               `).join('')}
             </div>
           </div>
         ` : (isGateway ? `
-          <div class="text-[11px] text-slate-400 bg-slate-950/40 p-2 rounded-xl border border-slate-800">
-            Role: Gateway & SSH Tunnel Coordinator. Tailscale mesh active.
+          <div class="text-[11px] text-[var(--text-muted)] bg-[var(--bg-surface)] p-2 rounded-xl border border-[var(--border-app)]">
+            Role: Gateway & Tailscale Orchestrator.
           </div>
         ` : `
-          <div class="text-[11px] text-slate-500 italic">No models detected on node.</div>
+          <div class="text-[11px] text-[var(--text-dim)] italic">No models detected on node.</div>
         `)}
 
       </div>
 
-      <!-- Card Footer Actions -->
-      <div class="pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-        <span class="text-[10px] text-slate-400 font-mono">${(s.tags || []).join(' • ')}</span>
-        <button onclick="deleteServer('${s.id}')" class="text-slate-400 hover:text-rose-400 p-1 rounded-lg transition" title="Remove Server from Fleet">
+      <!-- Footer Actions -->
+      <div class="pt-3 border-t border-[var(--border-app)] flex items-center justify-between text-xs text-[var(--text-muted)]">
+        <span class="text-[10px] font-mono text-[var(--text-dim)]">${(s.tags || []).join(' • ')}</span>
+        <button onclick="deleteServer('${s.id}')" class="text-[var(--text-dim)] hover:text-rose-500 p-1 rounded-lg transition" title="Remove Server">
           <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
         </button>
       </div>
@@ -317,7 +381,7 @@ function createServerCardHtml(s) {
   `;
 }
 
-// ================= Server CRUD Operations =================
+// ================= Server CRUD =================
 function openAddServerModal() {
   document.getElementById('add-server-modal').classList.remove('hidden');
 }
@@ -335,13 +399,11 @@ async function handleAddServerSubmit(event) {
     port: parseInt(document.getElementById('new-server-port').value, 10) || 11434,
     role: document.getElementById('new-server-role').value,
     type: document.getElementById('new-server-type').value,
-    ssh_user: document.getElementById('new-server-ssh-user').value.trim() || null,
-    ssh_host: document.getElementById('new-server-ssh-host').value.trim() || null,
     enabled: true
   };
 
   try {
-    const res = await fetch('/api/servers', {
+    const res = await fetch(`${apiBaseUrl}/api/servers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newServer)
@@ -361,7 +423,7 @@ async function handleAddServerSubmit(event) {
 
 async function toggleServer(serverId) {
   try {
-    await fetch(`/api/servers/${serverId}/toggle`, { method: 'POST' });
+    await fetch(`${apiBaseUrl}/api/servers/${serverId}/toggle`, { method: 'POST' });
     triggerManualRefresh();
   } catch (e) {
     console.error("Toggle failed:", e);
@@ -371,7 +433,7 @@ async function toggleServer(serverId) {
 async function deleteServer(serverId) {
   if (!confirm(`Are you sure you want to remove '${serverId}' from the cluster registry?`)) return;
   try {
-    await fetch(`/api/servers/${serverId}`, { method: 'DELETE' });
+    await fetch(`${apiBaseUrl}/api/servers/${serverId}`, { method: 'DELETE' });
     triggerManualRefresh();
   } catch (e) {
     console.error("Delete failed:", e);
@@ -384,7 +446,7 @@ function applyPromptPreset() {
   const sys = PROMPT_PRESETS[presetKey] || PROMPT_PRESETS.coder;
   const infoEl = document.getElementById('chat-route-detail');
   if (infoEl) {
-    infoEl.innerText = `Active Mode: ${presetKey.toUpperCase()} • ${sys.substring(0, 70)}...`;
+    infoEl.innerText = `Mode: ${presetKey.toUpperCase()} • ${sys.substring(0, 70)}...`;
   }
 }
 
@@ -406,8 +468,8 @@ function clearChatHistory() {
   const container = document.getElementById('chat-messages');
   container.innerHTML = `
     <div class="flex items-start gap-3.5 max-w-2xl">
-      <div class="h-8 w-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-slate-950 font-bold text-sm shrink-0">⚡</div>
-      <div class="bg-slate-800/80 border border-slate-700/60 rounded-2xl rounded-tl-sm p-4 text-sm text-slate-200">
+      <div class="h-8 w-8 rounded-xl bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-sm shrink-0 shadow-sm">⚡</div>
+      <div class="bg-[var(--bg-surface)] border border-[var(--border-app)] rounded-2xl rounded-tl-sm p-4 text-sm text-[var(--text-main)] shadow-sm">
         Conversation cleared. Ready for your next coding task.
       </div>
     </div>
@@ -427,33 +489,29 @@ async function handleChatSubmit(event) {
   document.getElementById('chat-send-btn').disabled = true;
   document.getElementById('chat-status-msg').innerText = "Streaming response from cluster...";
 
-  // Append user message to UI
   appendMessage('user', userText);
   chatHistory.push({ role: 'user', content: userText });
 
-  // Get configuration
   const chosenModel = document.getElementById('chat-model-select').value;
   const presetKey = document.getElementById('prompt-preset-select').value;
   const systemPrompt = PROMPT_PRESETS[presetKey] || PROMPT_PRESETS.coder;
   const temp = parseFloat(document.getElementById('chat-temp').value) || 0.2;
   const maxTokens = parseInt(document.getElementById('chat-max-tokens').value, 10) || 4096;
 
-  // Prepare OpenAI message array
   const messagesPayload = [
     { role: 'system', content: systemPrompt },
     ...chatHistory
   ];
 
-  // Create assistant placeholder message element
   const assistantMsgId = `msg-${Date.now()}`;
-  const assistantCard = appendAssistantPlaceholder(assistantMsgId);
+  appendAssistantPlaceholder(assistantMsgId);
   const contentEl = document.getElementById(`${assistantMsgId}-content`);
 
   let fullResponseText = '';
   const startTime = Date.now();
 
   try {
-    const response = await fetch('/v1/chat/completions', {
+    const response = await fetch(`${apiBaseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -494,7 +552,6 @@ async function handleChatSubmit(event) {
             const delta = data.choices?.[0]?.delta?.content || '';
             fullResponseText += delta;
             
-            // Render markdown progressively
             contentEl.innerHTML = marked.parse(fullResponseText);
             contentEl.classList.add('streaming-cursor');
             scrollToBottom();
@@ -503,35 +560,32 @@ async function handleChatSubmit(event) {
       }
     }
 
-    // Done streaming
     contentEl.classList.remove('streaming-cursor');
     const elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(1);
     
-    // Add meta footer to the message
     const metaEl = document.getElementById(`${assistantMsgId}-meta`);
     if (metaEl) {
       metaEl.innerHTML = `
-        <span class="flex items-center gap-1.5 text-cyan-400">
+        <span class="flex items-center gap-1.5 text-gold-500 font-bold">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-          <span>Node: <strong>${targetServerHeader}</strong></span>
+          <span>Node: ${targetServerHeader}</span>
         </span>
         <span>•</span>
-        <span>Model: <code class="text-slate-300 font-mono">${targetModelHeader}</code></span>
+        <span>Model: <code class="text-[var(--text-main)] font-mono">${targetModelHeader}</code></span>
         <span>•</span>
         <span>Time: ${elapsedSeconds}s</span>
       `;
     }
 
-    // Attach code copy buttons to code blocks
     attachCopyButtons(contentEl);
     chatHistory.push({ role: 'assistant', content: fullResponseText });
 
   } catch (e) {
-    contentEl.innerHTML = `<span class="text-rose-400 font-semibold">Error communicating with cluster:</span> ${e.message}`;
+    contentEl.innerHTML = `<span class="text-rose-500 font-bold">Error communicating with cluster:</span> ${e.message}`;
   } finally {
     isStreaming = false;
     document.getElementById('chat-send-btn').disabled = false;
-    document.getElementById('chat-status-msg').innerText = "Ready for requests.";
+    document.getElementById('chat-status-msg').innerText = "Ready for coding tasks.";
     scrollToBottom();
   }
 }
@@ -541,12 +595,12 @@ function appendMessage(role, text) {
   const isUser = role === 'user';
   
   const msgHtml = `
-    <div class="flex items-start gap-3.5 ${isUser ? 'justify-end' : 'justify-start'}">
-      ${!isUser ? `<div class="h-8 w-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-slate-950 font-bold text-sm shrink-0">⚡</div>` : ''}
-      <div class="${isUser ? 'bg-cyan-600 text-white rounded-2xl rounded-tr-sm max-w-xl p-3.5 text-sm shadow-md' : 'bg-slate-800/80 border border-slate-700/60 rounded-2xl rounded-tl-sm p-4 text-sm text-slate-200 max-w-2xl leading-relaxed shadow-sm'}">
+    <div class="flex items-start gap-3.5 ${isUser ? 'justify-end' : 'justify-start'} animate-fade-up">
+      ${!isUser ? `<div class="h-8 w-8 rounded-xl bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-sm shrink-0 shadow-sm">⚡</div>` : ''}
+      <div class="${isUser ? 'bg-gold-gradient text-slate-950 font-medium rounded-2xl rounded-tr-sm max-w-xl p-3.5 text-sm shadow-md' : 'bg-[var(--bg-surface)] border border-[var(--border-app)] rounded-2xl rounded-tl-sm p-4 text-sm text-[var(--text-main)] max-w-2xl leading-relaxed shadow-sm'}">
         ${isUser ? `<p class="whitespace-pre-wrap">${escapeHtml(text)}</p>` : marked.parse(text)}
       </div>
-      ${isUser ? `<div class="h-8 w-8 rounded-xl bg-slate-700 flex items-center justify-center text-white font-bold text-xs shrink-0">YOU</div>` : ''}
+      ${isUser ? `<div class="h-8 w-8 rounded-xl bg-[var(--bg-muted)] border border-[var(--border-app)] flex items-center justify-center text-[var(--text-main)] font-bold text-xs shrink-0">YOU</div>` : ''}
     </div>
   `;
   container.insertAdjacentHTML('beforeend', msgHtml);
@@ -556,13 +610,13 @@ function appendMessage(role, text) {
 function appendAssistantPlaceholder(id) {
   const container = document.getElementById('chat-messages');
   const msgHtml = `
-    <div class="flex items-start gap-3.5 justify-start">
-      <div class="h-8 w-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-slate-950 font-bold text-sm shrink-0">⚡</div>
-      <div class="bg-slate-800/90 border border-slate-700/70 rounded-2xl rounded-tl-sm p-4 text-sm text-slate-200 max-w-3xl w-full leading-relaxed shadow-lg space-y-2">
+    <div class="flex items-start gap-3.5 justify-start animate-fade-up">
+      <div class="h-8 w-8 rounded-xl bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-sm shrink-0 shadow-sm">⚡</div>
+      <div class="bg-[var(--bg-surface)] border border-[var(--border-app)] rounded-2xl rounded-tl-sm p-4 text-sm text-[var(--text-main)] max-w-3xl w-full leading-relaxed shadow-md space-y-2">
         <div id="${id}-content" class="chat-markdown streaming-cursor">
-          <span class="text-slate-400 text-xs italic">Consulting GPU cluster...</span>
+          <span class="text-[var(--text-dim)] text-xs italic">Consulting GPU cluster...</span>
         </div>
-        <div id="${id}-meta" class="pt-2 border-t border-slate-700/50 text-[10px] text-slate-400 flex items-center gap-2"></div>
+        <div id="${id}-meta" class="pt-2 border-t border-[var(--border-app)] text-[10px] text-[var(--text-dim)] flex items-center gap-2"></div>
       </div>
     </div>
   `;
@@ -575,7 +629,7 @@ function attachCopyButtons(containerEl) {
   codeBlocks.forEach(pre => {
     if (pre.querySelector('.copy-code-btn')) return;
     const btn = document.createElement('button');
-    btn.className = 'copy-code-btn px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] text-cyan-300 font-mono border border-slate-700';
+    btn.className = 'copy-code-btn';
     btn.innerText = 'Copy';
     btn.onclick = () => {
       const code = pre.querySelector('code')?.innerText || pre.innerText;
@@ -608,6 +662,7 @@ function escapeHtml(string) {
 
 // Start on page load
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   initWebSocket();
   fetchServersRest();
   if (window.lucide) lucide.createIcons();

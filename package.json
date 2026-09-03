@@ -1,0 +1,16 @@
+{
+  "name": "courtesy-desktop",
+  "version": "1.0.0",
+  "description": "Autonomous AI Cluster Fleet & Codex Desktop Application",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "keywords": ["ai", "codex", "claude", "electron", "gpu", "cluster"],
+  "author": "echoeddestiny428",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^31.0.0"
+  }
+}
