@@ -584,3 +584,51 @@ html.light .antigravity-input-pill {
   margin-left: -16rem;
   overflow: hidden;
 }
+
+/* ================= Right-Click Context Menu ================= */
+.ctx-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--trans-fast), color var(--trans-fast);
+  border: none;
+  background: none;
+  text-align: left;
+}
+.ctx-item:hover {
+  background: var(--gold-subtle);
+  color: var(--text-main);
+}
+.ctx-shortcut {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+html.light .ctx-item:hover {
+  background: rgba(212, 175, 55, 0.12);
+}
+
+/* Portal titlebar drag region overlay */
+#view-portal .titlebar-drag-region {
+  background: transparent;
+}
+
+/* Standard & Admin topbar drag region (transparent, just for drag) */
+header.titlebar-drag-region {
+  -webkit-app-region: drag;
+}
+header.titlebar-drag-region button,
+header.titlebar-drag-region input,
+header.titlebar-drag-region select,
+header.titlebar-drag-region a,
+header.titlebar-drag-region .no-drag {
+  -webkit-app-region: no-drag;
+}

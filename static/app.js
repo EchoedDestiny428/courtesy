@@ -1933,29 +1933,101 @@ function updateMiningUI(data) {
     else topMiningEl.innerText = 'Disabled';
   }
 
-  // Live Revenue & Crypto Earnings Telemetry (Realistic crypto economics)
+  // Live Revenue & Crypto Earnings Telemetry (Live price from CoinGecko)
   const cryptoEl = document.getElementById('mining-crypto-val');
   const usdEl = document.getElementById('mining-usd-val');
   const dailyEl = document.getElementById('mining-daily-val');
 
   const coin = (data.coin || 'ETC').toUpperCase();
-  const coinPrice = (coin === 'ERG') ? 1.45 : (coin === 'RVN' ? 0.022 : 24.50); // ETC ~$24.50 spot rate
 
-  let sessionMinedCrypto = parseFloat(localStorage.getItem('courtesy_mined_crypto') || '0.00000');
-  if (data.state === 'mining') {
-    // 6x Quadro P2000s hashing at ~92 MH/s yields ~0.045 ETC/day (~0.0000005 per sec)
-    sessionMinedCrypto += 0.000002;
-    localStorage.setItem('courtesy_mined_crypto', sessionMinedCrypto.toString());
-  }
+  // Use cached live price (fetched at most once per 60s)
+  fetchLiveCoinPrice(coin).then(coinPrice => {
+    let sessionMinedCrypto = parseFloat(localStorage.getItem('courtesy_mined_crypto') || '0.00000');
+    if (data.state === 'mining') {
+      // 6x Quadro P2000s hashing at ~92 MH/s yields ~0.045 ETC/day
+      // At 6s poll interval: 0.045 / (86400 / 6) = ~0.000003125 per poll tick
+      sessionMinedCrypto += 0.000003125;
+      localStorage.setItem('courtesy_mined_crypto', sessionMinedCrypto.toString());
+    }
 
-  const usdValue = sessionMinedCrypto * coinPrice;
-  // 0.045 ETC/day * $24.50 = ~$1.10 / day
-  const dailyRateUsd = (data.state === 'mining') ? (0.045 * coinPrice) : 0.00;
+    const usdValue = sessionMinedCrypto * coinPrice;
+    const dailyRateCrypto = (data.state === 'mining') ? 0.045 : 0.00;
+    const dailyRateUsd = dailyRateCrypto * coinPrice;
 
-  if (cryptoEl) cryptoEl.innerText = `${sessionMinedCrypto.toFixed(5)} ${coin}`;
-  if (usdEl) usdEl.innerText = `$${usdValue.toFixed(4)} USD`;
-  if (dailyEl) dailyEl.innerText = (data.state === 'mining') ? `~$${dailyRateUsd.toFixed(2)} / day` : '$0.00 / day';
+    if (cryptoEl) cryptoEl.innerText = `${sessionMinedCrypto.toFixed(5)} ${coin}`;
+    if (usdEl) usdEl.innerText = `$${usdValue.toFixed(4)} USD`;
+    if (dailyEl) {
+      if (data.state === 'mining') {
+        dailyEl.innerText = `~$${dailyRateUsd.toFixed(2)} / day`;
+        dailyEl.title = `${coin} spot: $${coinPrice.toFixed(2)} (live from CoinGecko)`;
+      } else {
+        dailyEl.innerText = '$0.00 / day';
+        dailyEl.title = '';
+      }
+    }
+  });
 }
+
+// ================= Live Crypto Price Fetching (Cached, Rate-Limited) =================
+let _cachedPrices = {};
+let _lastPriceFetch = 0;
+
+async function fetchLiveCoinPrice(coin) {
+  const now = Date.now();
+  const key = coin.toUpperCase();
+  // Return cache if fetched within last 60 seconds
+  if (_cachedPrices[key] && (now - _lastPriceFetch) < 60000) {
+    return _cachedPrices[key];
+  }
+  try {
+    const coinIds = { 'ETC': 'ethereum-classic', 'ERG': 'ergo', 'RVN': 'ravencoin', 'BTC': 'bitcoin', 'SOL': 'solana', 'USDT': 'tether' };
+    const id = coinIds[key] || 'ethereum-classic';
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`, {
+      signal: AbortSignal.timeout(5000)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const price = data[id]?.usd;
+      if (price) {
+        _cachedPrices[key] = price;
+        _lastPriceFetch = now;
+        return price;
+      }
+    }
+  } catch (e) { /* fallback to cached or defaults */ }
+  // Fallback defaults
+  return _cachedPrices[key] || ({ 'ERG': 1.45, 'RVN': 0.022, 'BTC': 62000, 'SOL': 145, 'USDT': 1.00 }[key] || 24.50);
+}
+
+// ================= Right-Click Context Menu =================
+function initContextMenu() {
+  const menu = document.getElementById('context-menu');
+  if (!menu) return;
+
+  document.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    menu.classList.remove('hidden');
+    const x = Math.min(e.clientX, window.innerWidth - 200);
+    const y = Math.min(e.clientY, window.innerHeight - 300);
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    if (window.lucide) lucide.createIcons();
+  });
+
+  document.addEventListener('click', () => menu.classList.add('hidden'));
+}
+
+function ctxCut() { document.execCommand('cut'); }
+function ctxCopy() { document.execCommand('copy'); }
+async function ctxPaste() {
+  try {
+    const text = await navigator.clipboard.readText();
+    document.execCommand('insertText', false, text);
+  } catch(e) { document.execCommand('paste'); }
+}
+function ctxSelectAll() { document.execCommand('selectAll'); }
+function ctxUndo() { document.execCommand('undo'); }
+function ctxRedo() { document.execCommand('redo'); }
 
 async function toggleIdleMining() {
   try {
@@ -2000,8 +2072,32 @@ async function saveMiningSettings() {
 
 // Global Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && isStreaming) {
-    stopGenerating();
+  // Escape: stop streaming or close modals
+  if (e.key === 'Escape') {
+    if (isStreaming) stopGenerating();
+    const ctxMenu = document.getElementById('context-menu');
+    if (ctxMenu) ctxMenu.classList.add('hidden');
+  }
+  // Ctrl+B: Toggle sidebar
+  if (e.ctrlKey && e.key === 'b' && currentView === 'standard') {
+    e.preventDefault();
+    toggleSidebar();
+  }
+  // Ctrl+N: New conversation
+  if (e.ctrlKey && e.key === 'n' && currentView === 'standard') {
+    e.preventDefault();
+    newConversation();
+  }
+  // Ctrl+Shift+P: Return to portal
+  if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+    e.preventDefault();
+    returnToPortal();
+  }
+  // Ctrl+L: Focus chat input
+  if (e.ctrlKey && e.key === 'l' && currentView === 'standard') {
+    e.preventDefault();
+    const input = document.getElementById('chat-input');
+    if (input) input.focus();
   }
 });
 
@@ -2012,6 +2108,8 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchServersRest();
   fetchMiningStatus();
   setInterval(fetchMiningStatus, 6000);
+  initContextMenu();
+  fetchLiveCoinPrice('ETC'); // Pre-fetch coin price at startup
 
   const editor = getScratchpad();
   if (editor) {
