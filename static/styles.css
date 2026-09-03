@@ -485,6 +485,10 @@ button:active, .interactive-btn:active {
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
+html.light .antigravity-input-pill {
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.08);
+}
+
 .antigravity-input-pill:focus-within {
   border-color: var(--gold-500);
   box-shadow: 0 16px 44px -8px var(--gold-glow), 0 0 0 1px rgba(212, 175, 55, 0.3);

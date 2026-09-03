@@ -103,40 +103,40 @@
       <!-- Top Section -->
       <div class="p-3 space-y-3 overflow-y-auto flex-1">
         
-        <!-- App Title & Menus (Pure Typography, No Photo) -->
+        <!-- App Title & Menus (Pure Typography, Adapts to Light/Dark Mode) -->
         <div class="flex items-center gap-4 px-1 pt-0.5 select-none text-xs">
-          <span class="font-bold text-white tracking-tight text-[13px]">Courtesy</span>
-          <span class="text-[11px] text-[var(--text-muted)] hover:text-white cursor-pointer transition">File</span>
-          <span class="text-[11px] text-[var(--text-muted)] hover:text-white cursor-pointer transition">View</span>
-          <span class="text-[11px] text-[var(--text-muted)] hover:text-white cursor-pointer transition">Window</span>
+          <span class="font-bold text-[var(--text-main)] tracking-tight text-[13px]">Courtesy</span>
+          <span class="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer transition">File</span>
+          <span class="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer transition">View</span>
+          <span class="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer transition">Window</span>
         </div>
 
         <!-- Sidebar Collapse / Navigation Controls Row -->
         <div class="flex items-center gap-2 px-1 pt-1 text-[var(--text-muted)]">
-          <button onclick="toggleSidebar()" class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-white transition" title="Collapse Sidebar">
+          <button onclick="toggleSidebar()" class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-[var(--text-main)] transition" title="Collapse Sidebar">
             <i data-lucide="panel-left" class="w-4 h-4"></i>
           </button>
-          <button class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-white transition opacity-50 cursor-not-allowed">
+          <button class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-[var(--text-main)] transition opacity-50 cursor-not-allowed">
             <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
           </button>
-          <button class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-white transition opacity-50 cursor-not-allowed">
+          <button class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-[var(--text-main)] transition opacity-50 cursor-not-allowed">
             <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
           </button>
         </div>
 
         <!-- + New Conversation Button -->
-        <button onclick="newConversation()" class="w-full py-2 px-3 rounded-xl border border-[var(--border-app)] hover:border-gold bg-[var(--bg-input)] hover:bg-[var(--bg-surface-elevated)] text-white text-xs font-semibold flex items-center gap-2 hover-float transition shadow-sm">
+        <button onclick="newConversation()" class="w-full py-2 px-3 rounded-xl border border-[var(--border-app)] hover:border-gold bg-[var(--bg-input)] hover:bg-[var(--bg-surface-elevated)] text-[var(--text-main)] text-xs font-semibold flex items-center gap-2 hover-float transition shadow-sm">
           <i data-lucide="plus" class="w-3.5 h-3.5 text-gold-500"></i>
           <span>New Conversation</span>
         </button>
 
         <!-- Navigation Links -->
         <div class="space-y-0.5 text-xs text-[var(--text-muted)] font-medium pt-1">
-          <button onclick="clearChat()" class="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] hover:text-white flex items-center gap-2 text-left transition">
+          <button onclick="clearChat()" class="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] hover:text-[var(--text-main)] flex items-center gap-2 text-left transition">
             <i data-lucide="history" class="w-3.5 h-3.5 text-[var(--text-dim)]"></i>
             <span>Conversation History</span>
           </button>
-          <button onclick="showToast('Scheduled tasks running on cluster hub', '⏰')" class="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] hover:text-white flex items-center gap-2 text-left transition">
+          <button onclick="showToast('Scheduled tasks running on cluster hub', '⏰')" class="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] hover:text-[var(--text-main)] flex items-center gap-2 text-left transition">
             <i data-lucide="clock" class="w-3.5 h-3.5 text-[var(--text-dim)]"></i>
             <span>Scheduled Tasks</span>
           </button>
@@ -147,7 +147,7 @@
           <div class="flex items-center justify-between px-2 text-[10px] font-mono text-[var(--text-dim)] uppercase tracking-wider">
             <span>Projects</span>
             <div class="flex items-center gap-1.5">
-              <button onclick="pickWorkspaceFolder()" class="hover:text-white p-0.5 rounded transition" title="Choose Workspace Folder (Opens File Explorer)">
+              <button onclick="pickWorkspaceFolder()" class="hover:text-[var(--text-main)] p-0.5 rounded transition" title="Choose Workspace Folder (Opens File Explorer)">
                 <i data-lucide="folder-plus" class="w-3 h-3"></i>
               </button>
             </div>
@@ -157,7 +157,7 @@
           <div class="space-y-1 font-mono text-xs">
             <!-- Active Project -->
             <div class="p-2 rounded-xl bg-[var(--bg-muted)] border border-gold/40 space-y-1 cursor-pointer" onclick="pickWorkspaceFolder()" title="Click to browse in File Explorer">
-              <div class="flex items-center justify-between text-white font-bold text-[11px]">
+              <div class="flex items-center justify-between text-[var(--text-main)] font-bold text-[11px]">
                 <div class="flex items-center gap-1.5 truncate">
                   <i data-lucide="folder" class="w-3.5 h-3.5 text-gold-500 shrink-0"></i>
                   <span id="sidebar-folder-label" class="truncate">courtesy</span>
@@ -168,19 +168,19 @@
             </div>
 
             <!-- Recent Preset Projects -->
-            <div onclick="setWorkspaceFolder('~/projects/HyprSim')" class="px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:text-white text-[11px] flex items-center gap-2 cursor-pointer transition">
+            <div onclick="setWorkspaceFolder('~/projects/HyprSim')" class="px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:text-[var(--text-main)] text-[11px] flex items-center gap-2 cursor-pointer transition">
               <i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--text-dim)]"></i>
               <span class="truncate">HyprSim</span>
             </div>
-            <div onclick="setWorkspaceFolder('~/projects/EndOfTokens')" class="px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:text-white text-[11px] flex items-center gap-2 cursor-pointer transition">
+            <div onclick="setWorkspaceFolder('~/projects/EndOfTokens')" class="px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:text-[var(--text-main)] text-[11px] flex items-center gap-2 cursor-pointer transition">
               <i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--text-dim)]"></i>
               <span class="truncate">EndOfTokens</span>
             </div>
-            <div onclick="setWorkspaceFolder('~/projects/EchoedDestiny428')" class="px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:text-white text-[11px] flex items-center gap-2 cursor-pointer transition">
+            <div onclick="setWorkspaceFolder('~/projects/EchoedDestiny428')" class="px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:text-[var(--text-main)] text-[11px] flex items-center gap-2 cursor-pointer transition">
               <i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--text-dim)]"></i>
               <span class="truncate">EchoedDestiny428</span>
             </div>
-            <div onclick="setWorkspaceFolder('~/projects/CLI Project')" class="px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:text-white text-[11px] flex items-center gap-2 cursor-pointer transition">
+            <div onclick="setWorkspaceFolder('~/projects/CLI Project')" class="px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:text-[var(--text-main)] text-[11px] flex items-center gap-2 cursor-pointer transition">
               <i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--text-dim)]"></i>
               <span class="truncate">CLI Project</span>
             </div>
@@ -191,12 +191,12 @@
 
       <!-- Sidebar Bottom Footer -->
       <div class="p-3 border-t border-[var(--border-app)] flex items-center justify-between text-xs text-[var(--text-muted)]">
-        <button onclick="openAdminLoginModal()" class="flex items-center gap-1.5 hover:text-white p-1 rounded-lg transition" title="Cluster Admin Console">
+        <button onclick="openAdminLoginModal()" class="flex items-center gap-1.5 hover:text-[var(--text-main)] p-1 rounded-lg transition" title="Cluster Admin Console">
           <i data-lucide="settings" class="w-4 h-4 text-gold-500"></i>
           <span>Settings</span>
         </button>
 
-        <button onclick="toggleTheme()" class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-gold-400 hover:text-white transition" title="Toggle Light / Dark Mode">
+        <button onclick="toggleTheme()" class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-gold-400 hover:text-[var(--text-main)] transition" title="Toggle Light / Dark Mode">
           <i data-lucide="sun-moon" class="w-4 h-4"></i>
         </button>
       </div>
@@ -212,19 +212,19 @@
         
         <!-- Left: Sidebar Toggle & Navigation Arrows -->
         <div class="flex items-center gap-2">
-          <button onclick="toggleSidebar()" class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Toggle Sidebar">
+          <button onclick="toggleSidebar()" class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="Toggle Sidebar">
             <i data-lucide="panel-left" class="w-4 h-4"></i>
           </button>
-          <button class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white opacity-50 cursor-not-allowed">
+          <button class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] opacity-50 cursor-not-allowed">
             <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
           </button>
-          <button class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white opacity-50 cursor-not-allowed">
+          <button class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] opacity-50 cursor-not-allowed">
             <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
           </button>
         </div>
 
         <!-- Center: Active Folder Indicator (Launches File Explorer directly!) -->
-        <button onclick="pickWorkspaceFolder()" class="px-3 py-1 rounded-xl bg-[var(--bg-muted)] border border-[var(--border-app)] hover:border-gold text-white font-mono text-xs flex items-center gap-2 hover-float transition shadow-sm" title="Click to open Windows File Explorer">
+        <button onclick="pickWorkspaceFolder()" class="px-3 py-1 rounded-xl bg-[var(--bg-muted)] border border-[var(--border-app)] hover:border-gold text-[var(--text-main)] font-mono text-xs flex items-center gap-2 hover-float transition shadow-sm" title="Click to open Windows File Explorer">
           <i data-lucide="folder" class="w-3.5 h-3.5 text-gold-500"></i>
           <span id="current-folder-label">courtesy</span>
           <i data-lucide="chevron-down" class="w-3 h-3 text-[var(--text-dim)]"></i>
@@ -258,19 +258,19 @@
           </button>
 
           <!-- Day / Night Toggle -->
-          <button onclick="toggleTheme()" class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-gold-400 hover:text-white transition" title="Toggle Light / Dark theme">
+          <button onclick="toggleTheme()" class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-gold-400 hover:text-[var(--text-main)] transition" title="Toggle Light / Dark theme">
             <i data-lucide="sun-moon" class="w-3.5 h-3.5"></i>
           </button>
 
           <!-- Window Controls (Electron) -->
           <div class="flex items-center gap-1 pl-1 border-l border-[var(--border-app)]">
-            <button onclick="windowMinimize()" class="p-1 hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white rounded transition">
+            <button onclick="windowMinimize()" class="p-1 hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] rounded transition">
               <i data-lucide="minus" class="w-3 h-3"></i>
             </button>
-            <button onclick="windowMaximize()" class="p-1 hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white rounded transition">
+            <button onclick="windowMaximize()" class="p-1 hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] rounded transition">
               <i data-lucide="square" class="w-2.5 h-2.5"></i>
             </button>
-            <button onclick="windowClose()" class="p-1 hover:bg-rose-900 text-[var(--text-dim)] hover:text-white rounded transition">
+            <button onclick="windowClose()" class="p-1 hover:bg-rose-900 text-[var(--text-dim)] hover:text-[var(--text-main)] rounded transition">
               <i data-lucide="x" class="w-3 h-3"></i>
             </button>
           </div>
@@ -289,7 +289,7 @@
           <div id="empty-chat-placeholder" class="min-h-[50vh] flex flex-col items-center justify-center text-center space-y-6 animate-fade-in pt-8">
             
             <!-- Floating Workspace Folder Selector -->
-            <button onclick="pickWorkspaceFolder()" class="px-4 py-1.5 rounded-full border border-[var(--border-app)] bg-[var(--bg-surface-elevated)] hover:border-gold text-[var(--text-secondary)] font-mono text-xs flex items-center gap-2 hover-float transition shadow-sm" title="Click to open Windows File Explorer">
+            <button onclick="pickWorkspaceFolder()" class="px-4 py-1.5 rounded-full border border-[var(--border-app)] bg-[var(--bg-surface-elevated)] hover:border-gold text-[var(--text-main)] font-mono text-xs flex items-center gap-2 hover-float transition shadow-sm" title="Click to open Windows File Explorer">
               <i data-lucide="folder" class="w-3.5 h-3.5 text-gold-500"></i>
               <span id="center-folder-label">courtesy</span>
               <i data-lucide="chevron-down" class="w-3 h-3 text-[var(--text-dim)]"></i>
@@ -306,7 +306,7 @@
                 
                 <!-- Left: Attachments & Model Pill -->
                 <div class="flex items-center gap-2">
-                  <button onclick="pickWorkspaceFolder()" class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Attach folder context / File Explorer">
+                  <button onclick="pickWorkspaceFolder()" class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="Attach folder context / File Explorer">
                     <i data-lucide="plus" class="w-4 h-4"></i>
                   </button>
 
@@ -318,7 +318,7 @@
 
                 <!-- Right: Voice Mic & Send Button -->
                 <div class="flex items-center gap-2">
-                  <button onclick="showToast('Voice prompt active on cluster', '🎙️')" class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Voice Input">
+                  <button onclick="showToast('Voice prompt active on cluster', '🎙️')" class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="Voice Input">
                     <i data-lucide="mic" class="w-3.5 h-3.5"></i>
                   </button>
 
@@ -360,7 +360,7 @@
             
             <div class="flex items-center justify-between pt-1 border-t border-[var(--border-app-subtle)]">
               <div class="flex items-center gap-2">
-                <button onclick="pickWorkspaceFolder()" class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Choose Workspace Folder">
+                <button onclick="pickWorkspaceFolder()" class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="Choose Workspace Folder">
                   <i data-lucide="plus" class="w-4 h-4"></i>
                 </button>
                 <span class="text-[10px] font-mono text-gold-500" id="sticky-model-display">🧠 Qwen 2.5 Coder 14B</span>
@@ -396,7 +396,7 @@
       <!-- Left: Logo, Title & Superuser Badge -->
       <div class="flex items-center gap-3">
         <div class="flex items-center gap-2 cursor-pointer" onclick="showView('view-standard')">
-          <span class="font-extrabold tracking-wider text-xs text-white">COURTESY <span class="text-gold-500 font-mono">ADMIN</span></span>
+          <span class="font-extrabold tracking-wider text-xs text-[var(--text-main)]">COURTESY <span class="text-gold-500 font-mono">ADMIN</span></span>
         </div>
         <span class="text-[9px] font-mono font-bold text-slate-950 bg-gold-gradient px-2 py-0.5 rounded-full shadow-sm">
           👑 SUPERUSER
