@@ -9,6 +9,10 @@ env/
 venv/
 ENV/
 
+# Dependencies
+node_modules/
+package-lock.json
+
 # Archives & Temporary files
 *.tar.gz
 *.tmp
