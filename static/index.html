@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Courtesy • Antigravity AI Cluster & Codex</title>
-  <link rel="icon" href="logo.svg">
+  <link rel="icon" href="courtesy-gold.png">
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -18,50 +18,45 @@
               300: '#FDE68A',
               400: '#F5D061',
               500: '#D4AF37',
-              600: '#B89225',
-              700: '#947216',
+              600: '#B89428',
+              700: '#8C6F18',
+              900: '#473708',
+              subtle: 'rgba(212, 175, 55, 0.1)',
+              glow: 'rgba(212, 175, 55, 0.25)',
+              border: 'rgba(212, 175, 55, 0.4)'
             }
           }
         }
       }
     }
   </script>
-  <!-- Highlight.js for code syntax highlighting -->
+  <!-- Google Fonts: Space Grotesk & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Highlight.js for code blocks -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" id="hljs-theme">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <!-- Marked.js for markdown rendering -->
+  <!-- Marked.js for markdown parsing -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="styles.css">
 </head>
-<body class="min-h-screen flex flex-col antialiased select-none bg-[var(--bg-app)] text-[var(--text-main)] font-sans overflow-x-hidden">
+<body class="bg-[var(--bg-app)] text-[var(--text-main)] font-sans antialiased select-none overflow-hidden transition-colors duration-200">
 
   <!-- ================================================================
-       VIEW 1: ORIGINAL LANDING SPLASH PORTAL (LAUNCH SCREEN)
+       LANDING LAUNCH PORTAL (RESTORED CLEAN INITIAL SCREEN)
        ================================================================ -->
   <section id="view-portal" class="min-h-screen flex flex-col items-center justify-center p-6 relative z-10 transition-opacity duration-300">
     <div class="portal-glow-bg"></div>
 
     <div class="max-w-md w-full flex flex-col items-center text-center space-y-6 relative z-10">
       
-      <!-- Animated Sliding Logo (Clean Vector SVG, Never Fails) -->
+      <!-- Animated Sliding Logo (Transparent Gold PNG) -->
       <div class="relative group cursor-pointer logo-slide-up w-28 h-28 flex items-center justify-center" onclick="startStandardMode()" title="Click to Launch Courtesy Codex">
         <div class="absolute -inset-4 rounded-full bg-gold-500/20 blur-xl group-hover:bg-gold-500/30 transition duration-500"></div>
-        <svg class="w-24 h-24 relative z-10 drop-shadow-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 2000">
-          <defs>
-            <linearGradient id="portalGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#FFF0B3" />
-              <stop offset="50%" stop-color="#D4AF37" />
-              <stop offset="100%" stop-color="#947216" />
-            </linearGradient>
-          </defs>
-          <!-- Left Chevron Peak -->
-          <polyline points="421,1224 814,582 1188,1224" fill="none" stroke="url(#portalGoldGrad)" stroke-width="70" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="4" />
-          <!-- Right Closed Triangle -->
-          <polygon points="781,1224 1180,582 1579,1224" fill="none" stroke="url(#portalGoldGrad)" stroke-width="70" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="4" />
-        </svg>
+        <img id="portal-logo-img" src="courtesy-gold.png" alt="Courtesy" class="w-24 h-24 relative z-10 object-contain drop-shadow-md">
       </div>
 
       <!-- Minimal Title -->
@@ -540,15 +535,15 @@
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-xs font-mono">
             <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-gold/40 space-y-1">
               <span class="text-[10px] text-[var(--text-dim)] block">Crypto Mined</span>
-              <span id="mining-crypto-val" class="font-bold text-gold-400 text-sm">0.0482 ETC</span>
+              <span id="mining-crypto-val" class="font-bold text-gold-400 text-sm">0.00000 ETC</span>
             </div>
             <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-emerald-500/40 space-y-1">
               <span class="text-[10px] text-[var(--text-dim)] block">Money Made (USD)</span>
-              <span id="mining-usd-val" class="font-bold text-emerald-400 text-sm">$138.40 USD</span>
+              <span id="mining-usd-val" class="font-bold text-emerald-400 text-sm">$0.0000 USD</span>
             </div>
             <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
               <span class="text-[10px] text-[var(--text-dim)] block">Daily Run-Rate</span>
-              <span id="mining-daily-val" class="font-bold text-white text-xs">~$14.20 / day</span>
+              <span id="mining-daily-val" class="font-bold text-white text-xs">$0.00 / day</span>
             </div>
             <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
               <span class="text-[10px] text-[var(--text-dim)] block">Cluster Hashrate</span>

@@ -663,6 +663,12 @@ function applyTheme(theme) {
     if (moonIcon) moonIcon.classList.remove('hidden');
     if (hljsTheme) hljsTheme.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css";
   }
+
+  const portalLogo = document.getElementById('portal-logo-img');
+  if (portalLogo) {
+    portalLogo.src = (theme === 'light') ? 'courtesy-black.png' : 'courtesy-gold.png';
+  }
+
   localStorage.setItem('courtesy-theme', theme);
   if (window.lucide) lucide.createIcons();
 }
@@ -1004,22 +1010,22 @@ function renderClusterSummary(summary, metricsMap = null) {
   if (fleetCountEl) {
     fleetCountEl.innerText = summary.online_nodes || 3;
   }
-  if (portalCountEl && summary.total_nodes) {
-    portalCountEl.innerText = `${summary.online_nodes || 0} / ${summary.total_nodes || 3} Nodes Online`;
+  if (portalCountEl) {
+    const online = (summary && typeof summary.online_nodes === 'number') ? summary.online_nodes : 3;
+    const total = (summary && typeof summary.total_nodes === 'number') ? summary.total_nodes : 3;
+    portalCountEl.innerText = `${online} / ${total} Compute Nodes Online (30GB VRAM)`;
   }
 
   if (metricsMap) {
     renderGpuActivityStrip(metricsMap);
 
-    // Update connected node indicator in Standard IDE topbar
-    const onlineNodes = Object.values(metricsMap).filter(s => s.online && s.role === 'inference');
-    if (onlineNodes.length > 0) {
-      onlineNodes.sort((a, b) => (a.latency_ms || 999) - (b.latency_ms || 999));
-      const best = onlineNodes[0];
-      const nodeLabel = document.getElementById('std-connected-node-label');
-      if (nodeLabel) {
-        nodeLabel.innerText = `${best.id} (${best.latency_ms || 12}ms)`;
-      }
+    // Update pinned node indicator in Standard IDE topbar
+    const nodeLabel = document.getElementById('std-connected-node-label');
+    if (nodeLabel) {
+      const modelLabel = pinnedNode === 'kraken' ? '7B Fast' : '14B Heavy';
+      const nodeData = metricsMap[pinnedNode];
+      const lat = (nodeData && nodeData.latency_ms) ? ` • ${nodeData.latency_ms}ms` : '';
+      nodeLabel.innerText = `Pinned: ${pinnedNode} (${modelLabel}${lat})`;
     }
   }
 }
@@ -1099,6 +1105,11 @@ function createMinimalServerCardHtml(s) {
   const isGateway = s.role === 'gateway' || s.type === 'system_only';
   const gpus = s.gpus || [];
 
+  const totalRam = s.ram_total_gb || (isGateway ? 8.0 : 32.0);
+  const usedRam = isOnline ? (s.ram_used_gb || (isGateway ? 2.2 : 8.4)) : 0.0;
+  const ramPct = isOnline ? (s.ram_percent || Math.round((usedRam / totalRam) * 100)) : 0;
+  const roleLabel = isGateway ? 'Cluster Orchestrator' : (s.id === 'cst7' ? '14B Heavy Coder' : '7B Fast Coder');
+
   return `
     <div class="luxury-card rounded-xl p-3.5 flex flex-col justify-between gap-3 text-xs">
       
@@ -1110,7 +1121,7 @@ function createMinimalServerCardHtml(s) {
         </div>
 
         <div class="flex items-center gap-1">
-          ${s.latency_ms ? `<span class="text-[10px] font-mono text-gold-500 px-1 py-0.5 rounded bg-[var(--gold-subtle)]">${s.latency_ms}ms</span>` : ''}
+          ${isOnline && s.latency_ms ? `<span class="text-[10px] font-mono text-gold-500 px-1 py-0.5 rounded bg-[var(--gold-subtle)]">${s.latency_ms}ms</span>` : ''}
           <button onclick="toggleServer('${s.id}')" title="Toggle Node" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition">
             <i data-lucide="${s.enabled ? 'power' : 'power-off'}" class="w-3 h-3 ${s.enabled ? 'text-emerald-400' : 'text-slate-500'}"></i>
           </button>
@@ -1124,10 +1135,10 @@ function createMinimalServerCardHtml(s) {
         <div>
           <div class="flex justify-between text-[10px] text-[var(--text-dim)] mb-0.5">
             <span class="font-bold text-[var(--text-secondary)]">CPU RAM</span>
-            <span class="text-[var(--text-main)] font-semibold">${s.ram_used_gb || 8.4} / ${s.ram_total_gb || 32} GB (${s.ram_percent || 26}%)</span>
+            <span class="text-[var(--text-main)] font-semibold">${usedRam} / ${totalRam} GB (${ramPct}%)</span>
           </div>
           <div class="w-full bg-[var(--bg-input)] h-1.5 rounded-full overflow-hidden">
-            <div class="gold-progress-bar h-full rounded-full" style="width: ${Math.min(100, s.ram_percent || 26)}%"></div>
+            <div class="gold-progress-bar h-full rounded-full" style="width: ${Math.min(100, ramPct)}%"></div>
           </div>
         </div>
 
@@ -1135,16 +1146,18 @@ function createMinimalServerCardHtml(s) {
         ${gpus.length > 0 ? `
           <div class="space-y-1.5 pt-1.5 border-t border-[var(--border-app)]">
             ${gpus.map(gpu => {
-              const isMiningActive = (gpu.util_percent && gpu.util_percent > 70);
-              const vramUsedGb = gpu.vram_used_mb ? (gpu.vram_used_mb / 1024).toFixed(1) : (isMiningActive ? "4.4" : "1.2");
-              const vramPercent = gpu.vram_percent || (isMiningActive ? 88 : 24);
+              const isMiningActive = isOnline && (gpu.util_percent && gpu.util_percent > 70);
+              const temp = isOnline ? (gpu.temp_c || (isMiningActive ? 64 : 38)) : 0;
+              const util = isOnline ? (gpu.util_percent || (isMiningActive ? 94 : 0)) : 0;
+              const vramUsedGb = isOnline ? (gpu.vram_used_mb ? (gpu.vram_used_mb / 1024).toFixed(1) : (isMiningActive ? "4.3" : "0.8")) : "0.0";
+              const vramPercent = isOnline ? (gpu.vram_percent || (isMiningActive ? 86 : 16)) : 0;
               return `
                 <div class="p-1.5 rounded-lg bg-[var(--bg-input)] space-y-1">
                   <div class="flex items-center justify-between text-[10px]">
                     <span class="text-[var(--text-secondary)] font-medium">GPU ${gpu.index} (${vramUsedGb}/5.0 GB VRAM)</span>
                     <div class="flex items-center gap-1.5">
-                      <span class="text-gold-500 font-bold">${gpu.temp_c || 64}°C</span>
-                      <span class="text-[var(--text-dim)]">${gpu.util_percent || (isMiningActive ? 94 : 0)}% util</span>
+                      <span class="text-gold-500 font-bold">${isOnline ? `${temp}°C` : '--'}</span>
+                      <span class="text-[var(--text-dim)]">${util}% util</span>
                       <span class="text-emerald-400 font-bold font-mono text-[9px]">${vramPercent}% VRAM</span>
                     </div>
                   </div>
@@ -1157,17 +1170,17 @@ function createMinimalServerCardHtml(s) {
           </div>
         ` : ''}
 
-        <!-- Assigned AI Model -->
+        <!-- Assigned AI / Role -->
         <div class="pt-2 border-t border-[var(--border-app)] flex items-center justify-between text-[10px]">
           <span class="text-[var(--text-dim)]">Assigned AI</span>
-          <span class="text-gold-400 font-bold">${s.id === 'cst7' ? '14B Heavy Coder' : '7B Fast Coder'}</span>
+          <span class="text-gold-400 font-bold">${roleLabel}</span>
         </div>
 
       </div>
 
       <!-- Action Footer -->
       <div class="pt-2 border-t border-[var(--border-app)] flex items-center justify-between text-[10px]">
-        <span class="text-[var(--text-dim)] font-mono truncate max-w-[130px]">${s.host}:${s.port || 11434}</span>
+        <span class="text-[var(--text-dim)] font-mono truncate max-w-[130px]">${isGateway ? '100.107.249.92' : `${s.host}:${s.port || 11434}`}</span>
         ${!isGateway ? `
           <button onclick="offloadSingleNode('${s.id}')" class="text-gold-500 hover:text-white flex items-center gap-1 font-mono transition" title="Flush resident models from VRAM">
             <i data-lucide="sparkles" class="w-3 h-3"></i>
