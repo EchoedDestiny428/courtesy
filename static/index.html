@@ -189,6 +189,10 @@
                 onkeydown="handleTextareaKeydown(event)"
               ></textarea>
               <div class="absolute right-2.5 bottom-2.5 flex items-center gap-1.5">
+                <button type="button" id="chat-stop-btn" onclick="stopGenerating()" class="hidden px-2.5 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 font-bold text-xs flex items-center gap-1 transition border border-rose-700/50">
+                  <i data-lucide="square" class="w-2.5 h-2.5 fill-current"></i>
+                  <span>Stop</span>
+                </button>
                 <button type="submit" id="chat-send-btn" class="px-3 py-1.5 rounded-lg bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-extrabold text-xs flex items-center gap-1 transition shadow-sm shadow-gold-glow">
                   <span>Send</span>
                   <i data-lucide="send" class="w-3 h-3 stroke-[2.5]"></i>
@@ -259,20 +263,26 @@
               <button onclick="copyEditorCode()" class="p-1 rounded-md bg-[var(--bg-muted)] hover:border-gold text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border-app)] transition" title="Copy code">
                 <i data-lucide="copy" class="w-3 h-3"></i>
               </button>
+              <button onclick="downloadEditorCode()" class="p-1 rounded-md bg-[var(--bg-muted)] hover:border-gold text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border-app)] transition" title="Download file to disk">
+                <i data-lucide="download" class="w-3 h-3"></i>
+              </button>
               <button onclick="clearEditor()" class="p-1 rounded-md bg-[var(--bg-muted)] hover:border-gold text-[var(--text-muted)] hover:text-rose-400 border border-[var(--border-app)] transition" title="Clear editor">
                 <i data-lucide="eraser" class="w-3 h-3"></i>
               </button>
             </div>
           </div>
 
-          <!-- Code Editor Area -->
-          <div class="flex-1 relative flex">
+          <!-- Code Editor Area with Line Numbers Gutter -->
+          <div class="flex-1 relative flex overflow-hidden">
+            <div id="editor-gutter" class="select-none text-right pr-2.5 pl-2 py-3.5 text-[var(--text-dim)] font-mono text-[11px] border-r border-[var(--border-app)] bg-[var(--bg-surface-elevated)] min-w-[32px] leading-[1.6] overflow-hidden opacity-60">1</div>
             <textarea 
               id="ide-code-area" 
-              class="ide-editor-textarea"
+              class="ide-editor-textarea flex-1"
               placeholder="# Antigravity Scratchpad&#10;# Write code here, or click '⚡ Scratchpad' on any generated response snippet.&#10;&#10;def hello_courtesy():&#10;    print('6x Quadro P2000 Cluster Ready')&#10;&#10;if __name__ == '__main__':&#10;    hello_courtesy()"
               spellcheck="false"
               onkeydown="handleEditorTabKey(event)"
+              oninput="syncEditorGutter()"
+              onscroll="syncEditorScroll()"
             ></textarea>
           </div>
 

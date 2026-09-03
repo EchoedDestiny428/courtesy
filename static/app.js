@@ -545,14 +545,47 @@ function handleEditorTabKey(event) {
   }
 }
 
+function syncEditorGutter() {
+  const textarea = document.getElementById('ide-code-area');
+  const gutter = document.getElementById('editor-gutter');
+  if (!textarea || !gutter) return;
+
+  const lines = (textarea.value || '').split('\n').length;
+  gutter.innerText = Array.from({ length: Math.max(1, lines) }, (_, i) => i + 1).join('\n');
+}
+
+function syncEditorScroll() {
+  const textarea = document.getElementById('ide-code-area');
+  const gutter = document.getElementById('editor-gutter');
+  if (textarea && gutter) {
+    gutter.scrollTop = textarea.scrollTop;
+  }
+}
+
 function copyEditorCode() {
   const code = document.getElementById('ide-code-area').value;
   navigator.clipboard.writeText(code);
   showToast("Code copied to clipboard!", "📋");
 }
 
+function downloadEditorCode() {
+  const code = document.getElementById('ide-code-area').value;
+  const filename = document.getElementById('editor-filename').value || 'code.txt';
+  const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`Downloaded ${filename}`, "💾");
+}
+
 function clearEditor() {
   document.getElementById('ide-code-area').value = '';
+  syncEditorGutter();
   showToast("Scratchpad cleared", "🗑️");
 }
 
@@ -565,6 +598,7 @@ function insertCodeIntoEditor(code, lang = 'python') {
       langSelect.value = lang.toLowerCase();
       handleLanguageChange();
     }
+    syncEditorGutter();
     editor.focus();
     showToast("Snippet sent to Scratchpad", "⚡");
   }
@@ -625,6 +659,23 @@ function clearChatHistory() {
   showToast("Conversation cleared");
 }
 
+let currentAbortController = null;
+
+function stopGenerating() {
+  if (currentAbortController) {
+    currentAbortController.abort();
+    currentAbortController = null;
+  }
+  isStreaming = false;
+  const sendBtn = document.getElementById('chat-send-btn');
+  const stopBtn = document.getElementById('chat-stop-btn');
+  if (sendBtn) sendBtn.disabled = false;
+  if (stopBtn) stopBtn.classList.add('hidden');
+  const statusMsg = document.getElementById('chat-status-msg');
+  if (statusMsg) statusMsg.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Stopped`;
+  showToast("Generation stopped");
+}
+
 async function handleChatSubmit(event) {
   event.preventDefault();
   if (isStreaming) return;
@@ -635,7 +686,13 @@ async function handleChatSubmit(event) {
 
   inputEl.value = '';
   isStreaming = true;
-  document.getElementById('chat-send-btn').disabled = true;
+  currentAbortController = new AbortController();
+
+  const sendBtn = document.getElementById('chat-send-btn');
+  const stopBtn = document.getElementById('chat-stop-btn');
+  if (sendBtn) sendBtn.disabled = true;
+  if (stopBtn) stopBtn.classList.remove('hidden');
+
   document.getElementById('chat-status-msg').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-gold-500 animate-ping"></span> Inferring...`;
 
   appendMessage('user', userText);
@@ -661,6 +718,7 @@ async function handleChatSubmit(event) {
   try {
     const response = await fetch(`${apiBaseUrl}/v1/chat/completions`, {
       method: 'POST',
+      signal: currentAbortController.signal,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer courtesy-local'
@@ -729,10 +787,18 @@ async function handleChatSubmit(event) {
     chatHistory.push({ role: 'assistant', content: fullResponseText });
 
   } catch (e) {
-    contentEl.innerHTML = `<span class="text-rose-500 font-bold">Error communicating with cluster:</span> ${e.message}`;
+    if (e.name === 'AbortError') {
+      contentEl.classList.remove('streaming-cursor');
+    } else {
+      contentEl.innerHTML = `<span class="text-rose-500 font-bold">Error communicating with cluster:</span> ${e.message}`;
+    }
   } finally {
     isStreaming = false;
-    document.getElementById('chat-send-btn').disabled = false;
+    currentAbortController = null;
+    const sendBtn = document.getElementById('chat-send-btn');
+    const stopBtn = document.getElementById('chat-stop-btn');
+    if (sendBtn) sendBtn.disabled = false;
+    if (stopBtn) stopBtn.classList.add('hidden');
     document.getElementById('chat-status-msg').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Ready`;
     scrollToBottom();
   }
@@ -832,6 +898,13 @@ function escapeHtml(string) {
   }[s]));
 }
 
+// Global Keyboard Shortcuts
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && isStreaming) {
+    stopGenerating();
+  }
+});
+
 // Start on page load
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
@@ -841,5 +914,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   initWebSocket();
   fetchServersRest();
+  syncEditorGutter();
   if (window.lucide) lucide.createIcons();
 });
