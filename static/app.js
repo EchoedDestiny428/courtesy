@@ -89,8 +89,17 @@ function startStandardMode() {
   showView('view-connecting');
   const label = document.getElementById('connecting-step-label');
   const bar = document.getElementById('connecting-progress-bar');
+  
+  const parts = currentWorkspaceFolder.replace(/\\/g, '/').split('/');
+  const shortName = parts.pop() || parts.pop() || currentWorkspaceFolder;
+
   const folderLabel = document.getElementById('current-folder-label');
-  if (folderLabel) folderLabel.innerText = currentWorkspaceFolder;
+  const centerFolderLabel = document.getElementById('center-folder-label');
+  const sideFolderLabel = document.getElementById('sidebar-folder-label');
+
+  if (folderLabel) folderLabel.innerText = shortName;
+  if (centerFolderLabel) centerFolderLabel.innerText = shortName;
+  if (sideFolderLabel) sideFolderLabel.innerText = shortName;
 
   if (bar) bar.style.width = '25%';
   if (label) label.innerText = 'Pinging cluster compute nodes...';
@@ -107,12 +116,36 @@ function startStandardMode() {
 
   setTimeout(() => {
     showView('view-standard');
-    showToast("Connected to Antigravity IDE Workbench", "⚡");
-    syncEditorGutter();
+    showToast("Connected to Courtesy Codex", "⚡");
+    if (window.lucide) lucide.createIcons();
   }, 1250);
 }
 
-// ================= Workspace Folder Selector =================
+// ================= Workspace Folder Selector & File Explorer =================
+async function pickWorkspaceFolder() {
+  if (window.electronAPI && window.electronAPI.selectDirectory) {
+    try {
+      const selected = await window.electronAPI.selectDirectory();
+      if (selected) {
+        setWorkspaceFolder(selected);
+        return;
+      }
+    } catch (e) {}
+  }
+
+  if (window.showDirectoryPicker) {
+    try {
+      const handle = await window.showDirectoryPicker();
+      if (handle && handle.name) {
+        setWorkspaceFolder(handle.name);
+        return;
+      }
+    } catch (e) {}
+  }
+
+  openFolderSelectorModal();
+}
+
 function openFolderSelectorModal() {
   const modal = document.getElementById('modal-folder-select');
   if (modal) modal.classList.remove('hidden');
@@ -127,10 +160,20 @@ function closeFolderSelectorModal() {
 function setWorkspaceFolder(path) {
   currentWorkspaceFolder = path;
   localStorage.setItem('workspace_folder', path);
+
+  const parts = path.replace(/\\/g, '/').split('/');
+  const shortName = parts.pop() || parts.pop() || path;
+
   const label = document.getElementById('current-folder-label');
-  if (label) label.innerText = path;
+  const centerLabel = document.getElementById('center-folder-label');
+  const sideLabel = document.getElementById('sidebar-folder-label');
+
+  if (label) label.innerText = shortName;
+  if (centerLabel) centerLabel.innerText = shortName;
+  if (sideLabel) sideLabel.innerText = shortName;
+
   closeFolderSelectorModal();
-  showToast(`Workspace folder: ${path}`, "📁");
+  showToast(`Workspace: ${shortName}`, "📁");
 }
 
 function applyCustomFolder() {
@@ -138,6 +181,13 @@ function applyCustomFolder() {
   const val = input ? input.value.trim() : '';
   if (val) {
     setWorkspaceFolder(val);
+  }
+}
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar-antigravity');
+  if (sidebar) {
+    sidebar.classList.toggle('collapsed');
   }
 }
 
@@ -271,16 +321,27 @@ function selectModelMode(mode) {
     if (stdBtn) stdBtn.className = m === mode ? "model-pill-btn active" : "model-pill-btn";
   });
 
+  const modelLabels = {
+    '7b': '⚡ Qwen 2.5 Coder 7B',
+    '14b': '🧠 Qwen 2.5 Coder 14B',
+    'auto': '✨ Auto Cluster Routing'
+  };
+
+  const activeDisplay = document.getElementById('active-model-display');
+  const stickyDisplay = document.getElementById('sticky-model-display');
+  if (activeDisplay) activeDisplay.innerText = modelLabels[mode] || mode;
+  if (stickyDisplay) stickyDisplay.innerText = modelLabels[mode] || mode;
+
   const detailEl = document.getElementById('chat-route-detail');
   if (mode === '7b') {
     if (detailEl) detailEl.innerText = "⚡ qwen2.5-coder:7b (Fast)";
-    showToast("Switched to 7B Fast Coder (Low Latency)");
+    showToast("Target: 7B Fast Coder");
   } else if (mode === '14b') {
     if (detailEl) detailEl.innerText = "🧠 qwen2.5-coder:14b (Heavy)";
-    showToast("Switched to 14B Heavy Reasoning (Auto-Offload Active)");
+    showToast("Target: 14B Heavy Coder");
   } else {
     if (detailEl) detailEl.innerText = "✨ Auto Cluster Routing";
-    showToast("Switched to Auto Cluster Load-Balancing");
+    showToast("Target: Auto Cluster Routing");
   }
 }
 
@@ -1168,24 +1229,49 @@ function handleInputKey(event) {
   }
 }
 
-function clearChat() {
+function newConversation() {
   chatHistory = [];
   const container = document.getElementById('chat-messages');
+  const stickyBar = document.getElementById('sticky-chat-input-bar');
+  const placeholder = document.getElementById('empty-chat-placeholder');
+
+  if (stickyBar) stickyBar.classList.add('hidden');
+  if (placeholder) placeholder.classList.remove('hidden');
+
   if (container) {
-    container.innerHTML = `
-      <div class="p-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-app)] space-y-2 animate-fade-up">
-        <div class="flex items-center gap-2 text-gold-500 font-bold text-xs">
-          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
-          <span>Antigravity Codex Ready</span>
-        </div>
-        <p class="text-[var(--text-muted)] text-[11px] leading-relaxed">
-          Conversation cleared. Auto-connected to the cluster. Ask for code generation, architecture planning, or refactors. Code blocks can be injected into the Scratchpad with one click.
-        </p>
-      </div>
-    `;
-    if (window.lucide) lucide.createIcons();
+    const items = container.querySelectorAll('.chat-msg-item');
+    items.forEach(el => el.remove());
   }
-  showToast("Conversation cleared");
+
+  const pInput = document.getElementById('prompt-input');
+  if (pInput) {
+    pInput.value = '';
+    pInput.focus();
+  }
+  const sInput = document.getElementById('sticky-prompt-input');
+  if (sInput) sInput.value = '';
+
+  showToast("New conversation started", "✨");
+}
+
+function clearChat() {
+  newConversation();
+}
+
+function handleStickyInputKey(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendStickyPrompt();
+  }
+}
+
+function sendStickyPrompt() {
+  const stickyInput = document.getElementById('sticky-prompt-input');
+  if (!stickyInput) return;
+  const text = stickyInput.value.trim();
+  if (!text) return;
+  stickyInput.value = '';
+  sendPrompt(text);
 }
 
 let currentAbortController = null;
@@ -1197,31 +1283,56 @@ function stopGenerating() {
   }
   isStreaming = false;
 
-  const sendBtn = document.getElementById('send-prompt-btn') || document.getElementById('chat-send-btn');
-  const stopBtn = document.getElementById('stop-stream-btn') || document.getElementById('chat-stop-btn');
+  const sendBtn = document.getElementById('send-prompt-btn');
+  const stopBtn = document.getElementById('stop-stream-btn');
+  const stickySendBtn = document.getElementById('sticky-send-btn');
+  const stickyStopBtn = document.getElementById('sticky-stop-btn');
+
   if (sendBtn) sendBtn.disabled = false;
   if (stopBtn) stopBtn.classList.add('hidden');
+  if (stickySendBtn) stickySendBtn.disabled = false;
+  if (stickyStopBtn) stickyStopBtn.classList.add('hidden');
 
   showToast("Generation stopped");
 }
 
-async function sendPrompt() {
+async function sendPrompt(overrideText = null) {
   if (isStreaming) return;
 
-  const inputEl = document.getElementById('prompt-input') || document.getElementById('chat-input');
-  if (!inputEl) return;
+  const inputEl = document.getElementById('prompt-input');
+  const stickyInputEl = document.getElementById('sticky-prompt-input');
+  
+  let userText = overrideText;
+  if (!userText) {
+    if (inputEl && inputEl.value.trim()) {
+      userText = inputEl.value.trim();
+      inputEl.value = '';
+    } else if (stickyInputEl && stickyInputEl.value.trim()) {
+      userText = stickyInputEl.value.trim();
+      stickyInputEl.value = '';
+    }
+  }
 
-  const userText = inputEl.value.trim();
   if (!userText) return;
 
-  inputEl.value = '';
+  // Transition UI: Hide centered welcome placeholder and show sticky bottom input
+  const placeholder = document.getElementById('empty-chat-placeholder');
+  const stickyBar = document.getElementById('sticky-chat-input-bar');
+  if (placeholder) placeholder.classList.add('hidden');
+  if (stickyBar) stickyBar.classList.remove('hidden');
+
   isStreaming = true;
   currentAbortController = new AbortController();
 
-  const sendBtn = document.getElementById('send-prompt-btn') || document.getElementById('chat-send-btn');
-  const stopBtn = document.getElementById('stop-stream-btn') || document.getElementById('chat-stop-btn');
+  const sendBtn = document.getElementById('send-prompt-btn');
+  const stopBtn = document.getElementById('stop-stream-btn');
+  const stickySendBtn = document.getElementById('sticky-send-btn');
+  const stickyStopBtn = document.getElementById('sticky-stop-btn');
+
   if (sendBtn) sendBtn.disabled = true;
   if (stopBtn) stopBtn.classList.remove('hidden');
+  if (stickySendBtn) stickySendBtn.disabled = true;
+  if (stickyStopBtn) stickyStopBtn.classList.remove('hidden');
 
   appendMessage('user', userText);
   chatHistory.push({ role: 'user', content: userText });
@@ -1238,9 +1349,21 @@ async function sendPrompt() {
   const assistantMsgId = `msg-${Date.now()}`;
   appendAssistantPlaceholder(assistantMsgId);
   const contentEl = document.getElementById(`${assistantMsgId}-content`);
+  const thinkingTimerEl = document.getElementById(`${assistantMsgId}-thinking-timer`);
+  const thinkingBodyEl = document.getElementById(`${assistantMsgId}-thinking-body`);
+  const thinkingBlockEl = document.getElementById(`${assistantMsgId}-thinking`);
 
   let fullResponseText = '';
   const startTime = Date.now();
+  let firstTokenReceived = false;
+
+  // Thinking timer interval
+  const timerInterval = setInterval(() => {
+    if (!firstTokenReceived && thinkingTimerEl) {
+      const sec = ((Date.now() - startTime) / 1000).toFixed(1);
+      thinkingTimerEl.innerText = `(${sec}s)`;
+    }
+  }, 100);
 
   try {
     const response = await fetch(`${apiBaseUrl}/v1/chat/completions`, {
@@ -1260,12 +1383,16 @@ async function sendPrompt() {
       })
     });
 
-    const targetServerHeader = response.headers.get('X-Courtesy-Server') || 'cluster';
+    const targetServerHeader = response.headers.get('X-Courtesy-Server') || 'kraken';
     const targetModelHeader = response.headers.get('X-Courtesy-Model') || chosenModel;
     const webSourcesHeader = response.headers.get('X-Courtesy-Web-Sources');
     let webSources = [];
     if (webSourcesHeader) {
       try { webSources = JSON.parse(webSourcesHeader); } catch (e) {}
+    }
+
+    if (thinkingBodyEl) {
+      thinkingBodyEl.innerHTML = `• Connected to GPU node <b>${targetServerHeader}</b><br>• Model: <span class="text-gold-400">${targetModelHeader}</span><br>• Analyzing prompt logic and formulating solution...`;
     }
 
     const reader = response.body.getReader();
@@ -1291,16 +1418,44 @@ async function sendPrompt() {
             const delta = data.choices?.[0]?.delta?.content || '';
             fullResponseText += delta;
 
-            contentEl.innerHTML = marked.parse(fullResponseText);
-            contentEl.classList.add('streaming-cursor');
+            if (!firstTokenReceived && delta.length > 0) {
+              firstTokenReceived = true;
+              clearInterval(timerInterval);
+              const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+              if (thinkingTimerEl) thinkingTimerEl.innerText = `(${elapsed}s)`;
+              // Leave thinking block open or let user collapse it
+            }
+
+            // Check if model contains <think>...</think> tags
+            let displayText = fullResponseText;
+            if (fullResponseText.includes('<think>')) {
+              const thinkEnd = fullResponseText.indexOf('</think>');
+              if (thinkEnd !== -1) {
+                const thought = fullResponseText.substring(7, thinkEnd).trim();
+                if (thinkingBodyEl) thinkingBodyEl.innerText = thought;
+                displayText = fullResponseText.substring(thinkEnd + 8).trim();
+              } else {
+                const ongoingThought = fullResponseText.substring(7);
+                if (thinkingBodyEl) thinkingBodyEl.innerText = ongoingThought;
+                displayText = '';
+              }
+            }
+
+            if (contentEl) {
+              contentEl.innerHTML = marked.parse(displayText);
+              contentEl.classList.add('streaming-cursor');
+            }
             scrollToBottom();
           } catch (e) {}
         }
       }
     }
 
-    contentEl.classList.remove('streaming-cursor');
+    clearInterval(timerInterval);
+    if (contentEl) contentEl.classList.remove('streaming-cursor');
     const elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    if (thinkingTimerEl) thinkingTimerEl.innerText = `(${elapsedSeconds}s)`;
 
     const metaEl = document.getElementById(`${assistantMsgId}-meta`);
     if (metaEl) {
@@ -1330,22 +1485,25 @@ async function sendPrompt() {
       if (window.lucide) lucide.createIcons();
     }
 
-    attachCodeBlockHeaders(contentEl);
+    if (contentEl) attachCodeBlockHeaders(contentEl);
     chatHistory.push({ role: 'assistant', content: fullResponseText });
 
   } catch (e) {
+    clearInterval(timerInterval);
     if (e.name === 'AbortError') {
-      contentEl.classList.remove('streaming-cursor');
+      if (contentEl) contentEl.classList.remove('streaming-cursor');
     } else {
-      contentEl.innerHTML = `<span class="text-rose-500 font-bold">Error communicating with cluster:</span> ${e.message}`;
+      if (contentEl) contentEl.innerHTML = `<span class="text-rose-500 font-bold">Error communicating with cluster:</span> ${e.message}`;
     }
   } finally {
+    clearInterval(timerInterval);
     isStreaming = false;
     currentAbortController = null;
-    const sendBtn = document.getElementById('send-prompt-btn') || document.getElementById('chat-send-btn');
-    const stopBtn = document.getElementById('stop-stream-btn') || document.getElementById('chat-stop-btn');
+    
     if (sendBtn) sendBtn.disabled = false;
     if (stopBtn) stopBtn.classList.add('hidden');
+    if (stickySendBtn) stickySendBtn.disabled = false;
+    if (stickyStopBtn) stickyStopBtn.classList.add('hidden');
     scrollToBottom();
   }
 }
@@ -1370,7 +1528,7 @@ function appendMessage(role, text) {
   const isUser = role === 'user';
   
   const msgHtml = `
-    <div class="flex items-start gap-2.5 ${isUser ? 'justify-end' : 'justify-start'} animate-fade-up">
+    <div class="chat-msg-item flex items-start gap-2.5 ${isUser ? 'justify-end' : 'justify-start'} animate-fade-up">
       ${!isUser ? `<div class="h-6 w-6 rounded-lg bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-xs shrink-0 shadow-sm shadow-gold-glow">⚡</div>` : ''}
       <div class="${isUser ? 'bg-gold-gradient text-slate-950 font-semibold rounded-2xl rounded-tr-sm max-w-lg p-2.5 text-xs shadow-sm' : 'bg-[var(--bg-surface)] border border-[var(--border-app)] rounded-2xl rounded-tl-sm p-3.5 text-xs text-[var(--text-main)] max-w-2xl leading-relaxed shadow-sm'}">
         ${isUser ? `<p class="whitespace-pre-wrap">${escapeHtml(text)}</p>` : marked.parse(text)}
@@ -1384,17 +1542,32 @@ function appendMessage(role, text) {
 function appendAssistantPlaceholder(id) {
   const container = document.getElementById('chat-messages');
   const msgHtml = `
-    <div class="flex items-start gap-2.5 justify-start animate-fade-up">
+    <div id="${id}-wrapper" class="chat-msg-item flex items-start gap-3 justify-start animate-fade-up">
       <div class="h-6 w-6 rounded-lg bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-xs shrink-0 shadow-sm shadow-gold-glow">⚡</div>
-      <div class="bg-[var(--bg-surface)] border border-[var(--border-app)] rounded-2xl rounded-tl-sm p-3 text-xs text-[var(--text-main)] max-w-2xl w-full leading-relaxed shadow-sm space-y-2">
-        <div id="${id}-content" class="chat-markdown streaming-cursor">
-          <span class="text-[var(--text-dim)] text-xs italic">Consulting GPU cluster...</span>
+      <div class="flex-1 space-y-2 max-w-2xl w-full">
+        
+        <!-- Thinking Process Accordion -->
+        <details id="${id}-thinking" class="thinking-block" open>
+          <summary class="thinking-summary">
+            <span class="thinking-dot"></span>
+            <span class="font-bold">Thinking Process</span>
+            <span id="${id}-thinking-timer" class="text-[10px] text-gold-400 font-mono">(thinking...)</span>
+            <i data-lucide="chevron-down" class="w-3.5 h-3.5 ml-auto text-[var(--text-dim)]"></i>
+          </summary>
+          <div id="${id}-thinking-body" class="thinking-body">
+            • Routing request to optimal GPU node...<br>• Synthesizing architecture and code instructions...
+          </div>
+        </details>
+
+        <div id="${id}-content" class="chat-markdown streaming-cursor text-xs text-[var(--text-main)] leading-relaxed">
+          <span class="text-[var(--text-dim)] text-xs italic">Consulting cluster...</span>
         </div>
         <div id="${id}-meta" class="pt-1.5 border-t border-[var(--border-app)] text-[10px] text-[var(--text-dim)] flex items-center gap-2"></div>
       </div>
     </div>
   `;
   container.insertAdjacentHTML('beforeend', msgHtml);
+  if (window.lucide) lucide.createIcons();
   scrollToBottom();
 }
 
@@ -1415,14 +1588,9 @@ function attachCodeBlockHeaders(containerEl) {
     const header = document.createElement('div');
     header.className = 'code-block-header';
 
-    // "Send to Scratchpad" button
-    const scratchpadBtn = document.createElement('button');
-    scratchpadBtn.className = 'code-header-btn';
-    scratchpadBtn.innerHTML = `<span>⚡ Scratchpad</span>`;
-    scratchpadBtn.title = "Open snippet in Scratchpad editor";
-    scratchpadBtn.onclick = () => {
-      insertCodeIntoEditor(fullCode, lang);
-    };
+    const langBadge = document.createElement('span');
+    langBadge.className = 'text-[10px] font-mono text-gold-500 uppercase px-1';
+    langBadge.innerText = lang;
 
     // "Copy" button
     const copyBtn = document.createElement('button');
@@ -1430,11 +1598,11 @@ function attachCodeBlockHeaders(containerEl) {
     copyBtn.innerHTML = `<span>Copy</span>`;
     copyBtn.onclick = () => {
       navigator.clipboard.writeText(fullCode);
-      copyBtn.innerHTML = `<span>✓</span>`;
+      copyBtn.innerHTML = `<span class="text-emerald-400">✓ Copied</span>`;
       setTimeout(() => { copyBtn.innerHTML = `<span>Copy</span>`; }, 1500);
     };
 
-    header.appendChild(scratchpadBtn);
+    header.appendChild(langBadge);
     header.appendChild(copyBtn);
     pre.appendChild(header);
   });
@@ -1584,12 +1752,16 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchServersRest();
   fetchMiningStatus();
   setInterval(fetchMiningStatus, 6000);
-  syncEditorGutter();
 
   const editor = getScratchpad();
   if (editor) {
     editor.addEventListener('keydown', handleEditorTabKey);
+    syncEditorGutter();
   }
+
+  // Restore saved workspace folder
+  const savedFolder = localStorage.getItem('workspace_folder') || 'courtesy';
+  setWorkspaceFolder(savedFolder);
 
   // Route to saved admin session or Portal landing view
   const savedToken = sessionStorage.getItem('admin_token');

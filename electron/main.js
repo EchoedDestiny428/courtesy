@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeTheme, dialog } = require('electron');
 const path = require('path');
 
 let mainWindow = null;
@@ -28,6 +28,18 @@ function createWindow() {
   // Smooth appearance when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+  });
+
+  // Native directory picker IPC handler
+  ipcMain.handle('dialog:openDirectory', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory'],
+      title: 'Select Workspace Folder'
+    });
+    if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+      return null;
+    }
+    return result.filePaths[0];
   });
 
   // Window control IPC handlers

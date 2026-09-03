@@ -455,3 +455,98 @@ button:active, .interactive-btn:active {
 .radar-circle {
   animation: radarPing 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
 }
+
+/* ================= Antigravity Style Dex & Floating Input ================= */
+.logo-slide-up {
+  animation: logoSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes logoSlideUp {
+  0% { transform: scale(1.35) translateY(24px); opacity: 0; }
+  40% { opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.hover-float {
+  transition: transform 0.2s var(--ease-smooth), box-shadow 0.2s var(--ease-smooth), border-color 0.2s;
+}
+
+.hover-float:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px var(--gold-glow);
+  border-color: var(--gold-500);
+}
+
+.antigravity-input-pill {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-app);
+  border-radius: 20px;
+  box-shadow: 0 12px 36px -8px rgba(0, 0, 0, 0.55);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.antigravity-input-pill:focus-within {
+  border-color: var(--gold-500);
+  box-shadow: 0 16px 44px -8px var(--gold-glow), 0 0 0 1px rgba(212, 175, 55, 0.3);
+}
+
+/* ================= Thinking Process Component ================= */
+.thinking-block {
+  margin-bottom: 0.75rem;
+  border-radius: 12px;
+  background: rgba(212, 175, 55, 0.04);
+  border: 1px solid rgba(212, 175, 55, 0.15);
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.thinking-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--gold-400);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.thinking-summary::-webkit-details-marker {
+  display: none;
+}
+
+.thinking-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold-500);
+  animation: pulseGoldDot 1.5s infinite;
+}
+
+@keyframes pulseGoldDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+.thinking-body {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  border-top: 1px solid rgba(212, 175, 55, 0.1);
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+}
+
+/* Sidebar collapsible transition */
+#sidebar-antigravity {
+  transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1), margin-left 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#sidebar-antigravity.collapsed {
+  width: 0px !important;
+  margin-left: -16rem;
+  overflow: hidden;
+}
