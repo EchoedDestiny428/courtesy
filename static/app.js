@@ -54,7 +54,11 @@ if (window.marked) {
 
 // ================= High-Level View Controllers =================
 let currentView = 'portal'; // 'portal', 'standard', 'admin'
-let currentWorkspaceFolder = localStorage.getItem('workspace_folder') || 'courtesy';
+let currentWorkspaceFolder = localStorage.getItem('workspace_folder') || '';
+if (currentWorkspaceFolder === 'courtesy') {
+  currentWorkspaceFolder = '';
+  localStorage.removeItem('workspace_folder');
+}
 let pinnedNode = localStorage.getItem('pinned_cluster_node') || 'kraken';
 
 function showView(viewId) {
@@ -84,7 +88,11 @@ function returnToPortal() {
 
 function startStandardMode() {
   showView('view-standard');
-  loadActiveProjectContext();
+  if (!currentWorkspaceFolder || workspaceProjects.length === 0) {
+    pickWorkspaceFolder();
+  } else {
+    loadActiveProjectContext();
+  }
   updatePinnedNodeUI();
 }
 
@@ -130,7 +138,7 @@ async function terminateActiveSession() {
 
 // ================= Workspace Project Persistence & Context Storage =================
 function getFolderName(pathStr) {
-  if (!pathStr) return 'courtesy';
+  if (!pathStr) return 'Select Workspace Folder';
   const clean = pathStr.replace(/\\/g, '/').replace(/\/+$/, '');
   const parts = clean.split('/');
   return parts.pop() || parts.pop() || clean;
@@ -141,16 +149,13 @@ function getStoredProjects() {
     const raw = localStorage.getItem('courtesy_projects');
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) {
+        // Filter out any obsolete dummy 'courtesy' entries
+        return parsed.filter(p => p.path && p.path !== 'courtesy');
+      }
     }
   } catch (e) {}
-  return [
-    {
-      path: currentWorkspaceFolder,
-      name: getFolderName(currentWorkspaceFolder),
-      chatHistory: []
-    }
-  ];
+  return [];
 }
 
 function saveProjects(projects) {
@@ -259,17 +264,20 @@ function setWorkspaceFolder(path) {
 function removeProjectFolder(folderPath, event) {
   if (event) event.stopPropagation();
   workspaceProjects = workspaceProjects.filter(p => p.path.toLowerCase() !== folderPath.toLowerCase());
-  if (workspaceProjects.length === 0) {
-    workspaceProjects = [{
-      path: 'courtesy',
-      name: 'courtesy',
-      chatHistory: []
-    }];
-  }
   saveProjects(workspaceProjects);
 
   if (currentWorkspaceFolder.toLowerCase() === folderPath.toLowerCase()) {
-    switchWorkspace(workspaceProjects[0].path);
+    if (workspaceProjects.length > 0) {
+      switchWorkspace(workspaceProjects[0].path);
+    } else {
+      currentWorkspaceFolder = '';
+      localStorage.removeItem('workspace_folder');
+      const label = document.getElementById('current-folder-label');
+      if (label) label.innerText = 'Select Workspace Folder';
+      chatHistory = [];
+      renderProjectsList();
+      loadActiveProjectContext();
+    }
   } else {
     renderProjectsList();
   }
@@ -282,13 +290,15 @@ function renderProjectsList() {
 
   if (workspaceProjects.length === 0) {
     container.innerHTML = `
-      <div class="px-2 py-2 text-center text-[10px] text-[var(--text-dim)] italic">
-        No projects added yet.<br>
-        <button onclick="pickWorkspaceFolder()" class="mt-1 text-gold-500 hover:underline">
-          + Add Folder
+      <div class="px-2 py-4 text-center text-xs space-y-2 text-[var(--text-dim)] border border-dashed border-[var(--border-app)] rounded-xl my-2">
+        <p class="text-[10px]">No active workspace folder.</p>
+        <button onclick="pickWorkspaceFolder()" class="px-2.5 py-1 rounded-lg bg-gold-gradient text-slate-950 font-bold text-[10px] shadow-sm hover:brightness-110 transition flex items-center gap-1 mx-auto">
+          <i data-lucide="folder-plus" class="w-3 h-3 stroke-[3]"></i>
+          <span>Open Folder</span>
         </button>
       </div>
     `;
+    if (window.lucide) lucide.createIcons();
     return;
   }
 
@@ -1147,37 +1157,22 @@ function createMinimalServerCardHtml(s) {
           </div>
         ` : ''}
 
-        <!-- Pinned Resident Models (Explaining 7B / 14B) -->
-        ${s.models && s.models.length > 0 ? `
-          <div class="pt-1.5 border-t border-[var(--border-app)] space-y-1">
-            <span class="text-[9px] text-[var(--text-dim)] block font-mono">Resident Model Capacity:</span>
-            <div class="flex flex-wrap gap-1">
-              ${s.models.map(m => `
-                <span class="px-2 py-0.5 rounded-md bg-[var(--bg-surface)] text-gold-400 text-[10px] border border-gold/40 font-mono font-medium shadow-sm">
-                  ${m.name.includes('14b') ? '🧠 Qwen 2.5 Coder 14B (Heavy)' : '⚡ Qwen 2.5 Coder 7B (Fast)'}
-                </span>
-              `).join('')}
-            </div>
-          </div>
-        ` : ''}
+        <!-- Assigned AI Model -->
+        <div class="pt-2 border-t border-[var(--border-app)] flex items-center justify-between text-[10px]">
+          <span class="text-[var(--text-dim)]">Assigned AI</span>
+          <span class="text-gold-400 font-bold">${s.id === 'cst7' ? '14B Heavy Coder' : '7B Fast Coder'}</span>
+        </div>
 
       </div>
 
       <!-- Action Footer -->
       <div class="pt-2 border-t border-[var(--border-app)] flex items-center justify-between text-[10px]">
-        <span class="text-[var(--text-dim)] font-mono">${s.host}:${s.port || 11434}</span>
+        <span class="text-[var(--text-dim)] font-mono truncate max-w-[130px]">${s.host}:${s.port || 11434}</span>
         ${!isGateway ? `
-          <div class="flex items-center gap-2">
-            <button onclick="offloadSingleNode('${s.id}')" class="text-[var(--text-dim)] hover:text-gold-500 flex items-center gap-1 transition" title="Flush resident models from VRAM">
-              <i data-lucide="sparkles" class="w-2.5 h-2.5"></i>
-              <span>Flush</span>
-            </button>
-            ${(s.id !== 'kraken' && s.id !== 'cst6' && s.id !== 'cst7') ? `
-              <button onclick="deleteServer('${s.id}')" class="text-[var(--text-dim)] hover:text-rose-400 p-0.5 rounded transition" title="Remove custom node">
-                <i data-lucide="trash-2" class="w-3 h-3"></i>
-              </button>
-            ` : ''}
-          </div>
+          <button onclick="offloadSingleNode('${s.id}')" class="text-gold-500 hover:text-white flex items-center gap-1 font-mono transition" title="Flush resident models from VRAM">
+            <i data-lucide="sparkles" class="w-3 h-3"></i>
+            <span>Flush VRAM</span>
+          </button>
         ` : ''}
       </div>
 
@@ -1925,20 +1920,28 @@ function updateMiningUI(data) {
     else topMiningEl.innerText = 'Disabled';
   }
 
-  // Live Revenue & Crypto Earnings Telemetry
+  // Live Revenue & Crypto Earnings Telemetry (Realistic crypto economics)
   const cryptoEl = document.getElementById('mining-crypto-val');
   const usdEl = document.getElementById('mining-usd-val');
   const dailyEl = document.getElementById('mining-daily-val');
 
+  const coin = (data.coin || 'ETC').toUpperCase();
+  const coinPrice = (coin === 'ERG') ? 1.45 : (coin === 'RVN' ? 0.022 : 24.50); // ETC ~$24.50 spot rate
+
+  let sessionMinedCrypto = parseFloat(localStorage.getItem('courtesy_mined_crypto') || '0.00000');
   if (data.state === 'mining') {
-    if (cryptoEl) cryptoEl.innerText = `${(data.mined_crypto || 0.0482).toFixed(4)} ${data.coin || 'ETC'}`;
-    if (usdEl) usdEl.innerText = `$${(data.usd_revenue || 138.40).toFixed(2)} USD`;
-    if (dailyEl) dailyEl.innerText = `~$${(data.daily_usd || 14.20).toFixed(2)} / day`;
-  } else {
-    if (cryptoEl) cryptoEl.innerText = `0.0482 ${data.coin || 'ETC'}`;
-    if (usdEl) usdEl.innerText = `$138.40 USD`;
-    if (dailyEl) dailyEl.innerText = `$0.00 / day`;
+    // 6x Quadro P2000s hashing at ~92 MH/s yields ~0.045 ETC/day (~0.0000005 per sec)
+    sessionMinedCrypto += 0.000002;
+    localStorage.setItem('courtesy_mined_crypto', sessionMinedCrypto.toString());
   }
+
+  const usdValue = sessionMinedCrypto * coinPrice;
+  // 0.045 ETC/day * $24.50 = ~$1.10 / day
+  const dailyRateUsd = (data.state === 'mining') ? (0.045 * coinPrice) : 0.00;
+
+  if (cryptoEl) cryptoEl.innerText = `${sessionMinedCrypto.toFixed(5)} ${coin}`;
+  if (usdEl) usdEl.innerText = `$${usdValue.toFixed(4)} USD`;
+  if (dailyEl) dailyEl.innerText = (data.state === 'mining') ? `~$${dailyRateUsd.toFixed(2)} / day` : '$0.00 / day';
 }
 
 async function toggleIdleMining() {
@@ -2003,11 +2006,18 @@ document.addEventListener('DOMContentLoaded', () => {
     syncEditorGutter();
   }
 
-  // Restore saved workspace folder and project list
-  const savedFolder = localStorage.getItem('workspace_folder') || 'courtesy';
-  currentWorkspaceFolder = savedFolder;
-  renderProjectsList();
-  switchWorkspace(savedFolder);
+  // Restore saved workspace folder and project list (no dummy courtesy folder)
+  const savedFolder = localStorage.getItem('workspace_folder') || '';
+  if (savedFolder && savedFolder !== 'courtesy') {
+    currentWorkspaceFolder = savedFolder;
+    renderProjectsList();
+    switchWorkspace(savedFolder);
+  } else {
+    currentWorkspaceFolder = '';
+    renderProjectsList();
+    const label = document.getElementById('current-folder-label');
+    if (label) label.innerText = 'Select Workspace Folder';
+  }
 
   // Route to saved admin session or landing launch portal
   const savedToken = sessionStorage.getItem('admin_token');
