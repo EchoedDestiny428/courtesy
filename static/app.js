@@ -53,11 +53,11 @@ if (window.marked) {
 }
 
 // ================= High-Level View Controllers =================
-let currentView = 'portal'; // 'portal', 'connecting', 'standard', 'admin'
-let currentWorkspaceFolder = localStorage.getItem('workspace_folder') || '~/projects/robotics';
+let currentView = 'standard'; // 'standard', 'admin'
+let currentWorkspaceFolder = localStorage.getItem('workspace_folder') || 'courtesy';
 
 function showView(viewId) {
-  const views = ['view-portal', 'view-connecting', 'view-standard', 'view-admin'];
+  const views = ['view-standard', 'view-admin'];
   views.forEach(v => {
     const el = document.getElementById(v);
     if (el) {
@@ -73,15 +73,7 @@ function showView(viewId) {
 }
 
 function returnToPortal() {
-  showView('view-portal');
-}
-
-function shakeLogo() {
-  const img = document.getElementById('portal-logo-img');
-  if (img) {
-    img.style.transform = 'scale(1.15) rotate(10deg)';
-    setTimeout(() => { img.style.transform = ''; }, 300);
-  }
+  showView('view-standard');
 }
 
 // ================= Standard IDE Auto-Connecting Flow =================
@@ -1763,7 +1755,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const savedFolder = localStorage.getItem('workspace_folder') || 'courtesy';
   setWorkspaceFolder(savedFolder);
 
-  // Route to saved admin session or Portal landing view
+  // Route to saved admin session or direct Codex workbench
   const savedToken = sessionStorage.getItem('admin_token');
   if (savedToken) {
     fetch(`${apiBaseUrl}/api/auth/verify`, {
@@ -1775,13 +1767,13 @@ document.addEventListener('DOMContentLoaded', () => {
         showView('view-admin');
       } else {
         sessionStorage.removeItem('admin_token');
-        showView('view-portal');
+        showView('view-standard');
       }
     }).catch(() => {
-      showView('view-portal');
+      showView('view-standard');
     });
   } else {
-    showView('view-portal');
+    showView('view-standard');
   }
 
   if (window.lucide) lucide.createIcons();

@@ -39,54 +39,6 @@
 <body class="min-h-screen flex flex-col antialiased select-none bg-[var(--bg-app)] text-[var(--text-main)] font-sans overflow-x-hidden">
 
   <!-- ================================================================
-       VIEW 1: LANDING SPLASH PORTAL (MODE SELECTOR)
-       ================================================================ -->
-  <section id="view-portal" class="min-h-screen flex flex-col items-center justify-center p-6 relative z-10 transition-opacity duration-300">
-    <div class="portal-glow-bg"></div>
-
-    <div class="max-w-md w-full flex flex-col items-center text-center space-y-6 relative z-10">
-      
-      <!-- Animated Sliding Logo -->
-      <div class="relative group cursor-pointer logo-slide-up" onclick="shakeLogo()">
-        <div class="absolute -inset-4 rounded-full bg-gold-500/20 blur-xl group-hover:bg-gold-500/30 transition duration-500"></div>
-        <img id="portal-logo-img" src="/static/logo.svg" alt="Courtesy" class="w-28 h-28 portal-logo-anim relative z-10">
-      </div>
-
-      <!-- Minimal Title -->
-      <div class="space-y-1">
-        <h1 class="text-3xl font-extrabold tracking-widest text-white">COURTESY</h1>
-        <p class="text-[11px] font-mono text-gold-500 uppercase tracking-widest">Autonomous Cluster Codex</p>
-      </div>
-
-      <!-- Minimalist Action Icons & Buttons -->
-      <div class="flex items-center gap-3 pt-3">
-        <button onclick="startStandardMode()" class="px-5 py-2.5 rounded-2xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-xs shadow-md shadow-gold-glow hover-float flex items-center gap-2 transition" title="Open Codex IDE">
-          <i data-lucide="sparkles" class="w-4 h-4"></i>
-          <span>Launch Codex</span>
-          <i data-lucide="arrow-right" class="w-3.5 h-3.5 stroke-[2.5]"></i>
-        </button>
-
-        <button onclick="openAdminLoginModal()" class="px-4 py-2.5 rounded-2xl bg-[var(--bg-surface-elevated)] hover:border-gold border border-[var(--border-app)] text-white font-medium text-xs hover-float flex items-center gap-2 transition" title="Cluster Admin Console">
-          <i data-lucide="shield" class="w-4 h-4 text-gold-500"></i>
-          <span>Admin</span>
-        </button>
-
-        <button onclick="toggleTheme()" class="p-2.5 rounded-2xl bg-[var(--bg-surface-elevated)] border border-[var(--border-app)] hover:border-gold text-gold-400 hover-float transition" title="Toggle Light / Dark Mode">
-          <i data-lucide="sun-moon" class="w-4 h-4"></i>
-        </button>
-      </div>
-
-      <!-- Minimalist Status Dot -->
-      <div class="pt-6 flex items-center gap-2 text-[10px] font-mono text-[var(--text-dim)]">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-        <span id="portal-online-count">Cluster Ready</span>
-      </div>
-
-    </div>
-  </section>
-
-
-  <!-- ================================================================
        MODAL: SECURE ADMIN LOGIN
        ================================================================ -->
   <div id="modal-admin-login" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden animate-fade-in">
@@ -141,45 +93,9 @@
 
 
   <!-- ================================================================
-       VIEW 2: AUTO-CONNECTING SCREEN
+       MAIN WORKBENCH: EXACT ANTIGRAVITY CODEX DEX (NO PHOTOS)
        ================================================================ -->
-  <section id="view-connecting" class="min-h-screen flex flex-col items-center justify-center p-6 fixed inset-0 z-40 bg-[var(--bg-app)] hidden animate-fade-in">
-    <div class="max-w-md w-full flex flex-col items-center text-center space-y-6">
-      
-      <!-- Radar Pulse -->
-      <div class="relative w-28 h-28 flex items-center justify-center">
-        <div class="absolute inset-0 rounded-full border border-gold radar-circle"></div>
-        <div class="absolute inset-3 rounded-full border border-gold/40 radar-circle" style="animation-delay: 0.6s;"></div>
-        <div class="w-14 h-14 rounded-2xl bg-gold-gradient text-slate-950 flex items-center justify-center shadow-lg shadow-gold-glow relative z-10">
-          <i data-lucide="cpu" class="w-7 h-7 stroke-[2.5] animate-pulse"></i>
-        </div>
-      </div>
-
-      <div class="space-y-2">
-        <h2 class="text-base font-bold text-white flex items-center justify-center gap-2">
-          <span>Auto-Routing to Best GPU Server</span>
-        </h2>
-        <p id="connecting-step-label" class="text-xs font-mono text-gold-400">Pinging cluster nodes...</p>
-      </div>
-
-      <!-- Animated Progress Bar -->
-      <div class="w-64 h-1.5 rounded-full bg-[var(--bg-muted)] overflow-hidden border border-[var(--border-app)]">
-        <div id="connecting-progress-bar" class="h-full bg-gold-gradient rounded-full w-1/4 transition-all duration-300"></div>
-      </div>
-
-      <div class="text-[10px] font-mono text-[var(--text-dim)] flex items-center gap-2">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-        <span>Scanning kraken, cst6, cst7</span>
-      </div>
-
-    </div>
-  </section>
-
-
-  <!-- ================================================================
-       VIEW 3: STANDARD DEVELOPER WORKBENCH (ANTIGRAVITY CODEX DEX)
-       ================================================================ -->
-  <main id="view-standard" class="h-screen flex overflow-hidden hidden animate-fade-in">
+  <main id="view-standard" class="h-screen flex overflow-hidden">
     
     <!-- Left Sidebar (Antigravity Style - 256px) -->
     <aside id="sidebar-antigravity" class="w-64 flex flex-col justify-between border-r border-[var(--border-app)] bg-[var(--bg-surface)] text-xs select-none shrink-0 transition-all duration-300 z-20">
@@ -187,17 +103,25 @@
       <!-- Top Section -->
       <div class="p-3 space-y-3 overflow-y-auto flex-1">
         
-        <!-- App Title & Menus -->
-        <div class="flex items-center justify-between px-1.5 pt-0.5">
-          <div class="flex items-center gap-2 cursor-pointer" onclick="returnToPortal()">
-            <img src="/static/logo.svg" alt="Courtesy" class="w-4 h-4">
-            <span class="font-extrabold tracking-wider text-[11px] text-white">Courtesy</span>
-          </div>
-          <div class="flex items-center gap-2 text-[10px] text-[var(--text-dim)] font-mono">
-            <span class="hover:text-white cursor-pointer">File</span>
-            <span class="hover:text-white cursor-pointer">View</span>
-            <span class="hover:text-white cursor-pointer">Window</span>
-          </div>
+        <!-- App Title & Menus (Pure Typography, No Photo) -->
+        <div class="flex items-center gap-4 px-1 pt-0.5 select-none text-xs">
+          <span class="font-bold text-white tracking-tight text-[13px]">Courtesy</span>
+          <span class="text-[11px] text-[var(--text-muted)] hover:text-white cursor-pointer transition">File</span>
+          <span class="text-[11px] text-[var(--text-muted)] hover:text-white cursor-pointer transition">View</span>
+          <span class="text-[11px] text-[var(--text-muted)] hover:text-white cursor-pointer transition">Window</span>
+        </div>
+
+        <!-- Sidebar Collapse / Navigation Controls Row -->
+        <div class="flex items-center gap-2 px-1 pt-1 text-[var(--text-muted)]">
+          <button onclick="toggleSidebar()" class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-white transition" title="Collapse Sidebar">
+            <i data-lucide="panel-left" class="w-4 h-4"></i>
+          </button>
+          <button class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-white transition opacity-50 cursor-not-allowed">
+            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+          </button>
+          <button class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-white transition opacity-50 cursor-not-allowed">
+            <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+          </button>
         </div>
 
         <!-- + New Conversation Button -->
@@ -471,8 +395,7 @@
       
       <!-- Left: Logo, Title & Superuser Badge -->
       <div class="flex items-center gap-3">
-        <div class="flex items-center gap-2 cursor-pointer" onclick="returnToPortal()">
-          <img src="/static/logo.svg" alt="Logo" class="w-5 h-5">
+        <div class="flex items-center gap-2 cursor-pointer" onclick="showView('view-standard')">
           <span class="font-extrabold tracking-wider text-xs text-white">COURTESY <span class="text-gold-500 font-mono">ADMIN</span></span>
         </div>
         <span class="text-[9px] font-mono font-bold text-slate-950 bg-gold-gradient px-2 py-0.5 rounded-full shadow-sm">
