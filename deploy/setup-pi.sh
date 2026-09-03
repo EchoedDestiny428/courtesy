@@ -17,7 +17,7 @@ sudo apt-get install -y python3 python3-pip python3-venv curl sshpass
 echo ">>> [3/5] Setting up virtualenv..."
 python3 -m venv "${APP_DIR}/.venv"
 "${APP_DIR}/.venv/bin/pip" install --upgrade pip
-"${APP_DIR}/.venv/bin/pip" install fastapi "uvicorn[standard]" httpx pydantic paramiko websockets jinja2 python-multipart
+"${APP_DIR}/.venv/bin/pip" install fastapi "uvicorn[standard]" httpx pydantic paramiko websockets jinja2 python-multipart beautifulsoup4
 
 echo ">>> [4/5] Installing systemd service..."
 cat << 'EOF' | sudo tee /etc/systemd/system/courtesy.service > /dev/null

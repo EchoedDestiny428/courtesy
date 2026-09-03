@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
+from src.config import get_server_by_id
+
 logger = logging.getLogger("courtesy.miner")
 
 CONFIG_PATH = Path(__file__).parent.parent / "config" / "mining.json"
@@ -21,6 +23,16 @@ IS_ON_CST = socket.gethostname().lower() in ("cst", "cst.local") or os.path.exis
 _last_inference_timestamp: float = time.time()
 _is_preempted: bool = False
 _is_mining_active: bool = False
+
+
+def resolve_node_ssh_target(node_id: str) -> str:
+    """Resolves node_id (e.g. kraken, cst6) into username@host using server config."""
+    srv = get_server_by_id(node_id)
+    if srv:
+        ssh_host = srv.get("ssh_host") or srv.get("host") or node_id
+        ssh_user = srv.get("ssh_user")
+        return f"{ssh_user}@{ssh_host}" if ssh_user else ssh_host
+    return node_id
 
 
 def load_mining_config() -> Dict[str, Any]:
@@ -94,10 +106,11 @@ async def preempt_mining():
 
     async def _kill_miner_on_node(node_id: str):
         try:
+            target = resolve_node_ssh_target(node_id)
             if IS_ON_CST:
-                cmd = ["ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes", node_id, "pkill -9 -f nanominer || true"]
+                cmd = ["ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes", target, "pkill -9 -f nanominer || true"]
             else:
-                cmd = ["ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes", "cst@cst", f"ssh -o ConnectTimeout=2 {node_id} 'pkill -9 -f nanominer || true'"]
+                cmd = ["ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes", "cst@cst", f"ssh -o ConnectTimeout=2 {target} 'pkill -9 -f nanominer || true'"]
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
             await asyncio.wait_for(proc.wait(), timeout=1.5)
         except Exception:
@@ -120,13 +133,14 @@ async def start_mining_cluster():
 
     async def _start_node_miner(node_id: str):
         try:
+            target = resolve_node_ssh_target(node_id)
             ini_content = generate_nanominer_ini(node_id, cfg)
             remote_cmd = "cat > ~/miner/config.ini; pkill -9 -f nanominer 2>/dev/null || true; sleep 0.5; cd ~/miner && nohup nice -n 19 ./nanominer config.ini > miner.log 2>&1 &"
 
             if IS_ON_CST:
-                cmd = ["ssh", "-o", "ConnectTimeout=4", node_id, remote_cmd]
+                cmd = ["ssh", "-o", "ConnectTimeout=4", target, remote_cmd]
             else:
-                cmd = ["ssh", "-o", "ConnectTimeout=4", "cst@cst", f"ssh {node_id} '{remote_cmd}'"]
+                cmd = ["ssh", "-o", "ConnectTimeout=4", "cst@cst", f"ssh {target} '{remote_cmd}'"]
 
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -147,10 +161,11 @@ async def start_mining_cluster():
 async def check_miner_process(node_id: str) -> bool:
     """Checks if nanominer is currently running on a node."""
     try:
+        target = resolve_node_ssh_target(node_id)
         if IS_ON_CST:
-            cmd = ["ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes", node_id, "pgrep -f nanominer"]
+            cmd = ["ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes", target, "pgrep -f nanominer"]
         else:
-            cmd = ["ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes", "cst@cst", f"ssh {node_id} pgrep -f nanominer"]
+            cmd = ["ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes", "cst@cst", f"ssh {target} pgrep -f nanominer"]
         proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=3.0)
         return bool(stdout.strip())
@@ -165,18 +180,6 @@ async def get_cluster_mining_status() -> Dict[str, Any]:
 
     idle_seconds = max(0, int(time.time() - _last_inference_timestamp))
     threshold = cfg.get("idle_threshold_seconds", 180)
-
-    # Determine overall state
-    if not cfg.get("enabled"):
-        state = "disabled"
-    elif _is_preempted:
-        state = "preempted_inference"
-    elif _is_mining_active:
-        state = "mining"
-    elif idle_seconds < threshold:
-        state = "idle_waiting"
-    else:
-        state = "ready_to_mine"
 
     # Per-node status
     nodes = cfg.get("nodes", ["kraken", "cst6", "cst7"])
@@ -193,6 +196,19 @@ async def get_cluster_mining_status() -> Dict[str, Any]:
             "running": running,
             "gpus": 2
         })
+
+    # Determine overall state: if miners are actively running on nodes, acknowledge active mining
+    if not cfg.get("enabled"):
+        state = "disabled"
+    elif _is_preempted:
+        state = "preempted_inference"
+    elif total_active_miners > 0 or _is_mining_active:
+        state = "mining"
+        _is_mining_active = True
+    elif idle_seconds < threshold:
+        state = "idle_waiting"
+    else:
+        state = "ready_to_mine"
 
     estimated_hashrate_mhs = total_active_miners * 2 * 42 if state == "mining" else 0
 
@@ -213,9 +229,10 @@ async def get_cluster_mining_status() -> Dict[str, Any]:
 async def idle_mining_watcher_loop(active_requests_func):
     """
     Background worker that runs every 8 seconds:
-    - If AI inference requests > 0: ensures mining is preempted.
+    - If AI inference requests > 0: ensures mining is preempted and updates timestamp.
     - If cluster has been idle for >= idle_threshold_seconds: launches mining!
     """
+    global _last_inference_timestamp
     while True:
         try:
             cfg = load_mining_config()
@@ -225,6 +242,7 @@ async def idle_mining_watcher_loop(active_requests_func):
                 threshold = cfg.get("idle_threshold_seconds", 180)
 
                 if active_count > 0:
+                    _last_inference_timestamp = time.time()
                     if _is_mining_active:
                         await preempt_mining()
                 elif idle_sec >= threshold and not _is_mining_active:

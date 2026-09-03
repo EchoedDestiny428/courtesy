@@ -88,6 +88,7 @@ async def fetch_ssh_metrics(server: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         out_text = ""
+        ssh_target = f"{ssh_user}@{ssh_host}" if ssh_user else ssh_host
         if IS_ON_CST:
             # We are running on the cst gateway node directly
             if server_id == "cst":
@@ -98,9 +99,9 @@ async def fetch_ssh_metrics(server: Dict[str, Any]) -> Dict[str, Any]:
                 )
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=3.0)
                 out_text = "---MEM---\n" + stdout.decode("utf-8", errors="ignore")
-            elif ssh_host:
+            elif ssh_target:
                 proc = await asyncio.create_subprocess_exec(
-                    "ssh", "-o", "ConnectTimeout=3", "-o", "BatchMode=yes", ssh_host,
+                    "ssh", "-o", "ConnectTimeout=3", "-o", "BatchMode=yes", ssh_target,
                     cmd_str,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE
@@ -120,8 +121,8 @@ async def fetch_ssh_metrics(server: Dict[str, Any]) -> Dict[str, Any]:
                 )
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=4.0)
                 out_text = "---MEM---\n" + stdout.decode("utf-8", errors="ignore")
-            elif ssh_host:
-                remote_cmd = f"ssh -o ConnectTimeout=3 -o BatchMode=yes {ssh_host} \"{cmd_str}\""
+            elif ssh_target:
+                remote_cmd = f"ssh -o ConnectTimeout=3 -o BatchMode=yes {ssh_target} \"{cmd_str}\""
                 proc = await asyncio.create_subprocess_exec(
                     "ssh", "-o", "ConnectTimeout=4", "-o", "BatchMode=yes", "cst@cst",
                     remote_cmd,

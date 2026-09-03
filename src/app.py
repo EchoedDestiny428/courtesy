@@ -1,11 +1,12 @@
 import asyncio
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Any, List
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -389,7 +390,7 @@ async def api_admin_terminate_sessions(admin_token: str = Depends(require_admin_
     results = {}
     for s in servers:
         if s.get("enabled", True):
-            res = await offload_server_models(s["id"])
+            res = await offload_server_models(s)
             results[s["id"]] = res
     await preempt_mining()
     return {"status": "sessions_terminated", "servers": results}

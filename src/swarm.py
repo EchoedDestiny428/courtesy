@@ -18,6 +18,8 @@ import httpx
 from src.config import get_servers
 from src.collector import get_cached_metrics
 from src.web_agent import generate_grounded_context
+from src.router import track_request_start, track_request_end
+from src.miner_manager import record_inference_start
 
 logger = logging.getLogger("courtesy.swarm")
 
@@ -80,48 +82,54 @@ async def call_node_inference(server: Dict[str, Any], model: str, system_prompt:
     s_id = server.get("id")
     host = server.get("host", "127.0.0.1")
     port = server.get("port", 11434)
-    
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        # If running on cst, we can reach 10.11.2.x directly via HTTP
-        if IS_ON_CST:
-            try:
-                native_payload = {
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.2,
-                        "num_predict": max_tokens
-                    }
-                }
-                resp = await client.post(f"http://{host}:{port}/api/chat", json=native_payload)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return data.get("message", {}).get("content", "")
-            except Exception as e:
-                logger.debug(f"Direct error on {s_id}: {e}")
 
-        # If outside subnet (e.g. from Windows) or fallback, route via Pi Gateway
-        gateway_url = "http://100.107.249.92:8000/v1/chat/completions"
-        v1_payload = {
-            "model": f"{s_id}/{model}",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "temperature": 0.2,
-            "max_tokens": max_tokens,
-            "stream": False
-        }
-        resp = await client.post(gateway_url, json=v1_payload)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
-        else:
-            raise RuntimeError(f"Swarm inference error on {s_id} ({resp.status_code}): {resp.text}")
+    record_inference_start()
+    await track_request_start(s_id)
+    
+    try:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            # If running on cst, we can reach 10.11.2.x directly via HTTP
+            if IS_ON_CST:
+                try:
+                    native_payload = {
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.2,
+                            "num_predict": max_tokens
+                        }
+                    }
+                    resp = await client.post(f"http://{host}:{port}/api/chat", json=native_payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        return data.get("message", {}).get("content", "")
+                except Exception as e:
+                    logger.debug(f"Direct error on {s_id}: {e}")
+
+            # If outside subnet (e.g. from Windows) or fallback, route via Pi Gateway
+            gateway_url = "http://100.107.249.92:8000/v1/chat/completions"
+            v1_payload = {
+                "model": f"{s_id}/{model}",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.2,
+                "max_tokens": max_tokens,
+                "stream": False
+            }
+            resp = await client.post(gateway_url, json=v1_payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                return data["choices"][0]["message"]["content"]
+            else:
+                raise RuntimeError(f"Swarm inference error on {s_id} ({resp.status_code}): {resp.text}")
+    finally:
+        await track_request_end(s_id)
 
 
 async def broadcast_swarm_event(event: Dict[str, Any]):

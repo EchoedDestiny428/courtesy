@@ -228,8 +228,15 @@ async def ensure_vram_headroom(target: RouteTarget, client: httpx.AsyncClient):
         logger.debug(f"VRAM headroom offload check error on {target.server_id}: {e}")
 
 
-async def offload_server_models(server: Dict[str, Any]) -> List[str]:
+async def offload_server_models(server: Any) -> List[str]:
     """Unloads all currently resident models on a server to free 100% of VRAM."""
+    if isinstance(server, str):
+        server_obj = get_server_by_id(server)
+        if not server_obj:
+            logger.warning(f"Cannot offload unknown server id: {server}")
+            return []
+        server = server_obj
+
     host = server.get("host", "127.0.0.1")
     port = server.get("port", 11434)
     base_url = f"http://{host}:{port}"
