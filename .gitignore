@@ -94,6 +94,11 @@ scratch/
 *.swp
 *.swo
 *~
+.courtesy/
+.courtesy-workspace.json
+*.workspace.json
+workspace-cache/
+user_data/
 
 # --- Operating System Artifacts ---
 # Windows

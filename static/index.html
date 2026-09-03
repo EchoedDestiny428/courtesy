@@ -153,37 +153,9 @@
             </div>
           </div>
 
-          <!-- Project Tree Items -->
-          <div class="space-y-1 font-mono text-xs">
-            <!-- Active Project -->
-            <div class="p-2 rounded-xl bg-[var(--bg-muted)] border border-gold/40 space-y-1 cursor-pointer" onclick="pickWorkspaceFolder()" title="Click to browse in File Explorer">
-              <div class="flex items-center justify-between text-[var(--text-main)] font-bold text-[11px]">
-                <div class="flex items-center gap-1.5 truncate">
-                  <i data-lucide="folder" class="w-3.5 h-3.5 text-gold-500 shrink-0"></i>
-                  <span id="sidebar-folder-label" class="truncate">courtesy</span>
-                </div>
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
-              </div>
-              <p class="text-[10px] text-[var(--text-muted)] truncate pl-5">Active Workspace</p>
-            </div>
-
-            <!-- Recent Preset Projects -->
-            <div onclick="setWorkspaceFolder('~/projects/HyprSim')" class="px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:text-[var(--text-main)] text-[11px] flex items-center gap-2 cursor-pointer transition">
-              <i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--text-dim)]"></i>
-              <span class="truncate">HyprSim</span>
-            </div>
-            <div onclick="setWorkspaceFolder('~/projects/EndOfTokens')" class="px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:text-[var(--text-main)] text-[11px] flex items-center gap-2 cursor-pointer transition">
-              <i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--text-dim)]"></i>
-              <span class="truncate">EndOfTokens</span>
-            </div>
-            <div onclick="setWorkspaceFolder('~/projects/EchoedDestiny428')" class="px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:text-[var(--text-main)] text-[11px] flex items-center gap-2 cursor-pointer transition">
-              <i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--text-dim)]"></i>
-              <span class="truncate">EchoedDestiny428</span>
-            </div>
-            <div onclick="setWorkspaceFolder('~/projects/CLI Project')" class="px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:text-[var(--text-main)] text-[11px] flex items-center gap-2 cursor-pointer transition">
-              <i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--text-dim)]"></i>
-              <span class="truncate">CLI Project</span>
-            </div>
+          <!-- Project Tree Items (Rendered Dynamically with Saved Context) -->
+          <div id="sidebar-projects-list" class="space-y-0.5 font-mono text-xs">
+            <!-- Dynamic project list loaded from localStorage -->
           </div>
         </div>
 
@@ -845,58 +817,7 @@ print(response.choices[0].message.content)</code></pre>
   </div>
 
 
-  <!-- ================================================================
-       MODAL: FOLDER / WORKSPACE SELECTOR
-       ================================================================ -->
-  <div id="modal-folder-select" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden animate-fade-in">
-    <div class="max-w-md w-full luxury-card p-5 rounded-2xl space-y-4 border border-gold modal-animate-in relative shadow-2xl">
-      
-      <button onclick="closeFolderSelectorModal()" class="absolute top-4 right-4 text-[var(--text-dim)] hover:text-white transition">
-        <i data-lucide="x" class="w-4 h-4"></i>
-      </button>
 
-      <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-lg bg-gold-gradient text-slate-950 flex items-center justify-center font-bold text-sm shadow-sm">
-          📁
-        </div>
-        <div>
-          <h2 class="text-xs font-bold text-white">Select Workspace Folder</h2>
-          <p class="text-[10px] text-[var(--text-dim)]">Choose the active project directory for Codex sessions</p>
-        </div>
-      </div>
-
-      <!-- Quick Preset Buttons -->
-      <div class="space-y-1.5">
-        <span class="text-[10px] font-mono text-[var(--text-dim)] block">Recent / Common Projects:</span>
-        <div class="grid grid-cols-2 gap-2 text-xs">
-          <button onclick="setWorkspaceFolder('~/projects/frc-swerve')" class="p-2 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] hover:border-gold text-left font-mono text-[11px] text-[var(--text-secondary)] hover:text-white transition">
-            🤖 frc-swerve
-          </button>
-          <button onclick="setWorkspaceFolder('~/projects/robotics')" class="p-2 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] hover:border-gold text-left font-mono text-[11px] text-[var(--text-secondary)] hover:text-white transition">
-            🦾 robotics-subsystems
-          </button>
-          <button onclick="setWorkspaceFolder('~/projects/fastapi-app')" class="p-2 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] hover:border-gold text-left font-mono text-[11px] text-[var(--text-secondary)] hover:text-white transition">
-            🚀 fastapi-service
-          </button>
-          <button onclick="setWorkspaceFolder('~/projects/courtesy')" class="p-2 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] hover:border-gold text-left font-mono text-[11px] text-[var(--text-secondary)] hover:text-white transition">
-            ⚡ courtesy-core
-          </button>
-        </div>
-      </div>
-
-      <!-- Custom Path Input -->
-      <div class="space-y-1 pt-1 text-xs">
-        <span class="text-[10px] font-mono text-[var(--text-dim)] block">Or Enter Custom Path:</span>
-        <div class="flex items-center gap-2">
-          <input id="custom-folder-input" type="text" placeholder="e.g. C:\Users\zacha\projects\my-bot" class="flex-1 bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-gold">
-          <button onclick="applyCustomFolder()" class="px-3 py-1.5 rounded-xl bg-gold-gradient text-slate-950 font-bold text-xs shadow-sm hover:brightness-110 transition">
-            Open
-          </button>
-        </div>
-      </div>
-
-    </div>
-  </div>
 
 
   <!-- Global Toast Notification Container -->
