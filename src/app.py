@@ -20,6 +20,7 @@ from src.router import offload_server_models
 from src.web_agent import search_web, fetch_webpage, generate_grounded_context
 from src.swarm import start_swarm_task, stop_swarm_task, get_swarm_status, register_swarm_subscriber, unregister_swarm_subscriber
 from src.miner_manager import load_mining_config, save_mining_config, get_cluster_mining_status, start_mining_cluster, preempt_mining, idle_mining_watcher_loop
+from src.auth import verify_admin_credentials, create_admin_session, is_valid_admin_token, revoke_admin_session, require_admin_auth
 from src.router import _active_requests
 
 logging.basicConfig(
@@ -351,6 +352,57 @@ async def api_mining_stop():
     save_mining_config(cfg)
     await preempt_mining()
     return {"status": "stopped"}
+
+
+# --- Authentication & Administrative Control Endpoints ---
+
+@app.post("/api/auth/login")
+async def api_auth_login(payload: Dict[str, Any]):
+    """Securely authenticates admin user against server-side salted hash."""
+    username = payload.get("username", "").strip()
+    password = payload.get("password", "")
+    if verify_admin_credentials(username, password):
+        token = create_admin_session()
+        return {"status": "success", "token": token, "username": username}
+    raise HTTPException(status_code=401, detail="Invalid username or password.")
+
+
+@app.post("/api/auth/verify")
+async def api_auth_verify(payload: Dict[str, Any]):
+    """Checks if a session token is currently valid."""
+    token = payload.get("token", "")
+    return {"valid": is_valid_admin_token(token)}
+
+
+@app.post("/api/auth/logout")
+async def api_auth_logout(payload: Dict[str, Any]):
+    """Revokes active admin session."""
+    token = payload.get("token", "")
+    revoke_admin_session(token)
+    return {"status": "logged_out"}
+
+
+@app.post("/api/admin/terminate_sessions")
+async def api_admin_terminate_sessions(admin_token: str = Depends(require_admin_auth)):
+    """Terminates all active Ollama model sessions & flushes dual-GPU VRAM across all nodes."""
+    servers = get_servers()
+    results = {}
+    for s in servers:
+        if s.get("enabled", True):
+            res = await offload_server_models(s["id"])
+            results[s["id"]] = res
+    await preempt_mining()
+    return {"status": "sessions_terminated", "servers": results}
+
+
+@app.post("/api/admin/restart")
+async def api_admin_restart(admin_token: str = Depends(require_admin_auth)):
+    """Triggers an administrative service reload."""
+    async def _do_restart():
+        await asyncio.sleep(1.0)
+        os.system("pkill -f uvicorn || true")
+    asyncio.create_task(_do_restart())
+    return {"status": "restarting", "message": "Cluster gateway is restarting..."}
 
 
 # --- WebSocket for Real-time Dashboard Telemetry ---

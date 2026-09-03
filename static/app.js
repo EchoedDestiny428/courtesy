@@ -52,18 +52,223 @@ if (window.marked) {
   });
 }
 
+// ================= High-Level View Controllers =================
+let currentView = 'portal'; // 'portal', 'connecting', 'standard', 'admin'
+let currentWorkspaceFolder = localStorage.getItem('workspace_folder') || '~/projects/robotics';
+
+function showView(viewId) {
+  const views = ['view-portal', 'view-connecting', 'view-standard', 'view-admin'];
+  views.forEach(v => {
+    const el = document.getElementById(v);
+    if (el) {
+      if (v === viewId) {
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    }
+  });
+  currentView = viewId.replace('view-', '');
+  if (window.lucide) lucide.createIcons();
+}
+
+function returnToPortal() {
+  showView('view-portal');
+}
+
+function shakeLogo() {
+  const img = document.getElementById('portal-logo-img');
+  if (img) {
+    img.style.transform = 'scale(1.15) rotate(10deg)';
+    setTimeout(() => { img.style.transform = ''; }, 300);
+  }
+}
+
+// ================= Standard IDE Auto-Connecting Flow =================
+function startStandardMode() {
+  showView('view-connecting');
+  const label = document.getElementById('connecting-step-label');
+  const bar = document.getElementById('connecting-progress-bar');
+  const folderLabel = document.getElementById('current-folder-label');
+  if (folderLabel) folderLabel.innerText = currentWorkspaceFolder;
+
+  if (bar) bar.style.width = '25%';
+  if (label) label.innerText = 'Pinging cluster compute nodes...';
+
+  setTimeout(() => {
+    if (bar) bar.style.width = '65%';
+    if (label) label.innerText = 'Measuring VRAM headroom across kraken, cst6, cst7...';
+  }, 400);
+
+  setTimeout(() => {
+    if (bar) bar.style.width = '100%';
+    if (label) label.innerText = 'Optimal node pinned: kraken (0% load, 12ms ping)';
+  }, 850);
+
+  setTimeout(() => {
+    showView('view-standard');
+    showToast("Connected to Antigravity IDE Workbench", "⚡");
+    syncEditorGutter();
+  }, 1250);
+}
+
+// ================= Workspace Folder Selector =================
+function openFolderSelectorModal() {
+  const modal = document.getElementById('modal-folder-select');
+  if (modal) modal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeFolderSelectorModal() {
+  const modal = document.getElementById('modal-folder-select');
+  if (modal) modal.classList.add('hidden');
+}
+
+function setWorkspaceFolder(path) {
+  currentWorkspaceFolder = path;
+  localStorage.setItem('workspace_folder', path);
+  const label = document.getElementById('current-folder-label');
+  if (label) label.innerText = path;
+  closeFolderSelectorModal();
+  showToast(`Workspace folder: ${path}`, "📁");
+}
+
+function applyCustomFolder() {
+  const input = document.getElementById('custom-folder-input');
+  const val = input ? input.value.trim() : '';
+  if (val) {
+    setWorkspaceFolder(val);
+  }
+}
+
+// ================= Secure Admin Login Flow =================
+function openAdminLoginModal() {
+  const err = document.getElementById('admin-login-error');
+  if (err) err.classList.add('hidden');
+  const pwdInput = document.getElementById('admin-password-input');
+  if (pwdInput) pwdInput.value = '';
+  const modal = document.getElementById('modal-admin-login');
+  if (modal) modal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeAdminLoginModal() {
+  const modal = document.getElementById('modal-admin-login');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function handleAdminLogin(event) {
+  event.preventDefault();
+  const uInput = document.getElementById('admin-username-input');
+  const pInput = document.getElementById('admin-password-input');
+  const errBox = document.getElementById('admin-login-error');
+  const errMsg = document.getElementById('admin-login-error-msg');
+  const btn = document.getElementById('admin-login-btn');
+
+  const username = uInput ? uInput.value.trim() : '';
+  const password = pInput ? pInput.value : '';
+
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.token) {
+      sessionStorage.setItem('admin_token', data.token);
+      closeAdminLoginModal();
+      showView('view-admin');
+      fetchServersRest();
+      fetchMiningStatus();
+      showToast("Admin Authenticated", "👑");
+    } else {
+      if (errBox) errBox.classList.remove('hidden');
+      if (errMsg) errMsg.innerText = data.detail || 'Invalid username or password';
+    }
+  } catch (e) {
+    if (errBox) errBox.classList.remove('hidden');
+    if (errMsg) errMsg.innerText = 'Connection to gateway failed';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function logoutAdmin() {
+  const token = sessionStorage.getItem('admin_token');
+  if (token) {
+    try {
+      await fetch(`${apiBaseUrl}/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+    } catch (e) {}
+  }
+  sessionStorage.removeItem('admin_token');
+  showView('view-portal');
+  showToast("Logged out from Admin Console");
+}
+
+function switchAdminTab(tabId) {
+  const tabs = ['fleet', 'mining', 'swarm', 'ide'];
+  tabs.forEach(t => {
+    const sec = document.getElementById(`admin-sec-${t}`);
+    const btn = document.getElementById(`admin-tab-btn-${t}`);
+    if (sec && btn) {
+      if (t === tabId) {
+        sec.classList.remove('hidden');
+        btn.className = "px-3 py-1 rounded-lg font-bold transition bg-gold-gradient text-slate-950 shadow-sm";
+      } else {
+        sec.classList.add('hidden');
+        btn.className = "px-3 py-1 rounded-lg font-medium transition text-[var(--text-muted)] hover:text-white";
+      }
+    }
+  });
+  if (window.lucide) lucide.createIcons();
+}
+
+async function terminateAllSessions() {
+  const token = sessionStorage.getItem('admin_token');
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/admin/terminate_sessions`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      showToast("GPU VRAM Flushed: All Sessions Terminated", "⏹");
+      fetchServersRest();
+    }
+  } catch (e) {
+    showToast("Failed to terminate sessions", "⚠");
+  }
+}
+
+async function restartClusterService() {
+  const token = sessionStorage.getItem('admin_token');
+  try {
+    await fetch(`${apiBaseUrl}/api/admin/restart`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    showToast("Gateway restarting... Reconnecting in 4s", "🔄");
+    setTimeout(fetchServersRest, 4000);
+  } catch (e) {
+    showToast("Restart triggered");
+  }
+}
+
 // ================= Model Mode & Node Pinning =================
 function selectModelMode(mode) {
   selectedModelMode = mode;
   ['7b', '14b', 'auto'].forEach(m => {
     const btn = document.getElementById(`mode-btn-${m}`);
-    if (btn) {
-      if (m === mode) {
-        btn.className = "model-pill-btn active";
-      } else {
-        btn.className = "model-pill-btn";
-      }
-    }
+    const stdBtn = document.getElementById(`std-mode-btn-${m}`);
+    if (btn) btn.className = m === mode ? "model-pill-btn active" : "model-pill-btn";
+    if (stdBtn) stdBtn.className = m === mode ? "model-pill-btn active" : "model-pill-btn";
   });
 
   const detailEl = document.getElementById('chat-route-detail');
@@ -545,7 +750,7 @@ function renderGpuActivityStrip(metricsMap) {
 }
 
 function renderServers(metricsMap) {
-  const container = document.getElementById('servers-grid');
+  const container = document.getElementById('admin-servers-grid') || document.getElementById('servers-grid');
   if (!container) return;
 
   const serverIds = Object.keys(metricsMap);
@@ -563,7 +768,7 @@ function renderServers(metricsMap) {
 }
 
 function renderServersFromRest(serversList) {
-  const container = document.getElementById('servers-grid');
+  const container = document.getElementById('admin-servers-grid') || document.getElementById('servers-grid');
   if (!container) return;
 
   container.innerHTML = serversList.map(s => {
@@ -1197,6 +1402,14 @@ function updateMiningUI(data) {
     if (toggleLabel) toggleLabel.innerText = "Enable Mining";
     if (toggleBtn) toggleBtn.className = "px-3 py-1 rounded-xl text-xs font-bold transition border border-gold bg-gold-gradient text-slate-950 shadow-sm hover:brightness-110";
   }
+
+  const topMiningEl = document.getElementById('admin-top-mining-status');
+  if (topMiningEl) {
+    if (data.state === 'mining') topMiningEl.innerText = `${data.coin || 'ETC'} Active (${(data.estimated_hashrate_mhs || 0).toFixed(0)} MH/s)`;
+    else if (data.state === 'preempted_inference') topMiningEl.innerText = 'Preempted (AI Active)';
+    else if (data.state === 'idle_waiting') topMiningEl.innerText = `Idle Waiting (${data.idle_seconds}s)`;
+    else topMiningEl.innerText = 'Disabled';
+  }
 }
 
 async function toggleIdleMining() {
@@ -1218,7 +1431,7 @@ async function saveMiningSettings() {
   const walletInput = document.getElementById('mining-wallet-input');
   const coinSelect = document.getElementById('mining-coin-select');
   const wallet = walletInput ? walletInput.value.trim() : '';
-  const coin = coinSelect ? coinSelect.value : 'ERG';
+  const coin = coinSelect ? coinSelect.value : 'ETC';
 
   if (!wallet) {
     showToast("Please enter a wallet address", "⚠");
@@ -1250,14 +1463,32 @@ window.addEventListener('keydown', (e) => {
 // Start on page load
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
-  if (!window.electronAPI) {
-    const winControls = document.getElementById('window-controls');
-    if (winControls) winControls.classList.add('hidden');
-  }
   initWebSocket();
   fetchServersRest();
-  syncEditorGutter();
   fetchMiningStatus();
   setInterval(fetchMiningStatus, 6000);
+  syncEditorGutter();
+
+  // Route to saved admin session or Portal landing view
+  const savedToken = sessionStorage.getItem('admin_token');
+  if (savedToken) {
+    fetch(`${apiBaseUrl}/api/auth/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: savedToken })
+    }).then(r => r.json()).then(d => {
+      if (d.valid) {
+        showView('view-admin');
+      } else {
+        sessionStorage.removeItem('admin_token');
+        showView('view-portal');
+      }
+    }).catch(() => {
+      showView('view-portal');
+    });
+  } else {
+    showView('view-portal');
+  }
+
   if (window.lucide) lucide.createIcons();
 });

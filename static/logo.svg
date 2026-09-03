@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF0B3" />
+      <stop offset="50%" stop-color="#D4AF37" />
+      <stop offset="100%" stop-color="#8C6D14" />
+    </linearGradient>
+    <linearGradient id="goldGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#D4AF37" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#D4AF37" stop-opacity="0" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Outer Orbit Ring -->
+  <circle cx="100" cy="100" r="85" fill="none" stroke="url(#goldGrad)" stroke-width="1.5" stroke-dasharray="8 6" opacity="0.4">
+    <animateTransform attributeName="transform" type="rotate" from="0 100 100" to="360 100 100" dur="40s" repeatCount="indefinite" />
+  </circle>
+
+  <!-- Inner Dynamic Ring -->
+  <circle cx="100" cy="100" r="68" fill="none" stroke="url(#goldGrad)" stroke-width="2" stroke-dasharray="30 15" opacity="0.75" filter="url(#glow)">
+    <animateTransform attributeName="transform" type="rotate" from="360 100 100" to="0 100 100" dur="25s" repeatCount="indefinite" />
+  </circle>
+
+  <!-- Core Antigravity Hexagon / Diamond -->
+  <polygon points="100,45 145,72 145,128 100,155 55,128 55,72" fill="#0C0D12" stroke="url(#goldGrad)" stroke-width="2.5" filter="url(#glow)" />
+
+  <!-- Inner Inverted Core -->
+  <polygon points="100,60 132,80 132,120 100,140 68,120 68,80" fill="none" stroke="url(#goldGrad)" stroke-width="1" opacity="0.6" />
+
+  <!-- Central Energy Monolith -->
+  <polygon points="100,75 118,100 100,125 82,100" fill="url(#goldGrad)" opacity="0.95" filter="url(#glow)">
+    <animate attributeName="opacity" values="0.8;1;0.8" dur="3s" repeatCount="indefinite" />
+  </polygon>
+
+  <!-- Central Spark Dot -->
+  <circle cx="100" cy="100" r="3.5" fill="#FFFFFF" filter="url(#glow)" />
+</svg>
