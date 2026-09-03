@@ -292,6 +292,23 @@
           </div>
         </div>
 
+        <!-- Quick Action Chips for Scratchpad -->
+        <div class="px-3 pt-2 pb-1 flex flex-wrap items-center gap-1.5 border-t border-[var(--border-app)] bg-[var(--bg-surface)] text-[10px]">
+          <span class="text-[var(--text-dim)] font-mono">Scratchpad:</span>
+          <button onclick="sendScratchpadToCodex('refactor')" class="px-2 py-0.5 rounded-lg bg-[var(--bg-muted)] hover:border-gold border border-[var(--border-app)] text-gold-400 font-mono transition flex items-center gap-1">
+            <i data-lucide="sparkles" class="w-2.5 h-2.5"></i> Refactor
+          </button>
+          <button onclick="sendScratchpadToCodex('bugs')" class="px-2 py-0.5 rounded-lg bg-[var(--bg-muted)] hover:border-rose-500 border border-[var(--border-app)] text-rose-300 font-mono transition flex items-center gap-1">
+            <i data-lucide="shield-alert" class="w-2.5 h-2.5"></i> Audit Bugs
+          </button>
+          <button onclick="sendScratchpadToCodex('tests')" class="px-2 py-0.5 rounded-lg bg-[var(--bg-muted)] hover:border-emerald-500 border border-[var(--border-app)] text-emerald-400 font-mono transition flex items-center gap-1">
+            <i data-lucide="check-circle" class="w-2.5 h-2.5"></i> Gen Tests
+          </button>
+          <button onclick="sendScratchpadToCodex('explain')" class="px-2 py-0.5 rounded-lg bg-[var(--bg-muted)] hover:border-cyan-500 border border-[var(--border-app)] text-cyan-300 font-mono transition flex items-center gap-1">
+            <i data-lucide="help-circle" class="w-2.5 h-2.5"></i> Explain
+          </button>
+        </div>
+
         <!-- Chat Input Bar -->
         <div class="p-3 border-t border-[var(--border-app)] bg-[var(--bg-surface)] space-y-2">
           <div class="relative">
@@ -301,7 +318,7 @@
               <button id="stop-stream-btn" onclick="stopGenerating()" class="hidden px-2 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 text-[10px] font-bold border border-rose-800 transition flex items-center gap-1">
                 <i data-lucide="square" class="w-2.5 h-2.5 fill-current"></i> Stop
               </button>
-              <button id="send-prompt-btn" onclick="sendPrompt()" class="p-1.5 rounded-lg bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold transition shadow-sm">
+              <button id="send-prompt-btn" onclick="sendPrompt()" class="p-1.5 rounded-lg bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold transition shadow-sm" title="Send (Enter)">
                 <i data-lucide="corner-down-left" class="w-3.5 h-3.5 stroke-[2.5]"></i>
               </button>
             </div>
@@ -323,6 +340,10 @@
               <option value="rust">Rust</option>
               <option value="cpp">C++</option>
               <option value="javascript">JavaScript</option>
+              <option value="typescript">TypeScript</option>
+              <option value="go">Go</option>
+              <option value="sql">SQL</option>
+              <option value="bash">Bash</option>
               <option value="markdown">Markdown</option>
             </select>
           </div>
@@ -346,7 +367,21 @@
           <div id="editor-gutter" class="w-10 py-3 pr-2 select-none text-right text-[var(--text-dim)] border-r border-[var(--border-app)] bg-[var(--bg-app)] font-mono text-[11px] leading-relaxed opacity-60">1</div>
           
           <!-- Textarea Editor -->
-          <textarea id="scratchpad-editor" spellcheck="false" placeholder="# Write or inspect code here... Code from chat can be transferred directly." class="flex-1 p-3 bg-transparent text-[var(--text-main)] focus:outline-none resize-none font-mono text-[11px] leading-relaxed" oninput="syncEditorGutter()" onscroll="syncGutterScroll()"></textarea>
+          <textarea id="scratchpad-editor" spellcheck="false" placeholder="# Write or inspect code here... Code from chat can be transferred directly with ⚡ Scratchpad." class="flex-1 p-3 bg-transparent text-[var(--text-main)] focus:outline-none resize-none font-mono text-[11px] leading-relaxed" oninput="syncEditorGutter()" onscroll="syncGutterScroll()"></textarea>
+        </div>
+
+        <!-- Scratchpad Status Bar -->
+        <div class="h-6 px-3 bg-[var(--bg-surface-elevated)] border-t border-[var(--border-app)] flex items-center justify-between text-[10px] font-mono text-[var(--text-dim)]">
+          <div class="flex items-center gap-3">
+            <span id="scratchpad-line-count">1 lines</span>
+            <span>•</span>
+            <span id="scratchpad-char-count">0 chars</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span>Indent: 2 spaces</span>
+            <span>•</span>
+            <span class="text-gold-500 font-bold" id="scratchpad-status-lang">PYTHON</span>
+          </div>
         </div>
 
       </div>
@@ -438,9 +473,14 @@
             <p class="text-[11px] text-[var(--text-dim)] pt-0.5">Real-time VRAM allocation, GPU power, temperature, and individual offload actions.</p>
           </div>
 
-          <button onclick="fetchServersRest()" class="px-3 py-1.5 rounded-xl border border-[var(--border-app)] hover:border-gold text-white font-mono text-[11px] flex items-center gap-1.5 transition">
-            <i data-lucide="refresh-cw" class="w-3 h-3 text-gold-500"></i> Refresh Fleet
-          </button>
+          <div class="flex items-center gap-2">
+            <button onclick="openAddServerModal()" class="px-3 py-1.5 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-[11px] flex items-center gap-1.5 shadow-sm shadow-gold-glow transition">
+              <i data-lucide="plus" class="w-3.5 h-3.5 stroke-[3]"></i> Add Compute Node
+            </button>
+            <button onclick="fetchServersRest()" class="px-3 py-1.5 rounded-xl border border-[var(--border-app)] hover:border-gold text-white font-mono text-[11px] flex items-center gap-1.5 transition">
+              <i data-lucide="refresh-cw" class="w-3 h-3 text-gold-500"></i> Refresh Fleet
+            </button>
+          </div>
         </div>
 
         <div id="admin-servers-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -617,21 +657,35 @@
       </section>
 
       <!-- ================= ADMIN TAB 4: IDE INTEGRATION ================= -->
-      <section id="admin-sec-ide" class="hidden space-y-4 max-w-3xl mx-auto animate-fade-in">
-        <div class="p-5 rounded-2xl luxury-card space-y-4 text-xs">
-          <div class="flex items-center justify-between border-b border-[var(--border-app)] pb-2">
-            <h2 class="font-bold text-white flex items-center gap-2">
-              <i data-lucide="plug" class="w-4 h-4 text-gold-500"></i>
-              <span>External IDE Connection Snippets</span>
-            </h2>
-            <span class="text-[10px] font-mono text-gold-500 bg-[var(--gold-subtle)] border border-gold px-2 py-0.5 rounded">
-              Base: http://100.107.249.92:8000/v1
-            </span>
+      <section id="admin-sec-ide" class="hidden space-y-4 max-w-4xl mx-auto animate-fade-in">
+        <div class="p-5 rounded-2xl luxury-card space-y-5 text-xs">
+          <div class="flex items-center justify-between border-b border-[var(--border-app)] pb-3">
+            <div>
+              <h2 class="font-bold text-white flex items-center gap-2">
+                <i data-lucide="plug" class="w-4 h-4 text-gold-500"></i>
+                <span>External IDE & Agent Integrations</span>
+              </h2>
+              <p class="text-[11px] text-[var(--text-dim)] pt-0.5">Connect any OpenAI-compatible IDE, CLI, or SDK directly to the Courtesy Cluster Gateway.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-mono text-gold-500 bg-[var(--gold-subtle)] border border-gold px-2.5 py-1 rounded-lg">
+                Endpoint: http://100.107.249.92:8000/v1
+              </span>
+            </div>
           </div>
 
+          <!-- Snippet 1: VS Code Continue -->
           <div class="space-y-1.5">
-            <span class="font-bold text-white">VS Code Continue (~/.continue/config.json)</span>
-            <pre class="bg-[var(--code-bg)] p-3 rounded-xl border border-[var(--border-app)] font-mono text-xs text-gold-400 overflow-x-auto"><code>{
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-white flex items-center gap-1.5">
+                <span>1. VS Code Continue.dev</span>
+                <span class="text-[10px] font-mono text-[var(--text-dim)]">(~/.continue/config.json)</span>
+              </span>
+              <button onclick="copySnippet('snip-continue')" class="text-[10px] font-mono text-gold-400 hover:text-white flex items-center gap-1">
+                <i data-lucide="copy" class="w-3 h-3"></i> Copy
+              </button>
+            </div>
+            <pre class="bg-[var(--code-bg)] p-3 rounded-xl border border-[var(--border-app)] font-mono text-xs text-gold-400 overflow-x-auto"><code id="snip-continue">{
   "models": [
     {
       "title": "Courtesy Codex (Auto Cluster)",
@@ -639,13 +693,155 @@
       "model": "auto",
       "apiBase": "http://100.107.249.92:8000/v1",
       "apiKey": "courtesy-local"
+    },
+    {
+      "title": "Courtesy Kraken (Fast 7B)",
+      "provider": "openai",
+      "model": "kraken/qwen2.5-coder:7b",
+      "apiBase": "http://100.107.249.92:8000/v1",
+      "apiKey": "courtesy-local"
+    },
+    {
+      "title": "Courtesy CST7 (Heavy 14B)",
+      "provider": "openai",
+      "model": "cst7/qwen2.5-coder:14b",
+      "apiBase": "http://100.107.249.92:8000/v1",
+      "apiKey": "courtesy-local"
     }
   ]
 }</code></pre>
           </div>
+
+          <!-- Snippet 2: Cline & Roo Code -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-white flex items-center gap-1.5">
+                <span>2. Cline / Roo Code</span>
+                <span class="text-[10px] font-mono text-[var(--text-dim)]">(Extension Settings)</span>
+              </span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px]">
+              <div class="p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-app)]">
+                <span class="text-[9px] text-[var(--text-dim)] block">API Provider</span>
+                <span class="text-white font-bold">OpenAI Compatible</span>
+              </div>
+              <div class="p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-app)]">
+                <span class="text-[9px] text-[var(--text-dim)] block">Base URL</span>
+                <span class="text-gold-400 font-bold truncate block">http://100.107.249.92:8000/v1</span>
+              </div>
+              <div class="p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-app)]">
+                <span class="text-[9px] text-[var(--text-dim)] block">API Key</span>
+                <span class="text-white font-bold">courtesy</span>
+              </div>
+              <div class="p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-app)]">
+                <span class="text-[9px] text-[var(--text-dim)] block">Model ID</span>
+                <span class="text-emerald-400 font-bold">auto / 7b / 14b</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Snippet 3: Aider CLI -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-white flex items-center gap-1.5">
+                <span>3. Aider CLI</span>
+                <span class="text-[10px] font-mono text-[var(--text-dim)]">(Terminal command)</span>
+              </span>
+              <button onclick="copySnippet('snip-aider')" class="text-[10px] font-mono text-gold-400 hover:text-white flex items-center gap-1">
+                <i data-lucide="copy" class="w-3 h-3"></i> Copy
+              </button>
+            </div>
+            <pre class="bg-[var(--code-bg)] p-3 rounded-xl border border-[var(--border-app)] font-mono text-xs text-gold-400 overflow-x-auto"><code id="snip-aider">aider --openai-api-base http://100.107.249.92:8000/v1 --openai-api-key courtesy --model openai/auto</code></pre>
+          </div>
+
+          <!-- Snippet 4: Python SDK -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-white flex items-center gap-1.5">
+                <span>4. Python OpenAI SDK</span>
+                <span class="text-[10px] font-mono text-[var(--text-dim)]">(Script integration)</span>
+              </span>
+              <button onclick="copySnippet('snip-python')" class="text-[10px] font-mono text-gold-400 hover:text-white flex items-center gap-1">
+                <i data-lucide="copy" class="w-3 h-3"></i> Copy
+              </button>
+            </div>
+            <pre class="bg-[var(--code-bg)] p-3 rounded-xl border border-[var(--border-app)] font-mono text-xs text-gold-400 overflow-x-auto"><code id="snip-python">from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://100.107.249.92:8000/v1",
+    api_key="courtesy-local"
+)
+
+response = client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "Write a quicksort in Rust."}]
+)
+print(response.choices[0].message.content)</code></pre>
+          </div>
+
         </div>
       </section>
 
+    </div>
+  </div>
+
+
+  <!-- ================================================================
+       MODAL: REGISTER NEW COMPUTE NODE
+       ================================================================ -->
+  <div id="add-server-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden animate-fade-in">
+    <div class="max-w-md w-full luxury-card p-5 rounded-2xl space-y-4 border border-gold modal-animate-in relative shadow-2xl">
+      <button onclick="closeAddServerModal()" class="absolute top-4 right-4 text-[var(--text-dim)] hover:text-white transition">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-gold-gradient text-slate-950 flex items-center justify-center font-bold text-sm shadow-sm">
+          ➕
+        </div>
+        <div>
+          <h2 class="text-xs font-bold text-white">Register Compute Node</h2>
+          <p class="text-[10px] text-[var(--text-dim)]">Connect a new GPU server or Ollama instance into the cluster</p>
+        </div>
+      </div>
+
+      <form id="add-server-form" onsubmit="handleAddServerSubmit(event)" class="space-y-3 text-xs">
+        <div class="grid grid-cols-2 gap-2">
+          <div class="space-y-1">
+            <label class="text-[10px] font-mono text-[var(--text-muted)] block">Node ID</label>
+            <input id="new-server-id" type="text" placeholder="e.g. cst8" required class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-gold">
+          </div>
+          <div class="space-y-1">
+            <label class="text-[10px] font-mono text-[var(--text-muted)] block">Friendly Name</label>
+            <input id="new-server-name" type="text" placeholder="cst8 (Node 4)" required class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-gold">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <div class="col-span-2 space-y-1">
+            <label class="text-[10px] font-mono text-[var(--text-muted)] block">Host IP / Domain</label>
+            <input id="new-server-host" type="text" placeholder="10.11.2.25" required class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-gold">
+          </div>
+          <div class="space-y-1">
+            <label class="text-[10px] font-mono text-[var(--text-muted)] block">Port</label>
+            <input id="new-server-port" type="number" value="11434" required class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-gold">
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-[10px] font-mono text-[var(--text-muted)] block">Preferred Model (Optional)</label>
+          <input id="new-server-model" type="text" placeholder="qwen2.5-coder:7b" class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-gold">
+        </div>
+
+        <div class="pt-2 flex items-center justify-end gap-2">
+          <button type="button" onclick="closeAddServerModal()" class="px-3 py-1.5 rounded-xl border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-muted)] text-xs transition">
+            Cancel
+          </button>
+          <button type="submit" class="px-4 py-1.5 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-xs shadow-sm shadow-gold-glow transition">
+            Register Node
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

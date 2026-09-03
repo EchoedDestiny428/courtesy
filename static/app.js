@@ -628,7 +628,7 @@ function setSwarmRunningUI(running) {
 function sendSwarmCodeToScratchpad() {
   if (currentSwarmFinalCode) {
     insertCodeIntoEditor(currentSwarmFinalCode, 'python');
-    switchTab('codex');
+    showView('view-standard');
     showToast("Swarm code loaded into Scratchpad!", "⚡");
   }
 }
@@ -712,6 +712,7 @@ function triggerManualRefresh() {
 function renderClusterSummary(summary, metricsMap = null) {
   const titleGpusEl = document.getElementById('titlebar-gpus');
   const fleetCountEl = document.getElementById('tab-fleet-count');
+  const portalCountEl = document.getElementById('portal-online-count');
 
   if (titleGpusEl) {
     titleGpusEl.innerText = `${summary.total_vram_gb || 30}GB`;
@@ -719,9 +720,23 @@ function renderClusterSummary(summary, metricsMap = null) {
   if (fleetCountEl) {
     fleetCountEl.innerText = summary.online_nodes || 3;
   }
+  if (portalCountEl && summary.total_nodes) {
+    portalCountEl.innerText = `${summary.online_nodes || 0} / ${summary.total_nodes || 3} Nodes Online`;
+  }
 
   if (metricsMap) {
     renderGpuActivityStrip(metricsMap);
+
+    // Update connected node indicator in Standard IDE topbar
+    const onlineNodes = Object.values(metricsMap).filter(s => s.online && s.role === 'inference');
+    if (onlineNodes.length > 0) {
+      onlineNodes.sort((a, b) => (a.latency_ms || 999) - (b.latency_ms || 999));
+      const best = onlineNodes[0];
+      const nodeLabel = document.getElementById('std-connected-node-label');
+      if (nodeLabel) {
+        nodeLabel.innerText = `${best.id} (${best.latency_ms || 12}ms)`;
+      }
+    }
   }
 }
 
@@ -812,7 +827,7 @@ function createMinimalServerCardHtml(s) {
 
         <div class="flex items-center gap-1">
           ${s.latency_ms ? `<span class="text-[10px] font-mono text-gold-500 px-1 py-0.5 rounded bg-[var(--gold-subtle)]">${s.latency_ms}ms</span>` : ''}
-          <button onclick="toggleServer('${s.id}')" title="Toggle Node" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)]">
+          <button onclick="toggleServer('${s.id}')" title="Toggle Node" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition">
             <i data-lucide="${s.enabled ? 'power' : 'power-off'}" class="w-3 h-3 ${s.enabled ? 'text-emerald-400' : 'text-slate-500'}"></i>
           </button>
         </div>
@@ -867,12 +882,19 @@ function createMinimalServerCardHtml(s) {
 
       <!-- Action Footer -->
       <div class="pt-2 border-t border-[var(--border-app)] flex items-center justify-between text-[10px]">
-        <span class="text-[var(--text-dim)] font-mono">${s.host}</span>
+        <span class="text-[var(--text-dim)] font-mono">${s.host}:${s.port || 11434}</span>
         ${!isGateway ? `
-          <button onclick="offloadSingleNode('${s.id}')" class="text-[var(--text-dim)] hover:text-gold-500 flex items-center gap-1" title="Free VRAM on this node">
-            <i data-lucide="sparkles" class="w-2.5 h-2.5"></i>
-            <span>Flush</span>
-          </button>
+          <div class="flex items-center gap-2">
+            <button onclick="offloadSingleNode('${s.id}')" class="text-[var(--text-dim)] hover:text-gold-500 flex items-center gap-1 transition" title="Flush resident models from VRAM">
+              <i data-lucide="sparkles" class="w-2.5 h-2.5"></i>
+              <span>Flush</span>
+            </button>
+            ${(s.id !== 'kraken' && s.id !== 'cst6' && s.id !== 'cst7') ? `
+              <button onclick="deleteServer('${s.id}')" class="text-[var(--text-dim)] hover:text-rose-400 p-0.5 rounded transition" title="Remove custom node">
+                <i data-lucide="trash-2" class="w-3 h-3"></i>
+              </button>
+            ` : ''}
+          </div>
         ` : ''}
       </div>
 
@@ -882,24 +904,41 @@ function createMinimalServerCardHtml(s) {
 
 // ================= Server CRUD =================
 function openAddServerModal() {
-  document.getElementById('add-server-modal').classList.remove('hidden');
+  const modal = document.getElementById('add-server-modal');
+  if (modal) modal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
 }
 
 function closeAddServerModal() {
-  document.getElementById('add-server-modal').classList.add('hidden');
+  const modal = document.getElementById('add-server-modal');
+  if (modal) modal.classList.add('hidden');
 }
 
 async function handleAddServerSubmit(event) {
   event.preventDefault();
+  const idInput = document.getElementById('new-server-id');
+  const nameInput = document.getElementById('new-server-name');
+  const hostInput = document.getElementById('new-server-host');
+  const portInput = document.getElementById('new-server-port');
+  const modelInput = document.getElementById('new-server-model');
+
   const newServer = {
-    id: document.getElementById('new-server-id').value.trim().toLowerCase(),
-    name: document.getElementById('new-server-name').value.trim(),
-    host: document.getElementById('new-server-host').value.trim(),
-    port: parseInt(document.getElementById('new-server-port').value, 10) || 11434,
+    id: idInput ? idInput.value.trim().toLowerCase() : '',
+    name: nameInput ? nameInput.value.trim() : '',
+    host: hostInput ? hostInput.value.trim() : '',
+    port: portInput ? parseInt(portInput.value, 10) || 11434 : 11434,
+    preferred_model: (modelInput && modelInput.value.trim()) ? modelInput.value.trim() : 'qwen2.5-coder:7b',
     role: "inference",
     type: "ollama",
-    enabled: true
+    enabled: true,
+    specs: { cpu: "Detected dynamically", ram: "32 GB", gpus: [] },
+    tags: ["custom-node", "compute"]
   };
+
+  if (!newServer.id || !newServer.name || !newServer.host) {
+    showToast("ID, Name, and Host are required", "⚠");
+    return;
+  }
 
   try {
     const res = await fetch(`${apiBaseUrl}/api/servers`, {
@@ -911,10 +950,30 @@ async function handleAddServerSubmit(event) {
       closeAddServerModal();
       document.getElementById('add-server-form').reset();
       triggerManualRefresh();
-      showToast("Node registered successfully");
+      showToast(`Node '${newServer.id}' registered!`, "✓");
+    } else {
+      const err = await res.json();
+      showToast(err.detail || "Failed to register node", "⚠");
     }
   } catch (e) {
     showToast("Failed to register node", "⚠");
+  }
+}
+
+async function deleteServer(serverId) {
+  if (!confirm(`Are you sure you want to remove node '${serverId}' from the cluster?`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/servers/${serverId}`, { method: 'DELETE' });
+    if (res.ok) {
+      showToast(`Node '${serverId}' removed`, "✓");
+      triggerManualRefresh();
+    } else {
+      showToast("Could not remove node", "⚠");
+    }
+  } catch (e) {
+    showToast("Error deleting node", "⚠");
   }
 }
 
@@ -926,16 +985,30 @@ async function toggleServer(serverId) {
 }
 
 // ================= Antigravity Code Workbench / Scratchpad =================
-function handleLanguageChange() {
-  const lang = document.getElementById('editor-language').value;
-  const ext = EXT_MAP[lang] || 'txt';
-  const nameInput = document.getElementById('editor-filename');
-  const parts = nameInput.value.split('.');
-  if (parts.length > 1) {
-    parts.pop();
-    nameInput.value = `${parts.join('.')}.${ext}`;
-  } else {
-    nameInput.value = `${nameInput.value}.${ext}`;
+function getScratchpad() {
+  return document.getElementById('scratchpad-editor') || document.getElementById('ide-code-area');
+}
+
+function getEditorGutter() {
+  return document.getElementById('editor-gutter');
+}
+
+function updateScratchpadStats() {
+  const textarea = getScratchpad();
+  const lineCountEl = document.getElementById('scratchpad-line-count');
+  const charCountEl = document.getElementById('scratchpad-char-count');
+  const langStatusEl = document.getElementById('scratchpad-status-lang');
+  const langSelect = document.getElementById('scratchpad-lang') || document.getElementById('editor-language');
+
+  if (textarea) {
+    const text = textarea.value || '';
+    const lines = text.split('\n').length;
+    if (lineCountEl) lineCountEl.innerText = `${lines} ${lines === 1 ? 'line' : 'lines'}`;
+    if (charCountEl) charCountEl.innerText = `${text.length} chars`;
+  }
+
+  if (langStatusEl && langSelect) {
+    langStatusEl.innerText = langSelect.value.toUpperCase();
   }
 }
 
@@ -947,36 +1020,56 @@ function handleEditorTabKey(event) {
     const end = textarea.selectionEnd;
     textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
     textarea.selectionStart = textarea.selectionEnd = start + 2;
+    syncEditorGutter();
   }
 }
 
 function syncEditorGutter() {
-  const textarea = document.getElementById('ide-code-area');
-  const gutter = document.getElementById('editor-gutter');
+  const textarea = getScratchpad();
+  const gutter = getEditorGutter();
   if (!textarea || !gutter) return;
 
   const lines = (textarea.value || '').split('\n').length;
   gutter.innerText = Array.from({ length: Math.max(1, lines) }, (_, i) => i + 1).join('\n');
+  updateScratchpadStats();
 }
 
-function syncEditorScroll() {
-  const textarea = document.getElementById('ide-code-area');
-  const gutter = document.getElementById('editor-gutter');
+function syncGutterScroll() {
+  const textarea = getScratchpad();
+  const gutter = getEditorGutter();
   if (textarea && gutter) {
     gutter.scrollTop = textarea.scrollTop;
   }
 }
 
-function copyEditorCode() {
-  const code = document.getElementById('ide-code-area').value;
-  navigator.clipboard.writeText(code);
-  showToast("Code copied to clipboard!", "📋");
+function updateEditorSyntax() {
+  const langSelect = document.getElementById('scratchpad-lang') || document.getElementById('editor-language');
+  const lang = langSelect ? langSelect.value : 'python';
+  showToast(`Scratchpad set to ${lang.toUpperCase()}`, "📝");
+  updateScratchpadStats();
 }
 
-function downloadEditorCode() {
-  const code = document.getElementById('ide-code-area').value;
-  const filename = document.getElementById('editor-filename').value || 'code.txt';
-  const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
+function copyScratchpadCode() {
+  const editor = getScratchpad();
+  if (!editor || !editor.value) {
+    showToast("Scratchpad is empty", "ℹ");
+    return;
+  }
+  navigator.clipboard.writeText(editor.value);
+  showToast("Scratchpad copied to clipboard!", "📋");
+}
+
+function downloadScratchpadCode() {
+  const editor = getScratchpad();
+  if (!editor || !editor.value) {
+    showToast("Scratchpad is empty", "ℹ");
+    return;
+  }
+  const langSelect = document.getElementById('scratchpad-lang') || document.getElementById('editor-language');
+  const lang = langSelect ? langSelect.value : 'python';
+  const ext = EXT_MAP[lang.toLowerCase()] || 'txt';
+  const filename = `courtesy_${lang}_${Date.now()}.${ext}`;
+  const blob = new Blob([editor.value], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -988,98 +1081,110 @@ function downloadEditorCode() {
   showToast(`Downloaded ${filename}`, "💾");
 }
 
-function clearEditor() {
-  document.getElementById('ide-code-area').value = '';
-  syncEditorGutter();
-  showToast("Scratchpad cleared", "🗑️");
-}
-
-function insertCodeIntoEditor(code, lang = 'python') {
-  const editor = document.getElementById('ide-code-area');
-  const langSelect = document.getElementById('editor-language');
+function clearScratchpad() {
+  const editor = getScratchpad();
   if (editor) {
-    editor.value = code;
-    if (lang && EXT_MAP[lang.toLowerCase()]) {
-      langSelect.value = lang.toLowerCase();
-      handleLanguageChange();
-    }
+    editor.value = '';
     syncEditorGutter();
-    editor.focus();
-    showToast("Snippet sent to Scratchpad", "⚡");
+    showToast("Scratchpad cleared", "🗑️");
   }
 }
 
-function sendEditorCodeToCodex(action) {
-  const code = document.getElementById('ide-code-area').value.trim();
-  const lang = document.getElementById('editor-language').value;
+function insertCodeIntoEditor(code, lang = 'python') {
+  const editor = getScratchpad();
+  const langSelect = document.getElementById('scratchpad-lang') || document.getElementById('editor-language');
+  if (editor) {
+    editor.value = code;
+    if (lang && langSelect) {
+      const matchKey = Object.keys(EXT_MAP).find(k => k === lang.toLowerCase() || EXT_MAP[k] === lang.toLowerCase());
+      if (matchKey) langSelect.value = matchKey;
+    }
+    syncEditorGutter();
+    editor.focus();
+    showToast("Code injected into Scratchpad", "⚡");
+  }
+}
+
+function sendScratchpadToCodex(action) {
+  const editor = getScratchpad();
+  const code = editor ? editor.value.trim() : '';
+  const langSelect = document.getElementById('scratchpad-lang') || document.getElementById('editor-language');
+  const lang = langSelect ? langSelect.value : 'python';
+
   if (!code) {
-    showToast("Scratchpad is empty. Write or paste code first!", "⚠");
+    showToast("Scratchpad is empty. Write or generate code first!", "⚠");
     return;
   }
 
   let promptText = "";
   if (action === 'refactor') {
-    promptText = `Refactor the following ${lang} code for clean architecture, readability, and high performance:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
+    promptText = `Refactor the following ${lang} code for clean architecture, type safety, modularity, and high performance:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
   } else if (action === 'bugs') {
-    promptText = `Audit this ${lang} code for bugs, race conditions, edge cases, and vulnerabilities. Provide corrected code:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
+    promptText = `Perform a comprehensive security, logic, and edge-case audit on this ${lang} code. Identify any race conditions, leaks, or failure points, and provide the corrected code:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
   } else if (action === 'tests') {
-    promptText = `Write comprehensive unit tests with edge cases and mocks for this ${lang} code:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
+    promptText = `Write exhaustive unit and integration tests with mocks, edge cases, and happy paths for this ${lang} code:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
+  } else if (action === 'explain') {
+    promptText = `Explain the architecture, algorithms, and line-by-line mechanics of this ${lang} code clearly:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
   }
 
-  const input = document.getElementById('chat-input');
-  input.value = promptText;
-  handleChatSubmit(new Event('submit'));
+  const promptInput = document.getElementById('prompt-input') || document.getElementById('chat-input');
+  if (promptInput) {
+    promptInput.value = promptText;
+    sendPrompt();
+  }
 }
 
-// ================= Codex Chat Playground =================
+// ================= Codex Chat Playground & Streaming =================
 let webAccessEnabled = true;
 
 function toggleWebAccess() {
   webAccessEnabled = !webAccessEnabled;
-  const btn = document.getElementById('web-access-btn');
-  const label = document.getElementById('web-access-label');
-  if (btn && label) {
-    if (webAccessEnabled) {
-      btn.className = "px-2 py-0.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20";
-      label.innerText = "Web Docs: ON";
-      showToast("Live Web Access & Docs Enabled", "🌐");
-    } else {
-      btn.className = "px-2 py-0.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition bg-[var(--bg-input)] border border-[var(--border-app)] text-[var(--text-dim)] hover:text-[var(--text-secondary)]";
-      label.innerText = "Web Docs: OFF";
-      showToast("Live Web Access Disabled", "⚪");
-    }
+
+  const stdBtn = document.getElementById('std-web-toggle-btn');
+  const stdText = document.getElementById('std-web-status-text');
+  const adminBtn = document.getElementById('web-access-btn');
+  const adminText = document.getElementById('web-access-label');
+
+  if (webAccessEnabled) {
+    if (stdBtn) stdBtn.className = "px-2.5 py-1 rounded-xl text-[11px] font-mono flex items-center gap-1.5 transition border border-emerald-500/40 bg-emerald-950/40 text-emerald-400";
+    if (stdText) stdText.innerText = "Web Docs: ON";
+    if (adminBtn) adminBtn.className = "px-2 py-0.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition bg-emerald-500/10 border border-emerald-500/30 text-emerald-400";
+    if (adminText) adminText.innerText = "Web Docs: ON";
+    showToast("Live Web Docs Grounding: Enabled", "🌐");
+  } else {
+    if (stdBtn) stdBtn.className = "px-2.5 py-1 rounded-xl text-[11px] font-mono flex items-center gap-1.5 transition border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-dim)]";
+    if (stdText) stdText.innerText = "Web Docs: OFF";
+    if (adminBtn) adminBtn.className = "px-2 py-0.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition bg-[var(--bg-input)] border border-[var(--border-app)] text-[var(--text-dim)]";
+    if (adminText) adminText.innerText = "Web Docs: OFF";
+    showToast("Live Web Docs Grounding: Disabled", "⚪");
   }
+  if (window.lucide) lucide.createIcons();
 }
 
-function applyPromptPreset() {
-  const presetKey = document.getElementById('prompt-preset-select').value;
-  showToast(`Persona: ${presetKey.toUpperCase()}`);
-}
-
-function handleTextareaKeydown(event) {
+function handleInputKey(event) {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
-    handleChatSubmit(event);
+    sendPrompt();
   }
 }
 
-function sendQuickPrompt(text) {
-  const input = document.getElementById('chat-input');
-  input.value = text;
-  handleChatSubmit(new Event('submit'));
-}
-
-function clearChatHistory() {
+function clearChat() {
   chatHistory = [];
   const container = document.getElementById('chat-messages');
-  container.innerHTML = `
-    <div class="flex items-start gap-3 max-w-xl animate-fade-up">
-      <div class="h-7 w-7 rounded-lg bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-xs shrink-0 shadow-sm shadow-gold-glow">⚡</div>
-      <div class="bg-[var(--bg-surface)] border border-[var(--border-app)] rounded-2xl rounded-tl-sm p-3.5 text-xs text-[var(--text-main)] shadow-sm">
-        Conversation cleared. Ready for your next coding task.
+  if (container) {
+    container.innerHTML = `
+      <div class="p-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-app)] space-y-2 animate-fade-up">
+        <div class="flex items-center gap-2 text-gold-500 font-bold text-xs">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+          <span>Antigravity Codex Ready</span>
+        </div>
+        <p class="text-[var(--text-muted)] text-[11px] leading-relaxed">
+          Conversation cleared. Auto-connected to the cluster. Ask for code generation, architecture planning, or refactors. Code blocks can be injected into the Scratchpad with one click.
+        </p>
       </div>
-    </div>
-  `;
+    `;
+    if (window.lucide) lucide.createIcons();
+  }
   showToast("Conversation cleared");
 }
 
@@ -1091,20 +1196,21 @@ function stopGenerating() {
     currentAbortController = null;
   }
   isStreaming = false;
-  const sendBtn = document.getElementById('chat-send-btn');
-  const stopBtn = document.getElementById('chat-stop-btn');
+
+  const sendBtn = document.getElementById('send-prompt-btn') || document.getElementById('chat-send-btn');
+  const stopBtn = document.getElementById('stop-stream-btn') || document.getElementById('chat-stop-btn');
   if (sendBtn) sendBtn.disabled = false;
   if (stopBtn) stopBtn.classList.add('hidden');
-  const statusMsg = document.getElementById('chat-status-msg');
-  if (statusMsg) statusMsg.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Stopped`;
+
   showToast("Generation stopped");
 }
 
-async function handleChatSubmit(event) {
-  event.preventDefault();
+async function sendPrompt() {
   if (isStreaming) return;
 
-  const inputEl = document.getElementById('chat-input');
+  const inputEl = document.getElementById('prompt-input') || document.getElementById('chat-input');
+  if (!inputEl) return;
+
   const userText = inputEl.value.trim();
   if (!userText) return;
 
@@ -1112,20 +1218,17 @@ async function handleChatSubmit(event) {
   isStreaming = true;
   currentAbortController = new AbortController();
 
-  const sendBtn = document.getElementById('chat-send-btn');
-  const stopBtn = document.getElementById('chat-stop-btn');
+  const sendBtn = document.getElementById('send-prompt-btn') || document.getElementById('chat-send-btn');
+  const stopBtn = document.getElementById('stop-stream-btn') || document.getElementById('chat-stop-btn');
   if (sendBtn) sendBtn.disabled = true;
   if (stopBtn) stopBtn.classList.remove('hidden');
-
-  document.getElementById('chat-status-msg').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-gold-500 animate-ping"></span> Inferring...`;
 
   appendMessage('user', userText);
   chatHistory.push({ role: 'user', content: userText });
 
   const chosenModel = getEffectiveModelTarget();
-  const presetKey = document.getElementById('prompt-preset-select').value;
-  const systemPrompt = PROMPT_PRESETS[presetKey] || PROMPT_PRESETS.coder;
-  const temp = parseFloat(document.getElementById('chat-temp').value) || 0.2;
+  const systemPrompt = PROMPT_PRESETS.coder;
+  const temp = 0.2;
 
   const messagesPayload = [
     { role: 'system', content: systemPrompt },
@@ -1187,7 +1290,7 @@ async function handleChatSubmit(event) {
             const data = JSON.parse(cleanLine.substring(6));
             const delta = data.choices?.[0]?.delta?.content || '';
             fullResponseText += delta;
-            
+
             contentEl.innerHTML = marked.parse(fullResponseText);
             contentEl.classList.add('streaming-cursor');
             scrollToBottom();
@@ -1198,7 +1301,7 @@ async function handleChatSubmit(event) {
 
     contentEl.classList.remove('streaming-cursor');
     const elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(1);
-    
+
     const metaEl = document.getElementById(`${assistantMsgId}-meta`);
     if (metaEl) {
       let sourcesHtml = '';
@@ -1239,12 +1342,26 @@ async function handleChatSubmit(event) {
   } finally {
     isStreaming = false;
     currentAbortController = null;
-    const sendBtn = document.getElementById('chat-send-btn');
-    const stopBtn = document.getElementById('chat-stop-btn');
+    const sendBtn = document.getElementById('send-prompt-btn') || document.getElementById('chat-send-btn');
+    const stopBtn = document.getElementById('stop-stream-btn') || document.getElementById('chat-stop-btn');
     if (sendBtn) sendBtn.disabled = false;
     if (stopBtn) stopBtn.classList.add('hidden');
-    document.getElementById('chat-status-msg').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Ready`;
     scrollToBottom();
+  }
+}
+
+// Backward compatibility alias
+function handleChatSubmit(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  sendPrompt();
+}
+
+function copySnippet(elementId) {
+  const el = document.getElementById(elementId);
+  if (el) {
+    const text = el.innerText;
+    navigator.clipboard.writeText(text);
+    showToast("Snippet copied to clipboard!", "📋");
   }
 }
 
@@ -1468,6 +1585,11 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchMiningStatus();
   setInterval(fetchMiningStatus, 6000);
   syncEditorGutter();
+
+  const editor = getScratchpad();
+  if (editor) {
+    editor.addEventListener('keydown', handleEditorTabKey);
+  }
 
   // Route to saved admin session or Portal landing view
   const savedToken = sessionStorage.getItem('admin_token');
