@@ -59,22 +59,52 @@ html.dark {
 html.light {
   --bg-app: #F8F9FA;
   --bg-surface: #FFFFFF;
-  --bg-surface-elevated: #F4F4F5;
-  --bg-card: rgba(255, 255, 255, 0.9);
-  --bg-card-hover: #FFFFFF;
-  --bg-input: #F1F1F4;
-  --bg-muted: #E4E4E7;
-  --border-app: rgba(0, 0, 0, 0.07);
-  --border-app-subtle: rgba(0, 0, 0, 0.04);
-  --border-hover: rgba(184, 146, 37, 0.4);
+  --bg-surface-elevated: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F9FAFB;
+  --bg-input: #F3F4F6;
+  --bg-muted: #E5E7EB;
+  --border-app: rgba(0, 0, 0, 0.09);
+  --border-app-subtle: rgba(0, 0, 0, 0.05);
+  --border-hover: rgba(184, 146, 37, 0.5);
   --text-main: #09090B;
   --text-secondary: #27272A;
-  --text-muted: #666672;
-  --text-dim: #7B7B87;
-  --titlebar-bg: rgba(248, 249, 250, 0.92);
-  --card-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.06);
-  --code-bg: #121217;
+  --text-muted: #4B5563;
+  --text-dim: #6B7280;
+  --titlebar-bg: rgba(255, 255, 255, 0.96);
+  --card-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.06);
+  --code-bg: #F1F3F5;
   --editor-bg: #FFFFFF;
+}
+
+html.light .chat-markdown pre {
+  background-color: #F1F3F5 !important;
+  color: #09090B !important;
+  border: 1px solid rgba(0, 0, 0, 0.09) !important;
+  box-shadow: 0 2px 10px -2px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.light .chat-markdown pre code {
+  color: #09090B !important;
+  background-color: transparent !important;
+}
+
+html.light .chat-markdown code:not(pre code) {
+  background-color: rgba(212, 175, 55, 0.12) !important;
+  color: #947216 !important;
+  border: 1px solid rgba(212, 175, 55, 0.3) !important;
+}
+
+html.light .code-header-btn {
+  background: rgba(255, 255, 255, 0.95) !important;
+  color: #374151 !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+}
+
+html.light .luxury-card {
+  background: #FFFFFF !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.05) !important;
 }
 
 /* Base resets & typography */

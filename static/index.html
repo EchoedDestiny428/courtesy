@@ -39,6 +39,54 @@
 <body class="min-h-screen flex flex-col antialiased select-none bg-[var(--bg-app)] text-[var(--text-main)] font-sans overflow-x-hidden">
 
   <!-- ================================================================
+       VIEW 1: ORIGINAL LANDING SPLASH PORTAL (LAUNCH SCREEN)
+       ================================================================ -->
+  <section id="view-portal" class="min-h-screen flex flex-col items-center justify-center p-6 relative z-10 transition-opacity duration-300">
+    <div class="portal-glow-bg"></div>
+
+    <div class="max-w-md w-full flex flex-col items-center text-center space-y-6 relative z-10">
+      
+      <!-- Animated Sliding Logo (Transparent Gold Vector) -->
+      <div class="relative group cursor-pointer logo-slide-up" onclick="startStandardMode()" title="Click to Launch Courtesy Codex">
+        <div class="absolute -inset-4 rounded-full bg-gold-500/20 blur-xl group-hover:bg-gold-500/30 transition duration-500"></div>
+        <img id="portal-logo-img" src="/static/logo.svg" alt="Courtesy" class="w-28 h-28 portal-logo-anim relative z-10">
+      </div>
+
+      <!-- Minimal Title -->
+      <div class="space-y-1">
+        <h1 class="text-3xl font-extrabold tracking-widest text-[var(--text-main)]">COURTESY</h1>
+        <p class="text-[11px] font-mono text-gold-500 uppercase tracking-widest">Autonomous Cluster Codex</p>
+      </div>
+
+      <!-- Minimalist Action Buttons -->
+      <div class="flex items-center gap-3 pt-2">
+        <button onclick="startStandardMode()" class="px-5 py-2.5 rounded-2xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-xs shadow-md shadow-gold-glow hover-float flex items-center gap-2 transition" title="Open Codex IDE">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <span>Launch Codex</span>
+          <i data-lucide="arrow-right" class="w-3.5 h-3.5 stroke-[2.5]"></i>
+        </button>
+
+        <button onclick="openAdminLoginModal()" class="px-4 py-2.5 rounded-2xl bg-[var(--bg-surface-elevated)] hover:border-gold border border-[var(--border-app)] text-[var(--text-main)] font-medium text-xs hover-float flex items-center gap-2 transition" title="Cluster Admin Console">
+          <i data-lucide="shield" class="w-4 h-4 text-gold-500"></i>
+          <span>Admin</span>
+        </button>
+
+        <button onclick="toggleTheme()" class="p-2.5 rounded-2xl bg-[var(--bg-surface-elevated)] border border-[var(--border-app)] hover:border-gold text-gold-400 hover-float transition" title="Toggle Light / Dark Mode">
+          <i data-lucide="sun-moon" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Cluster Status -->
+      <div class="pt-4 flex items-center gap-2 text-[10px] font-mono text-[var(--text-dim)]">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+        <span id="portal-online-count">Cluster Ready (kraken • cst6 • cst7)</span>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ================================================================
        MODAL: SECURE ADMIN LOGIN
        ================================================================ -->
   <div id="modal-admin-login" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden animate-fade-in">
@@ -92,10 +140,16 @@
   </div>
 
 
+  <!-- Floating Sidebar Restore Button (Appears when sidebar is collapsed) -->
+  <button id="floating-sidebar-toggle" onclick="toggleSidebar()" class="fixed left-3 top-3 z-40 p-2 rounded-xl bg-[var(--bg-surface)] border border-gold/40 text-gold-500 shadow-xl hover:scale-105 transition hidden" title="Expand Sidebar (Ctrl+B)">
+    <i data-lucide="panel-left-open" class="w-4 h-4"></i>
+  </button>
+
+
   <!-- ================================================================
-       MAIN WORKBENCH: EXACT ANTIGRAVITY CODEX DEX (NO PHOTOS)
+       MAIN WORKBENCH: EXACT ANTIGRAVITY CODEX DEX (PERSISTENT CONTEXT)
        ================================================================ -->
-  <main id="view-standard" class="h-screen flex overflow-hidden">
+  <main id="view-standard" class="h-screen flex overflow-hidden hidden">
     
     <!-- Left Sidebar (Antigravity Style - 256px) -->
     <aside id="sidebar-antigravity" class="w-64 flex flex-col justify-between border-r border-[var(--border-app)] bg-[var(--bg-surface)] text-xs select-none shrink-0 transition-all duration-300 z-20">
@@ -103,24 +157,21 @@
       <!-- Top Section -->
       <div class="p-3 space-y-3 overflow-y-auto flex-1">
         
-        <!-- App Title & Menus (Pure Typography, Adapts to Light/Dark Mode) -->
+        <!-- App Title & Menus (Clicking Courtesy returns to Portal) -->
         <div class="flex items-center gap-4 px-1 pt-0.5 select-none text-xs">
-          <span class="font-bold text-[var(--text-main)] tracking-tight text-[13px]">Courtesy</span>
-          <span class="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer transition">File</span>
-          <span class="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer transition">View</span>
-          <span class="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer transition">Window</span>
+          <span onclick="returnToPortal()" class="font-bold text-[var(--text-main)] tracking-tight text-[13px] cursor-pointer hover:text-gold-500 transition" title="Return to Launch Portal">Courtesy</span>
+          <span onclick="returnToPortal()" class="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer transition">Home</span>
+          <span onclick="newConversation()" class="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer transition">File</span>
+          <span onclick="toggleSidebar()" class="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer transition">View</span>
         </div>
 
         <!-- Sidebar Collapse / Navigation Controls Row -->
         <div class="flex items-center gap-2 px-1 pt-1 text-[var(--text-muted)]">
-          <button onclick="toggleSidebar()" class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-[var(--text-main)] transition" title="Collapse Sidebar">
+          <button onclick="toggleSidebar()" class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-[var(--text-main)] transition" title="Collapse Sidebar (Ctrl+B)">
             <i data-lucide="panel-left" class="w-4 h-4"></i>
           </button>
-          <button class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-[var(--text-main)] transition opacity-50 cursor-not-allowed">
+          <button onclick="returnToPortal()" class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-[var(--text-main)] transition" title="Back to Launch Screen">
             <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
-          </button>
-          <button class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-[var(--text-main)] transition opacity-50 cursor-not-allowed">
-            <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
           </button>
         </div>
 
@@ -147,8 +198,8 @@
           <div class="flex items-center justify-between px-2 text-[10px] font-mono text-[var(--text-dim)] uppercase tracking-wider">
             <span>Projects</span>
             <div class="flex items-center gap-1.5">
-              <button onclick="pickWorkspaceFolder()" class="hover:text-[var(--text-main)] p-0.5 rounded transition" title="Choose Workspace Folder (Opens File Explorer)">
-                <i data-lucide="folder-plus" class="w-3 h-3"></i>
+              <button onclick="pickWorkspaceFolder()" class="hover:text-[var(--text-main)] p-0.5 rounded transition" title="Add Project Folder (Opens File Explorer)">
+                <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
               </button>
             </div>
           </div>
@@ -184,14 +235,11 @@
         
         <!-- Left: Sidebar Toggle & Navigation Arrows -->
         <div class="flex items-center gap-2">
-          <button onclick="toggleSidebar()" class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="Toggle Sidebar">
+          <button onclick="toggleSidebar()" class="p-1.5 rounded-lg border border-[var(--border-app)] hover:border-gold hover:bg-[var(--bg-muted)] text-[var(--text-main)] transition" title="Toggle Sidebar (Ctrl+B)">
             <i data-lucide="panel-left" class="w-4 h-4"></i>
           </button>
-          <button class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] opacity-50 cursor-not-allowed">
-            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
-          </button>
-          <button class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] opacity-50 cursor-not-allowed">
-            <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+          <button onclick="returnToPortal()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="Return to Launch Screen">
+            <i data-lucide="home" class="w-3.5 h-3.5"></i>
           </button>
         </div>
 
@@ -205,25 +253,31 @@
         <!-- Right: Connected Node, Model & Controls -->
         <div class="flex items-center gap-2">
           
-          <!-- Model Pills -->
-          <div class="hidden sm:flex items-center p-0.5 rounded-xl bg-[var(--bg-muted)] border border-[var(--border-app)] text-[10px]">
-            <button onclick="selectModelMode('7b')" id="std-mode-btn-7b" class="model-pill-btn active">7B</button>
-            <button onclick="selectModelMode('14b')" id="std-mode-btn-14b" class="model-pill-btn">14B</button>
-            <button onclick="selectModelMode('auto')" id="std-mode-btn-auto" class="model-pill-btn">Auto</button>
+          <!-- Model Pills (7B Fast vs 14B Heavy) -->
+          <div class="flex items-center p-0.5 rounded-xl bg-[var(--bg-muted)] border border-[var(--border-app)] text-[10px]">
+            <button onclick="selectModelMode('7b')" id="std-mode-btn-7b" class="model-pill-btn active" title="Fast Qwen 2.5 Coder 7B (Pinned to kraken)">7B Fast</button>
+            <button onclick="selectModelMode('14b')" id="std-mode-btn-14b" class="model-pill-btn" title="Heavy Qwen 2.5 Coder 14B (Pinned to cst7)">14B Heavy</button>
           </div>
+
+          <!-- Sticky Pinned Node Badge (Always Connected to Same Node) -->
+          <button onclick="cyclePinnedNode()" class="px-2 py-1 rounded-full text-[10px] font-mono border border-gold/40 bg-[var(--bg-muted)] hover:border-gold text-[var(--text-main)] flex items-center gap-1.5 transition" title="Click to swap between pinned nodes without unloading context">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+            <span id="std-connected-node-label">Pinned: kraken (7B)</span>
+            <i data-lucide="refresh-cw" class="w-2.5 h-2.5 text-gold-500"></i>
+          </button>
+
+          <!-- Flush / Terminate Session Button -->
+          <button onclick="terminateActiveSession()" class="px-2 py-1 rounded-lg border border-rose-800/40 bg-rose-950/20 hover:bg-rose-900/40 text-rose-300 text-[10px] font-mono flex items-center gap-1 transition" title="Clear conversation context & flush GPU VRAM">
+            <i data-lucide="power" class="w-3 h-3 text-rose-400"></i>
+            <span class="hidden sm:inline">Flush</span>
+          </button>
 
           <!-- Web Docs Toggle -->
           <button id="std-web-toggle-btn" onclick="toggleWebAccess()" class="p-1.5 rounded-lg border border-gold bg-[var(--gold-subtle)] text-gold-400 hover-float transition" title="Toggle Web Docs Grounding">
             <i data-lucide="globe" class="w-3.5 h-3.5"></i>
           </button>
 
-          <!-- Connected Node Badge -->
-          <div class="px-2 py-0.5 rounded-full text-[10px] font-mono border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-dim)] flex items-center gap-1.5">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-            <span id="std-connected-node-label">kraken (12ms)</span>
-          </div>
-
-          <!-- Open Admin / IDE -->
+          <!-- Open Admin -->
           <button onclick="openAdminLoginModal()" class="px-2.5 py-1 rounded-lg bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-[11px] flex items-center gap-1 shadow-sm transition" title="Admin Cluster Fleet">
             <i data-lucide="shield" class="w-3 h-3 stroke-[2.5]"></i>
             <span>Admin</span>
@@ -248,7 +302,6 @@
           </div>
 
         </div>
-
       </header>
 
       <!-- Dex Main Scrollable Body -->
@@ -420,13 +473,10 @@
             🖥️ Rigs & Fleet
           </button>
           <button onclick="switchAdminTab('mining')" id="admin-tab-btn-mining" class="px-3 py-1 rounded-lg font-medium transition text-[var(--text-muted)] hover:text-white">
-            ⛏️ Idle Mining
+            ⛏️ Idle Mining & Revenue
           </button>
           <button onclick="switchAdminTab('swarm')" id="admin-tab-btn-swarm" class="px-3 py-1 rounded-lg font-medium transition text-[var(--text-muted)] hover:text-white">
             🤖 3-Node Swarm
-          </button>
-          <button onclick="switchAdminTab('ide')" id="admin-tab-btn-ide" class="px-3 py-1 rounded-lg font-medium transition text-[var(--text-muted)] hover:text-white">
-            🔌 IDE Integration
           </button>
         </div>
       </div>
@@ -485,23 +535,31 @@
             </div>
           </div>
 
-          <!-- Telemetry Strip -->
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)]">
-              <span class="text-[10px] text-[var(--text-dim)] block">Estimated Cluster Hashrate</span>
-              <span id="mining-hashrate-val" class="font-mono font-bold text-gold-500 text-sm">0.0 MH/s</span>
+          <!-- Revenue & Telemetry Strip (Crypto Mined & Money Made) -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-xs font-mono">
+            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-gold/40 space-y-1">
+              <span class="text-[10px] text-[var(--text-dim)] block">Crypto Mined</span>
+              <span id="mining-crypto-val" class="font-bold text-gold-400 text-sm">0.0482 ETC</span>
             </div>
-            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)]">
-              <span class="text-[10px] text-[var(--text-dim)] block">Idle Timer (Inactivity)</span>
-              <span id="mining-idle-val" class="font-mono font-bold text-white text-sm">0s / 120s</span>
+            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-emerald-500/40 space-y-1">
+              <span class="text-[10px] text-[var(--text-dim)] block">Money Made (USD)</span>
+              <span id="mining-usd-val" class="font-bold text-emerald-400 text-sm">$138.40 USD</span>
             </div>
-            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)]">
-              <span class="text-[10px] text-[var(--text-dim)] block">AI Preemption Latency</span>
-              <span class="font-mono font-bold text-emerald-400 text-sm">&lt;200ms (Instant)</span>
+            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
+              <span class="text-[10px] text-[var(--text-dim)] block">Daily Run-Rate</span>
+              <span id="mining-daily-val" class="font-bold text-white text-xs">~$14.20 / day</span>
             </div>
-            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)]">
+            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
+              <span class="text-[10px] text-[var(--text-dim)] block">Cluster Hashrate</span>
+              <span id="mining-hashrate-val" class="font-bold text-gold-500 text-sm">0.0 MH/s</span>
+            </div>
+            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
+              <span class="text-[10px] text-[var(--text-dim)] block">AI Preemption</span>
+              <span class="font-bold text-emerald-400 text-sm">&lt;200ms</span>
+            </div>
+            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
               <span class="text-[10px] text-[var(--text-dim)] block">Mining Hardware</span>
-              <span id="mining-gpus-val" class="font-mono font-bold text-white text-sm">6x Quadro P2000s</span>
+              <span id="mining-gpus-val" class="font-bold text-white text-xs">6x Quadro P2000s</span>
             </div>
           </div>
 
@@ -627,131 +685,7 @@
         </div>
       </section>
 
-      <!-- ================= ADMIN TAB 4: IDE INTEGRATION ================= -->
-      <section id="admin-sec-ide" class="hidden space-y-4 max-w-4xl mx-auto animate-fade-in">
-        <div class="p-5 rounded-2xl luxury-card space-y-5 text-xs">
-          <div class="flex items-center justify-between border-b border-[var(--border-app)] pb-3">
-            <div>
-              <h2 class="font-bold text-white flex items-center gap-2">
-                <i data-lucide="plug" class="w-4 h-4 text-gold-500"></i>
-                <span>External IDE & Agent Integrations</span>
-              </h2>
-              <p class="text-[11px] text-[var(--text-dim)] pt-0.5">Connect any OpenAI-compatible IDE, CLI, or SDK directly to the Courtesy Cluster Gateway.</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="text-[10px] font-mono text-gold-500 bg-[var(--gold-subtle)] border border-gold px-2.5 py-1 rounded-lg">
-                Endpoint: http://100.107.249.92:8000/v1
-              </span>
-            </div>
-          </div>
 
-          <!-- Snippet 1: VS Code Continue -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-white flex items-center gap-1.5">
-                <span>1. VS Code Continue.dev</span>
-                <span class="text-[10px] font-mono text-[var(--text-dim)]">(~/.continue/config.json)</span>
-              </span>
-              <button onclick="copySnippet('snip-continue')" class="text-[10px] font-mono text-gold-400 hover:text-white flex items-center gap-1">
-                <i data-lucide="copy" class="w-3 h-3"></i> Copy
-              </button>
-            </div>
-            <pre class="bg-[var(--code-bg)] p-3 rounded-xl border border-[var(--border-app)] font-mono text-xs text-gold-400 overflow-x-auto"><code id="snip-continue">{
-  "models": [
-    {
-      "title": "Courtesy Codex (Auto Cluster)",
-      "provider": "openai",
-      "model": "auto",
-      "apiBase": "http://100.107.249.92:8000/v1",
-      "apiKey": "courtesy-local"
-    },
-    {
-      "title": "Courtesy Kraken (Fast 7B)",
-      "provider": "openai",
-      "model": "kraken/qwen2.5-coder:7b",
-      "apiBase": "http://100.107.249.92:8000/v1",
-      "apiKey": "courtesy-local"
-    },
-    {
-      "title": "Courtesy CST7 (Heavy 14B)",
-      "provider": "openai",
-      "model": "cst7/qwen2.5-coder:14b",
-      "apiBase": "http://100.107.249.92:8000/v1",
-      "apiKey": "courtesy-local"
-    }
-  ]
-}</code></pre>
-          </div>
-
-          <!-- Snippet 2: Cline & Roo Code -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-white flex items-center gap-1.5">
-                <span>2. Cline / Roo Code</span>
-                <span class="text-[10px] font-mono text-[var(--text-dim)]">(Extension Settings)</span>
-              </span>
-            </div>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px]">
-              <div class="p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-app)]">
-                <span class="text-[9px] text-[var(--text-dim)] block">API Provider</span>
-                <span class="text-white font-bold">OpenAI Compatible</span>
-              </div>
-              <div class="p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-app)]">
-                <span class="text-[9px] text-[var(--text-dim)] block">Base URL</span>
-                <span class="text-gold-400 font-bold truncate block">http://100.107.249.92:8000/v1</span>
-              </div>
-              <div class="p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-app)]">
-                <span class="text-[9px] text-[var(--text-dim)] block">API Key</span>
-                <span class="text-white font-bold">courtesy</span>
-              </div>
-              <div class="p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-app)]">
-                <span class="text-[9px] text-[var(--text-dim)] block">Model ID</span>
-                <span class="text-emerald-400 font-bold">auto / 7b / 14b</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Snippet 3: Aider CLI -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-white flex items-center gap-1.5">
-                <span>3. Aider CLI</span>
-                <span class="text-[10px] font-mono text-[var(--text-dim)]">(Terminal command)</span>
-              </span>
-              <button onclick="copySnippet('snip-aider')" class="text-[10px] font-mono text-gold-400 hover:text-white flex items-center gap-1">
-                <i data-lucide="copy" class="w-3 h-3"></i> Copy
-              </button>
-            </div>
-            <pre class="bg-[var(--code-bg)] p-3 rounded-xl border border-[var(--border-app)] font-mono text-xs text-gold-400 overflow-x-auto"><code id="snip-aider">aider --openai-api-base http://100.107.249.92:8000/v1 --openai-api-key courtesy --model openai/auto</code></pre>
-          </div>
-
-          <!-- Snippet 4: Python SDK -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-white flex items-center gap-1.5">
-                <span>4. Python OpenAI SDK</span>
-                <span class="text-[10px] font-mono text-[var(--text-dim)]">(Script integration)</span>
-              </span>
-              <button onclick="copySnippet('snip-python')" class="text-[10px] font-mono text-gold-400 hover:text-white flex items-center gap-1">
-                <i data-lucide="copy" class="w-3 h-3"></i> Copy
-              </button>
-            </div>
-            <pre class="bg-[var(--code-bg)] p-3 rounded-xl border border-[var(--border-app)] font-mono text-xs text-gold-400 overflow-x-auto"><code id="snip-python">from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://100.107.249.92:8000/v1",
-    api_key="courtesy-local"
-)
-
-response = client.chat.completions.create(
-    model="auto",
-    messages=[{"role": "user", "content": "Write a quicksort in Rust."}]
-)
-print(response.choices[0].message.content)</code></pre>
-          </div>
-
-        </div>
-      </section>
 
     </div>
   </div>
