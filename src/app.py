@@ -272,6 +272,118 @@ async def api_web_ground(payload: Dict[str, Any]):
     return {"context": context, "sources": sources}
 
 
+# --- Local & Remote Workspace Filespace Endpoints ---
+
+@app.post("/api/workspace/files")
+async def api_workspace_files(payload: Dict[str, Any]):
+    """Returns directory structure of a workspace folder."""
+    dir_path = payload.get("path", "")
+    if not dir_path or not os.path.isdir(dir_path):
+        return {"files": []}
+    
+    ignored = {'.git', 'node_modules', '__pycache__', '.venv', 'dist', 'build', '.vscode', '.idea'}
+    file_list = []
+    
+    for root, dirs, files in os.walk(dir_path):
+        dirs[:] = [d for d in dirs if d not in ignored]
+        depth = os.path.relpath(root, dir_path).count(os.sep)
+        if depth > 3:
+            continue
+        for f in files:
+            full = os.path.join(root, f)
+            rel = os.path.relpath(full, dir_path)
+            file_list.append({
+                "name": f,
+                "path": full.replace('\\', '/'),
+                "relative": rel.replace('\\', '/'),
+                "size": os.path.getsize(full) if os.path.exists(full) else 0
+            })
+            if len(file_list) > 300:
+                break
+        if len(file_list) > 300:
+            break
+            
+    return {"files": file_list}
+
+
+@app.post("/api/workspace/read")
+async def api_workspace_read(payload: Dict[str, Any]):
+    """Reads content of a workspace file."""
+    file_path = payload.get("path", "")
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            return {"content": f.read()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/workspace/write")
+async def api_workspace_write(payload: Dict[str, Any]):
+    """Writes or overwrites content to a workspace file."""
+    file_path = payload.get("path", "")
+    content = payload.get("content", "")
+    if not file_path:
+        raise HTTPException(status_code=400, detail="Path is required")
+    try:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return {"status": "success", "path": file_path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/workspace/apply_diff")
+async def api_workspace_apply_diff(payload: Dict[str, Any]):
+    """Applies a specific target content replacement to a workspace file."""
+    file_path = payload.get("path", "")
+    target = payload.get("target", "")
+    replacement = payload.get("replacement", "")
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if target not in content:
+            raise HTTPException(status_code=400, detail="Target snippet not found in file")
+        content = content.replace(target, replacement, 1)
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return {"status": "success", "path": file_path}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/workspace/exec")
+async def api_workspace_exec(payload: Dict[str, Any]):
+    """Executes a terminal command within the workspace directory."""
+    cmd = payload.get("command", "")
+    cwd = payload.get("cwd", "")
+    if not cmd:
+        raise HTTPException(status_code=400, detail="Command is required")
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            cwd=cwd if cwd and os.path.isdir(cwd) else None,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30.0)
+        return {
+            "exit_code": proc.returncode,
+            "stdout": stdout.decode("utf-8", errors="replace"),
+            "stderr": stderr.decode("utf-8", errors="replace")
+        }
+    except asyncio.TimeoutError:
+        return {"exit_code": -1, "stdout": "", "stderr": "Command timed out after 30s"}
+    except Exception as e:
+        return {"exit_code": -1, "stdout": "", "stderr": str(e)}
+
+
 # --- Autonomous Multi-Agent Swarm Endpoints ---
 
 @app.post("/api/swarm/start")

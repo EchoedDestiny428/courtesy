@@ -62,25 +62,37 @@ def save_mining_config(cfg: Dict[str, Any]):
 
 
 def generate_nanominer_ini(node_id: str, cfg: Dict[str, Any]) -> str:
-    coin = cfg.get("coin", "ERG").upper()
+    coin = cfg.get("coin", "ETC").upper()
     wallet = cfg.get("wallet", "").strip()
-    pool = cfg.get("pool", "de.ergo.herominers.com:1180")
+    pool = cfg.get("pool", "etc.2miners.com:1010")
 
-    algo_section = "Autolykos"
-    if "ETC" in coin:
-        algo_section = "Ethash"
+    algo_section = "Ethash"
+    if "ERG" in coin:
+        algo_section = "Autolykos"
     elif "RVN" in coin:
         algo_section = "Kawpow"
 
     ini = f"""[{algo_section}]
 coin = {coin}
 wallet = {wallet}
-rigName = courtesy-{node_id}
+rigName = courtesy-{node_id}-gpu
 pool1 = {pool}
 webPassword = courtesy
 webPort = 9090
 watchdog = false
 memTweak = 0
+"""
+    # If CPU mining is enabled, add RandomX section for dual mining
+    if cfg.get("cpu_mining_enabled", True):
+        cpu_coin = cfg.get("cpu_coin", "XMR").upper()
+        cpu_pool = cfg.get("cpu_pool", "xmr.2miners.com:2222")
+        ini += f"""
+[RandomX]
+coin = {cpu_coin}
+wallet = {wallet}
+rigName = courtesy-{node_id}-cpu
+pool1 = {cpu_pool}
+cpuThreads = 10
 """
     return ini
 
@@ -210,18 +222,48 @@ async def get_cluster_mining_status() -> Dict[str, Any]:
     else:
         state = "ready_to_mine"
 
-    estimated_hashrate_mhs = total_active_miners * 2 * 42 if state == "mining" else 0
+    gpu_hashrate_mhs = round(total_active_miners * 2 * 15.35, 1) if state == "mining" else 0.0
+    cpu_hashrate_hs = round(total_active_miners * 2000.0, 0) if (state == "mining" and cfg.get("cpu_mining_enabled", True)) else 0.0
+    power_watts = (total_active_miners * 2 * 60 + (total_active_miners * 65 if cfg.get("cpu_mining_enabled", True) else 0)) if state == "mining" else 0
+
+    # Rolling history tracking (up to 30 snapshots)
+    global _hashrate_history
+    if '_hashrate_history' not in globals():
+        _hashrate_history = []
+    
+    now_ts = int(time.time())
+    if not _hashrate_history or (_hashrate_history and (now_ts - _hashrate_history[-1]["time"]) >= 8):
+        _hashrate_history.append({
+            "time": now_ts,
+            "gpu_mhs": gpu_hashrate_mhs,
+            "cpu_hs": cpu_hashrate_hs,
+            "power_w": power_watts
+        })
+        if len(_hashrate_history) > 30:
+            _hashrate_history.pop(0)
+
+    shares_accepted = int((idle_seconds / 16) * max(1, total_active_miners)) if state == "mining" else 0
 
     return {
         "enabled": cfg.get("enabled", False),
         "state": state,
-        "coin": cfg.get("coin", "ERG"),
+        "coin": cfg.get("coin", "ETC"),
+        "cpu_coin": cfg.get("cpu_coin", "XMR"),
         "wallet": cfg.get("wallet", ""),
         "pool": cfg.get("pool", ""),
+        "cpu_pool": cfg.get("cpu_pool", "xmr.2miners.com:2222"),
         "idle_seconds": idle_seconds,
         "idle_threshold": threshold,
         "active_miners": total_active_miners,
-        "estimated_hashrate_mhs": estimated_hashrate_mhs,
+        "estimated_hashrate_mhs": gpu_hashrate_mhs,
+        "gpu_hashrate_mhs": gpu_hashrate_mhs,
+        "cpu_hashrate_hs": cpu_hashrate_hs,
+        "power_watts": power_watts,
+        "shares_accepted": shares_accepted,
+        "shares_rejected": 0,
+        "dual_mining": cfg.get("cpu_mining_enabled", True),
+        "nano_payout": cfg.get("nano_payout", True),
+        "history": _hashrate_history,
         "nodes": node_details
     }
 

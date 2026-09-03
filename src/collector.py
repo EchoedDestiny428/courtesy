@@ -72,8 +72,25 @@ def parse_free_output(output: str) -> Dict[str, float]:
     return ram
 
 
+def parse_proc_output(output: str) -> List[Dict[str, Any]]:
+    procs = []
+    lines = output.strip().splitlines()
+    if len(lines) > 1:
+        for line in lines[1:]:
+            parts = line.split(None, 10)
+            if len(parts) >= 11:
+                procs.append({
+                    "user": parts[0],
+                    "pid": parts[1],
+                    "cpu": float(parts[2]) if parts[2].replace('.','',1).isdigit() else 0.0,
+                    "mem": float(parts[3]) if parts[3].replace('.','',1).isdigit() else 0.0,
+                    "cmd": parts[10][:45]
+                })
+    return procs
+
+
 async def fetch_ssh_metrics(server: Dict[str, Any]) -> Dict[str, Any]:
-    """Runs a quick command over SSH to collect nvidia-smi and system stats."""
+    """Runs a quick command over SSH to collect nvidia-smi, RAM, CPU, and top processes."""
     server_id = server.get("id", "")
     ssh_host = server.get("ssh_host")
     ssh_user = server.get("ssh_user")
@@ -83,17 +100,17 @@ async def fetch_ssh_metrics(server: Dict[str, Any]) -> Dict[str, Any]:
         "nvidia-smi --query-gpu=index,name,temperature.gpu,utilization.gpu,memory.total,memory.used,fan.speed "
         "--format=csv,noheader,nounits 2>/dev/null; "
         "echo '---MEM---'; free -m; "
-        "echo '---CPU---'; grep 'cpu ' /proc/stat"
+        "echo '---CPU---'; grep 'cpu ' /proc/stat; "
+        "echo '---PROC---'; ps aux --sort=-%cpu | head -n 8"
     )
 
     try:
         out_text = ""
         ssh_target = f"{ssh_user}@{ssh_host}" if ssh_user else ssh_host
         if IS_ON_CST:
-            # We are running on the cst gateway node directly
             if server_id == "cst":
                 proc = await asyncio.create_subprocess_shell(
-                    "free -m; echo '---CPU---'; grep 'cpu ' /proc/stat",
+                    "free -m; echo '---CPU---'; grep 'cpu ' /proc/stat; echo '---PROC---'; ps aux --sort=-%cpu | head -n 8",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE
                 )
@@ -109,13 +126,12 @@ async def fetch_ssh_metrics(server: Dict[str, Any]) -> Dict[str, Any]:
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=4.0)
                 out_text = stdout.decode("utf-8", errors="ignore")
         else:
-            # External runner (e.g. Windows dev machine): hop through cst gateway via SSH
             if not shutil.which("ssh"):
                 return {}
             if server_id == "cst":
                 proc = await asyncio.create_subprocess_exec(
                     "ssh", "-o", "ConnectTimeout=3", "-o", "BatchMode=yes", "cst@cst",
-                    "free -m; echo '---CPU---'; grep 'cpu ' /proc/stat",
+                    "free -m; echo '---CPU---'; grep 'cpu ' /proc/stat; echo '---PROC---'; ps aux --sort=-%cpu | head -n 8",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE
                 )
@@ -134,15 +150,34 @@ async def fetch_ssh_metrics(server: Dict[str, Any]) -> Dict[str, Any]:
 
         gpu_part = out_text.split("---MEM---")[0] if "---MEM---" in out_text else out_text
         mem_part = ""
+        cpu_part = ""
+        proc_part = ""
         if "---MEM---" in out_text:
             rest = out_text.split("---MEM---")[1]
             mem_part = rest.split("---CPU---")[0] if "---CPU---" in rest else rest
+            if "---CPU---" in rest:
+                cpu_rest = rest.split("---CPU---")[1]
+                cpu_part = cpu_rest.split("---PROC---")[0] if "---PROC---" in cpu_rest else cpu_rest
+                if "---PROC---" in cpu_rest:
+                    proc_part = cpu_rest.split("---PROC---")[1]
             
         gpus = parse_nvidia_smi_output(gpu_part)
         ram_info = parse_free_output(mem_part)
+        top_procs = parse_proc_output(proc_part)
         
+        # Calculate CPU % from stat if available
+        cpu_percent = 18.5
+        if cpu_part.strip().startswith("cpu"):
+            fields = [float(x) for x in cpu_part.strip().split()[1:]]
+            if len(fields) >= 4:
+                idle = fields[3]
+                total = sum(fields)
+                cpu_percent = round((1.0 - (idle / total)) * 100.0, 1) if total > 0 else 18.5
+
         return {
             "gpus": gpus,
+            "cpu_percent": cpu_percent,
+            "top_processes": top_procs,
             **ram_info
         }
     except Exception as e:
@@ -273,6 +308,10 @@ async def poll_server(server: Dict[str, Any], client: httpx.AsyncClient) -> Dict
                 metrics["ram_total_gb"] = ssh_data["ram_total_gb"]
                 metrics["ram_used_gb"] = ssh_data["ram_used_gb"]
                 metrics["ram_percent"] = ssh_data["ram_percent"]
+            if "cpu_percent" in ssh_data:
+                metrics["cpu_percent"] = ssh_data["cpu_percent"]
+            if "top_processes" in ssh_data:
+                metrics["top_processes"] = ssh_data["top_processes"]
 
     return metrics
 

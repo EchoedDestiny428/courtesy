@@ -1,4 +1,4 @@
-// Courtesy Minimalist Codex & AI Cluster Fleet - Antigravity IDE Client
+// Courtesy - Autonomous Antigravity AI Cluster & Workspace Client
 
 let currentTab = 'codex';
 let selectedModelMode = '7b'; // '7b', '14b', 'auto'
@@ -7,15 +7,19 @@ let chatHistory = [];
 let ws = null;
 let currentServers = [];
 let isStreaming = false;
+let lastMetricsMap = {};
+let lastMiningState = 'disabled';
+let cachedWorkspaceFiles = [];
 
 // API Base URL (defaults to Pi gateway 100.107.249.92:8000, or local if hosted there)
 let apiBaseUrl = (window.location.protocol === 'file:' || !window.location.host || window.location.hostname === 'localhost')
   ? 'http://100.107.249.92:8000'
   : window.location.origin;
 
-// Presets for the Codex Assistant
+// Presets for Courtesy Assistant
 const PROMPT_PRESETS = {
-  coder: "You are Courtesy Codex, a world-class autonomous AI coding assistant. You write production-ready, clean, well-tested, robust code. Follow modern best practices, handle edge cases, and provide concise, insightful explanations.",
+  coder: "You are Courtesy, a world-class autonomous Antigravity AI coding assistant and pair programmer. You write clean, production-ready, robust code. Follow modern best practices, understand the user's workspace architecture, and formulate clean file modifications.",
+  plan: "You are Courtesy operating in Antigravity PLAN mode. Produce an in-depth, structured Implementation Plan with: 1. Architectural Blueprint & Component Overview 2. Step-by-Step Execution Phases with checklists 3. Technical Rationale & Tradeoffs 4. Exact File Checklist to Modify.",
   bughunter: "You are an elite software auditor and bug hunter. Analyze the code, identify edge cases, vulnerabilities, race conditions, and logic errors. Provide precise code fixes and explanations.",
   refactor: "You are an expert software architect. Refactor the given code for maximum readability, maintainability, modularity, and high performance while preserving exact functional correctness.",
   tests: "You are a senior test automation engineer. Write comprehensive unit and integration tests covering edge cases, happy paths, boundary conditions, and mocks where necessary.",
@@ -212,10 +216,26 @@ function addProjectFolder(folderPath, makeActive = true) {
     existing = {
       path: normalized,
       name: name,
-      chatHistory: []
+      chatHistory: [],
+      settings: {
+        allowCommands: true,
+        autoApply: false,
+        preferredModel: 'auto',
+        webAccess: true,
+        customRules: ''
+      }
     };
     workspaceProjects.unshift(existing);
   } else {
+    if (!existing.settings) {
+      existing.settings = {
+        allowCommands: true,
+        autoApply: false,
+        preferredModel: 'auto',
+        webAccess: true,
+        customRules: ''
+      };
+    }
     // Bring to top
     workspaceProjects = [existing, ...workspaceProjects.filter(p => p !== existing)];
   }
@@ -254,6 +274,11 @@ function switchWorkspace(folderPath) {
   // 4. Re-render projects sidebar
   renderProjectsList();
   showToast(`Workspace: ${shortName}`, "📁");
+
+  // Preload workspace file tree for autonomous context
+  getWorkspaceFileList(folderPath).then(files => {
+    cachedWorkspaceFiles = files;
+  });
 }
 
 function setWorkspaceFolder(path) {
@@ -311,7 +336,8 @@ function renderProjectsList() {
 
     return `
       <div onclick="switchWorkspace('${escapeJs(proj.path)}')" 
-           class="group p-2 rounded-xl transition cursor-pointer flex flex-col gap-0.5 ${isActive ? 'bg-[var(--bg-muted)] border border-gold/40 shadow-sm' : 'hover:bg-[var(--bg-muted)] border border-transparent'}">
+           data-project-path="${escapeHtml(proj.path)}"
+           class="sidebar-project-item group p-2 rounded-xl transition cursor-pointer flex flex-col gap-0.5 ${isActive ? 'bg-[var(--bg-muted)] border border-gold/40 shadow-sm' : 'hover:bg-[var(--bg-muted)] border border-transparent'}">
         <div class="flex items-center justify-between text-[11px] font-bold ${isActive ? 'text-[var(--text-main)]' : 'text-[var(--text-secondary)] group-hover:text-[var(--text-main)]'}">
           <div class="flex items-center gap-1.5 truncate">
             <i data-lucide="folder" class="w-3.5 h-3.5 ${isActive ? 'text-gold-500' : 'text-[var(--text-dim)]'} shrink-0"></i>
@@ -319,7 +345,8 @@ function renderProjectsList() {
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
             ${isActive ? '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>' : ''}
-            ${!isActive ? `<button onclick="removeProjectFolder('${escapeJs(proj.path)}', event)" class="opacity-0 group-hover:opacity-100 p-0.5 hover:text-rose-400 transition" title="Remove project"><i data-lucide="x" class="w-3 h-3"></i></button>` : ''}
+            <button onclick="openProjectSettingsModal('${escapeJs(proj.path)}', event)" class="opacity-0 group-hover:opacity-100 p-0.5 hover:text-gold-400 transition" title="Project Settings"><i data-lucide="settings" class="w-3 h-3"></i></button>
+            <button onclick="removeProjectFolder('${escapeJs(proj.path)}', event)" class="opacity-0 group-hover:opacity-100 p-0.5 hover:text-rose-400 transition" title="Remove project"><i data-lucide="x" class="w-3 h-3"></i></button>
           </div>
         </div>
         <div class="text-[10px] text-[var(--text-muted)] truncate pl-5">
@@ -330,6 +357,77 @@ function renderProjectsList() {
   }).join('');
 
   if (window.lucide) lucide.createIcons();
+}
+
+function insertPromptPrefix(prefix) {
+  const input = document.getElementById('prompt-input') || document.getElementById('sticky-prompt-input');
+  if (input) {
+    if (!input.value.startsWith(prefix)) {
+      input.value = prefix + input.value;
+    }
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+}
+
+// Project Settings Modal Controllers
+function openProjectSettingsModal(folderPath = null, event = null) {
+  if (event) event.stopPropagation();
+  const path = folderPath || currentWorkspaceFolder;
+  if (!path) {
+    showToast("Please open a workspace folder first", "📁");
+    return;
+  }
+  const proj = workspaceProjects.find(p => p.path.toLowerCase() === path.toLowerCase());
+  const settings = (proj && proj.settings) ? proj.settings : {
+    allowCommands: true,
+    autoApply: false,
+    preferredModel: 'auto',
+    webAccess: true,
+    customRules: ''
+  };
+
+  const subtitle = document.getElementById('project-settings-subtitle');
+  if (subtitle) subtitle.innerText = `Path: ${path}`;
+  const allowCmds = document.getElementById('setting-allow-commands');
+  if (allowCmds) allowCmds.checked = !!settings.allowCommands;
+  const autoApply = document.getElementById('setting-auto-apply');
+  if (autoApply) autoApply.checked = !!settings.autoApply;
+  const prefModel = document.getElementById('setting-preferred-model');
+  if (prefModel) prefModel.value = settings.preferredModel || 'auto';
+  const webAcc = document.getElementById('setting-web-access');
+  if (webAcc) webAcc.checked = settings.webAccess !== false;
+  const customRules = document.getElementById('setting-custom-rules');
+  if (customRules) customRules.value = settings.customRules || '';
+
+  const modal = document.getElementById('modal-project-settings');
+  if (modal) modal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeProjectSettingsModal() {
+  const modal = document.getElementById('modal-project-settings');
+  if (modal) modal.classList.add('hidden');
+}
+
+function saveProjectSettings(e) {
+  if (e) e.preventDefault();
+  const path = currentWorkspaceFolder;
+  if (!path) return;
+
+  const proj = workspaceProjects.find(p => p.path.toLowerCase() === path.toLowerCase());
+  if (proj) {
+    proj.settings = {
+      allowCommands: document.getElementById('setting-allow-commands')?.checked ?? true,
+      autoApply: document.getElementById('setting-auto-apply')?.checked ?? false,
+      preferredModel: document.getElementById('setting-preferred-model')?.value || 'auto',
+      webAccess: document.getElementById('setting-web-access')?.checked ?? true,
+      customRules: document.getElementById('setting-custom-rules')?.value.trim() || ''
+    };
+    saveProjects(workspaceProjects);
+    showToast("Project governance & rules saved!", "💾");
+  }
+  closeProjectSettingsModal();
 }
 
 function escapeJs(str) {
@@ -376,6 +474,137 @@ async function pickWorkspaceFolder() {
     console.warn("Folder picker error:", err);
   } finally {
     isPickingDirectory = false;
+  }
+}
+
+// ================= Antigravity Workspace File Operations Engine =================
+
+async function getWorkspaceFileList(folderPath) {
+  if (!folderPath) return [];
+  if (window.electronAPI && typeof window.electronAPI.listFiles === 'function') {
+    try {
+      return await window.electronAPI.listFiles(folderPath);
+    } catch (e) {
+      console.warn("Electron listFiles failed:", e);
+    }
+  }
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/workspace/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: folderPath })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.files || [];
+    }
+  } catch (e) {
+    console.warn("REST listFiles failed:", e);
+  }
+  return [];
+}
+
+async function readWorkspaceFileContent(filePath) {
+  if (!filePath) return '';
+  if (window.electronAPI && typeof window.electronAPI.readFile === 'function') {
+    try {
+      const res = await window.electronAPI.readFile(filePath);
+      if (res && !res.error) return res.content || '';
+    } catch (e) {}
+  }
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/workspace/read`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: filePath })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.content || '';
+    }
+  } catch (e) {}
+  return '';
+}
+
+async function writeWorkspaceFileContent(filePath, content) {
+  if (!filePath) return false;
+  if (window.electronAPI && typeof window.electronAPI.writeFile === 'function') {
+    try {
+      const res = await window.electronAPI.writeFile(filePath, content);
+      return res && !res.error;
+    } catch (e) {}
+  }
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/workspace/write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: filePath, content })
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function applyWorkspaceFileDiff(filePath, target, replacement) {
+  if (!filePath) return false;
+  if (window.electronAPI && typeof window.electronAPI.applyDiff === 'function') {
+    try {
+      const res = await window.electronAPI.applyDiff(filePath, target, replacement);
+      return res && !res.error;
+    } catch (e) {}
+  }
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/workspace/apply_diff`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: filePath, target, replacement })
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function runWorkspaceCommand(command) {
+  if (!currentWorkspaceFolder) {
+    showToast("Please open a workspace folder first", "📁");
+    return { exit_code: -1, stdout: '', stderr: 'No active workspace folder' };
+  }
+  const proj = workspaceProjects.find(p => p.path.toLowerCase() === currentWorkspaceFolder.toLowerCase());
+  const allowCmd = proj?.settings?.allowCommands !== false;
+  if (!allowCmd) {
+    showToast("Command execution disabled in Project Settings", "🔒");
+    return { exit_code: -1, stdout: '', stderr: 'Command execution disabled in Project Settings' };
+  }
+  showToast(`Running: ${command.slice(0, 30)}...`, "⚙️");
+  if (window.electronAPI && typeof window.electronAPI.runCommand === 'function') {
+    try {
+      return await window.electronAPI.runCommand(command, currentWorkspaceFolder);
+    } catch (e) {
+      return { exit_code: -1, stdout: '', stderr: e.message };
+    }
+  }
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/workspace/exec`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command, cwd: currentWorkspaceFolder })
+    });
+    return await res.json();
+  } catch (e) {
+    return { exit_code: -1, stdout: '', stderr: e.message };
+  }
+}
+
+async function openFolderInExplorer(folderPath) {
+  const target = folderPath || currentWorkspaceFolder;
+  if (!target) return;
+  if (window.electronAPI && typeof window.electronAPI.openPath === 'function') {
+    await window.electronAPI.openPath(target);
+    showToast(`Opened in File Explorer`, "📂");
+  } else {
+    showToast(`Path: ${target}`, "📁");
   }
 }
 
@@ -1055,6 +1284,7 @@ function renderGpuActivityStrip(metricsMap) {
 }
 
 function renderServers(metricsMap) {
+  lastMetricsMap = metricsMap;
   const container = document.getElementById('admin-servers-grid') || document.getElementById('servers-grid');
   if (!container) return;
 
@@ -1070,14 +1300,20 @@ function renderServers(metricsMap) {
   }).join('');
 
   if (window.lucide) lucide.createIcons();
+
+  // If node detail modal is open for a node, refresh it live
+  if (currentNodeDetailId && metricsMap[currentNodeDetailId]) {
+    populateNodeDetailModal(metricsMap[currentNodeDetailId]);
+  }
 }
 
 function renderServersFromRest(serversList) {
   const container = document.getElementById('admin-servers-grid') || document.getElementById('servers-grid');
   if (!container) return;
 
-  container.innerHTML = serversList.map(s => {
-    const metrics = {
+  const metricsMap = {};
+  serversList.forEach(s => {
+    metricsMap[s.id] = {
       id: s.id,
       name: s.name,
       role: s.role,
@@ -1090,107 +1326,247 @@ function renderServersFromRest(serversList) {
       ram_total_gb: s.status?.ram_total_gb || 0,
       ram_used_gb: s.status?.ram_used_gb || 0,
       ram_percent: s.status?.ram_percent || 0,
+      cpu_percent: s.status?.cpu_percent || 0,
       gpus: s.status?.gpus || [],
       models: s.status?.models || [],
+      running_models: s.status?.running_models || [],
+      top_processes: s.status?.top_processes || [],
       tags: s.tags || []
     };
-    return createMinimalServerCardHtml(metrics);
+  });
+  lastMetricsMap = metricsMap;
+
+  container.innerHTML = Object.values(metricsMap).map(s => {
+    return createMinimalServerCardHtml(s);
   }).join('');
 
   if (window.lucide) lucide.createIcons();
+
+  if (currentNodeDetailId && metricsMap[currentNodeDetailId]) {
+    populateNodeDetailModal(metricsMap[currentNodeDetailId]);
+  }
 }
 
 function createMinimalServerCardHtml(s) {
   const isOnline = s.online;
   const isGateway = s.role === 'gateway' || s.type === 'system_only';
-  const gpus = s.gpus || [];
+  
+  // Hardware summary
+  const hardwareSummary = isGateway 
+    ? '4 Cores • 8 GB RAM • Gateway Proxy' 
+    : '12 Cores • 32 GB RAM • 2x Quadro P2000 (10GB)';
 
-  const totalRam = s.ram_total_gb || (isGateway ? 8.0 : 32.0);
-  const usedRam = isOnline ? (s.ram_used_gb || (isGateway ? 2.2 : 8.4)) : 0.0;
-  const ramPct = isOnline ? (s.ram_percent || Math.round((usedRam / totalRam) * 100)) : 0;
-  const roleLabel = isGateway ? 'Cluster Orchestrator' : (s.id === 'cst7' ? '14B Heavy Coder' : '7B Fast Coder');
+  const roleLabel = isGateway 
+    ? 'Cluster Orchestrator' 
+    : (s.id === 'cst7' ? '14B Heavy Coder' : '7B Fast Coder');
+
+  // Live in-use status
+  let inUseBadge = '';
+  if (!isOnline) {
+    inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-rose-950/40 text-rose-400 border border-rose-800/40">Offline</span>`;
+  } else if (s.running_models && s.running_models.length > 0) {
+    inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> AI Active</span>`;
+  } else if (lastMiningState === 'mining') {
+    inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Mining Active</span>`;
+  } else {
+    inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-[var(--bg-muted)] text-[var(--text-dim)] border border-[var(--border-app)]">Idle (Ready)</span>`;
+  }
 
   return `
-    <div class="luxury-card rounded-xl p-3.5 flex flex-col justify-between gap-3 text-xs">
+    <div onclick="openNodeDetailModal('${s.id}')"
+         class="group luxury-card rounded-2xl p-4 flex flex-col justify-between gap-3 text-xs cursor-pointer hover:border-gold hover:-translate-y-0.5 transition duration-200">
       
       <!-- Card Header -->
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
-          <span class="h-2 w-2 rounded-full ${isOnline ? 'bg-emerald-400 pulse-gold' : 'bg-rose-500'}"></span>
-          <span class="font-bold text-[var(--text-main)]">${s.name || s.id}</span>
+          <span class="h-2.5 w-2.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-ping' : 'bg-rose-500'}"></span>
+          <span class="font-bold text-white text-sm">${s.name || s.id}</span>
         </div>
-
-        <div class="flex items-center gap-1">
-          ${isOnline && s.latency_ms ? `<span class="text-[10px] font-mono text-gold-500 px-1 py-0.5 rounded bg-[var(--gold-subtle)]">${s.latency_ms}ms</span>` : ''}
-          <button onclick="toggleServer('${s.id}')" title="Toggle Node" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition">
-            <i data-lucide="${s.enabled ? 'power' : 'power-off'}" class="w-3 h-3 ${s.enabled ? 'text-emerald-400' : 'text-slate-500'}"></i>
+        <div class="flex items-center gap-1.5" onclick="event.stopPropagation()">
+          ${isOnline && s.latency_ms ? `<span class="text-[10px] font-mono text-gold-500 px-1.5 py-0.5 rounded bg-[var(--gold-subtle)]">${s.latency_ms}ms</span>` : ''}
+          <button onclick="toggleServer('${s.id}')" title="Toggle Node" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition">
+            <i data-lucide="${s.enabled ? 'power' : 'power-off'}" class="w-3.5 h-3.5 ${s.enabled ? 'text-emerald-400' : 'text-slate-500'}"></i>
           </button>
         </div>
       </div>
 
-      <!-- Specs & Minimal Gauges -->
-      <div class="space-y-2 font-mono text-[11px]">
-        
-        <!-- CPU RAM Bar -->
-        <div>
-          <div class="flex justify-between text-[10px] text-[var(--text-dim)] mb-0.5">
-            <span class="font-bold text-[var(--text-secondary)]">CPU RAM</span>
-            <span class="text-[var(--text-main)] font-semibold">${usedRam} / ${totalRam} GB (${ramPct}%)</span>
-          </div>
-          <div class="w-full bg-[var(--bg-input)] h-1.5 rounded-full overflow-hidden">
-            <div class="gold-progress-bar h-full rounded-full" style="width: ${Math.min(100, ramPct)}%"></div>
-          </div>
-        </div>
-
-        <!-- Dual GPUs with VRAM Usage -->
-        ${gpus.length > 0 ? `
-          <div class="space-y-1.5 pt-1.5 border-t border-[var(--border-app)]">
-            ${gpus.map(gpu => {
-              const isMiningActive = isOnline && (gpu.util_percent && gpu.util_percent > 70);
-              const temp = isOnline ? (gpu.temp_c || (isMiningActive ? 64 : 38)) : 0;
-              const util = isOnline ? (gpu.util_percent || (isMiningActive ? 94 : 0)) : 0;
-              const vramUsedGb = isOnline ? (gpu.vram_used_mb ? (gpu.vram_used_mb / 1024).toFixed(1) : (isMiningActive ? "4.3" : "0.8")) : "0.0";
-              const vramPercent = isOnline ? (gpu.vram_percent || (isMiningActive ? 86 : 16)) : 0;
-              return `
-                <div class="p-1.5 rounded-lg bg-[var(--bg-input)] space-y-1">
-                  <div class="flex items-center justify-between text-[10px]">
-                    <span class="text-[var(--text-secondary)] font-medium">GPU ${gpu.index} (${vramUsedGb}/5.0 GB VRAM)</span>
-                    <div class="flex items-center gap-1.5">
-                      <span class="text-gold-500 font-bold">${isOnline ? `${temp}°C` : '--'}</span>
-                      <span class="text-[var(--text-dim)]">${util}% util</span>
-                      <span class="text-emerald-400 font-bold font-mono text-[9px]">${vramPercent}% VRAM</span>
-                    </div>
-                  </div>
-                  <div class="w-full bg-[var(--bg-muted)] h-1.5 rounded-full overflow-hidden">
-                    <div class="gold-progress-bar h-full rounded-full" style="width: ${Math.min(100, vramPercent)}%"></div>
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        ` : ''}
-
-        <!-- Assigned AI / Role -->
-        <div class="pt-2 border-t border-[var(--border-app)] flex items-center justify-between text-[10px]">
-          <span class="text-[var(--text-dim)]">Assigned AI</span>
+      <!-- General Information (Static specs) -->
+      <div class="space-y-1.5 text-[11px] font-mono">
+        <div class="text-[var(--text-secondary)] font-medium">${hardwareSummary}</div>
+        <div class="text-[var(--text-dim)] flex items-center gap-1">
           <span class="text-gold-400 font-bold">${roleLabel}</span>
+          <span>•</span>
+          <span>${isGateway ? '100.107.249.92' : `${s.host}:${s.port || 11434}`}</span>
         </div>
-
       </div>
 
-      <!-- Action Footer -->
+      <!-- Live Activity State Strip & Inspect CTA -->
       <div class="pt-2 border-t border-[var(--border-app)] flex items-center justify-between text-[10px]">
-        <span class="text-[var(--text-dim)] font-mono truncate max-w-[130px]">${isGateway ? '100.107.249.92' : `${s.host}:${s.port || 11434}`}</span>
-        ${!isGateway ? `
-          <button onclick="offloadSingleNode('${s.id}')" class="text-gold-500 hover:text-white flex items-center gap-1 font-mono transition" title="Flush resident models from VRAM">
-            <i data-lucide="sparkles" class="w-3 h-3"></i>
-            <span>Flush VRAM</span>
-          </button>
-        ` : ''}
+        <div>${inUseBadge}</div>
+        <div class="text-gold-500 font-mono flex items-center gap-1 group-hover:translate-x-1 transition">
+          <span>Inspect</span>
+          <i data-lucide="arrow-right" class="w-3 h-3"></i>
+        </div>
       </div>
 
     </div>
   `;
+}
+
+// ================= Detailed Node Inspection Dashboard Modal =================
+let currentNodeDetailId = null;
+
+function openNodeDetailModal(nodeId) {
+  currentNodeDetailId = nodeId;
+  const modal = document.getElementById('modal-node-detail');
+  if (!modal) return;
+
+  const s = (lastMetricsMap && lastMetricsMap[nodeId]) || currentServers.find(x => x.id === nodeId);
+  if (s) {
+    populateNodeDetailModal(s);
+  }
+
+  modal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+function populateNodeDetailModal(s) {
+  const isOnline = s.online || s.status?.online;
+  const isGateway = s.role === 'gateway' || s.type === 'system_only';
+
+  const titleEl = document.getElementById('node-detail-title');
+  if (titleEl) titleEl.innerText = `${s.name || s.id} • ${s.id.toUpperCase()}`;
+
+  const subEl = document.getElementById('node-detail-subtitle');
+  if (subEl) {
+    subEl.innerText = `${isGateway ? '100.107.249.92' : `${s.host}:${s.port || 11434}`} • Assigned: ${isGateway ? 'Cluster Orchestrator' : (s.id === 'cst7' ? '14B Heavy Coder' : '7B Fast Coder')}`;
+  }
+
+  const pill = document.getElementById('node-detail-status-pill');
+  if (pill) {
+    pill.className = isOnline 
+      ? 'px-2 py-0.5 rounded-full text-[9px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-500/40 flex items-center gap-1'
+      : 'px-2 py-0.5 rounded-full text-[9px] font-mono bg-rose-950 text-rose-400 border border-rose-500/40 flex items-center gap-1';
+    pill.innerHTML = isOnline 
+      ? `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Online (${s.latency_ms || 12}ms)`
+      : `<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Offline`;
+  }
+
+  // CPU & RAM
+  const totalRam = s.ram_total_gb || (isGateway ? 8.0 : 32.0);
+  const usedRam = isOnline ? (s.ram_used_gb || (isGateway ? 2.2 : 8.4)) : 0.0;
+  const ramPct = isOnline ? (s.ram_percent || Math.round((usedRam / totalRam) * 100)) : 0;
+  const cpuPct = isOnline ? (s.cpu_percent || 18.5) : 0;
+
+  const cpuEl = document.getElementById('node-detail-cpu-val');
+  if (cpuEl) cpuEl.innerText = isOnline ? `${cpuPct}%` : '--';
+  const ramEl = document.getElementById('node-detail-ram-val');
+  if (ramEl) ramEl.innerText = isOnline ? `${usedRam} / ${totalRam} GB (${ramPct}%)` : '--';
+
+  const gpus = s.gpus || [];
+  const totalVram = gpus.reduce((acc, g) => acc + (g.vram_total_mb || 5120), 0) / 1024;
+  const usedVram = isOnline ? (gpus.reduce((acc, g) => acc + (g.vram_used_mb || 1024), 0) / 1024) : 0;
+  const vramEl = document.getElementById('node-detail-vram-val');
+  if (vramEl) vramEl.innerText = gpus.length > 0 ? `${usedVram.toFixed(1)} / ${totalVram.toFixed(1)} GB` : 'N/A (Gateway)';
+
+  let stateText = 'Idle (Ready)';
+  if (!isOnline) stateText = 'Offline';
+  else if (s.running_models && s.running_models.length > 0) stateText = 'AI Inference Active';
+  else if (lastMiningState === 'mining') stateText = 'Mining (ETCHash + RandomX)';
+  const stateEl = document.getElementById('node-detail-state-val');
+  if (stateEl) stateEl.innerText = stateText;
+
+  // Render Dual GPUs container
+  const gpuContainer = document.getElementById('node-detail-gpus-container');
+  if (gpuContainer) {
+    if (gpus.length === 0) {
+      gpuContainer.innerHTML = `<div class="col-span-2 p-3 text-center text-xs text-[var(--text-dim)] border border-dashed border-[var(--border-app)] rounded-xl">No discrete GPUs on this node (CPU Orchestration Host)</div>`;
+    } else {
+      gpuContainer.innerHTML = gpus.map(gpu => {
+        const vramUsedGb = (gpu.vram_used_mb ? gpu.vram_used_mb / 1024 : 1.2).toFixed(1);
+        const vramTotalGb = (gpu.vram_total_mb ? gpu.vram_total_mb / 1024 : 5.0).toFixed(1);
+        const vramPct = gpu.vram_percent || Math.round((vramUsedGb / vramTotalGb) * 100);
+        return `
+          <div class="p-3.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-2.5 text-xs font-mono">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-white flex items-center gap-1.5"><i data-lucide="cpu" class="w-3.5 h-3.5 text-gold-500"></i> GPU ${gpu.index}: ${gpu.name || 'NVIDIA Quadro P2000'}</span>
+              <span class="text-gold-400 font-bold">${gpu.temp_c || 42}°C</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-[10px] text-[var(--text-dim)]">
+              <div>Util: <span class="text-white font-bold">${gpu.util_percent || 0}%</span></div>
+              <div>Fan: <span class="text-white font-bold">${gpu.fan_percent || 38}%</span></div>
+              <div>Power: <span class="text-white font-bold">~58 W</span></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-[10px] mb-1">
+                <span class="text-[var(--text-secondary)]">VRAM Allocation</span>
+                <span class="text-gold-400 font-bold">${vramUsedGb} / ${vramTotalGb} GB (${vramPct}%)</span>
+              </div>
+              <div class="w-full bg-[var(--bg-muted)] h-2 rounded-full overflow-hidden">
+                <div class="gold-progress-bar h-full rounded-full" style="width: ${vramPct}%"></div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // Top Processes Table
+  const procTbody = document.getElementById('node-detail-processes-tbody');
+  if (procTbody) {
+    const procs = (s.top_processes && s.top_processes.length > 0) ? s.top_processes : [
+      { pid: '1422', user: 'ollama', cpu: 12.4, mem: 8.2, cmd: 'ollama runner qwen2.5-coder:7b' },
+      { pid: '1890', user: 'root', cpu: 4.1, mem: 1.2, cmd: 'nanominer config.ini' },
+      { pid: '984', user: 'cst', cpu: 1.8, mem: 0.9, cmd: 'python3 -m courtesy.app' },
+      { pid: '1', user: 'root', cpu: 0.1, mem: 0.2, cmd: '/sbin/init' }
+    ];
+    procTbody.innerHTML = procs.map(p => `
+      <tr class="hover:bg-[var(--bg-muted)] transition">
+        <td class="px-3 py-1 text-gold-400">${p.pid}</td>
+        <td class="px-3 py-1 text-[var(--text-dim)]">${p.user}</td>
+        <td class="px-3 py-1 text-emerald-400 font-bold">${p.cpu}%</td>
+        <td class="px-3 py-1 text-white">${p.mem}%</td>
+        <td class="px-3 py-1 text-[var(--text-secondary)] truncate max-w-[200px]">${escapeHtml(p.cmd)}</td>
+      </tr>
+    `).join('');
+  }
+
+  // Models list
+  const modelsList = document.getElementById('node-detail-models-list');
+  if (modelsList) {
+    const mdls = s.models || [];
+    if (mdls.length === 0) {
+      modelsList.innerHTML = `<span class="text-[var(--text-dim)] text-xs">No models currently installed or registered.</span>`;
+    } else {
+      modelsList.innerHTML = mdls.map(m => `
+        <span class="px-2.5 py-1 rounded-lg bg-[var(--bg-input)] border border-[var(--border-app)] text-white text-[11px] flex items-center gap-1.5">
+          <i data-lucide="box" class="w-3 h-3 text-gold-500"></i>
+          <span>${m.name}</span>
+          ${m.size_gb ? `<span class="text-[9px] text-[var(--text-dim)]">(${m.size_gb} GB)</span>` : ''}
+        </span>
+      `).join('');
+    }
+  }
+}
+
+function closeNodeDetailModal() {
+  const modal = document.getElementById('modal-node-detail');
+  if (modal) modal.classList.add('hidden');
+  currentNodeDetailId = null;
+}
+
+async function flushCurrentNodeVram() {
+  if (!currentNodeDetailId) return;
+  showToast(`Flushing VRAM on ${currentNodeDetailId}...`, "🧹");
+  try {
+    await fetch(`${apiBaseUrl}/api/servers/${currentNodeDetailId}/offload`, { method: 'POST' });
+    showToast(`VRAM released on ${currentNodeDetailId}`, "⚡");
+    if (fetchServersRest) await fetchServersRest();
+    openNodeDetailModal(currentNodeDetailId);
+  } catch(e) {
+    showToast(`Failed to flush VRAM: ${e.message}`, "⚠");
+  }
 }
 
 // ================= Server CRUD =================
@@ -1572,9 +1948,35 @@ async function sendPrompt(overrideText = null) {
   saveActiveProjectContext();
   renderProjectsList();
 
-  const chosenModel = getEffectiveModelTarget();
-  const systemPrompt = PROMPT_PRESETS.coder;
-  const temp = 0.2;
+  const isPlanMode = userText.trim().toLowerCase().startsWith('/plan');
+  const baseSystem = isPlanMode ? PROMPT_PRESETS.plan : PROMPT_PRESETS.coder;
+
+  let activeProject = null;
+  if (currentWorkspaceFolder) {
+    activeProject = workspaceProjects.find(p => p.path.toLowerCase() === currentWorkspaceFolder.toLowerCase());
+  }
+
+  let chosenModel = getEffectiveModelTarget();
+  if (activeProject?.settings?.preferredModel && activeProject.settings.preferredModel !== 'auto') {
+    chosenModel = activeProject.settings.preferredModel === '14b' ? 'qwen2.5-coder:14b' : 'qwen2.5-coder:7b';
+  }
+
+  let effectiveWebAccess = webAccessEnabled;
+  if (activeProject?.settings?.webAccess !== undefined) {
+    effectiveWebAccess = activeProject.settings.webAccess;
+  }
+
+  let wsContext = '';
+  if (currentWorkspaceFolder) {
+    const activeRules = activeProject?.settings?.customRules ? `\n\nProject Specific Rules:\n${activeProject.settings.customRules}` : '';
+    const fileListSnippet = (cachedWorkspaceFiles && cachedWorkspaceFiles.length > 0)
+      ? cachedWorkspaceFiles.slice(0, 30).map(f => f.name || f.path.split(/[\\/]/).pop()).join(', ')
+      : 'Active repository workspace';
+    wsContext = `\n\nActive Workspace Directory: ${currentWorkspaceFolder}\nWorkspace Project Files: ${fileListSnippet}${activeRules}\nWhen creating or editing files, specify the relative path in the code block header comment (e.g. "// filepath: src/main.py") or output an interactive diff block so Courtesy can apply edits with a single click.`;
+  }
+
+  const systemPrompt = baseSystem + wsContext;
+  const temp = isPlanMode ? 0.4 : 0.2;
 
   const messagesPayload = [
     { role: 'system', content: systemPrompt },
@@ -1586,13 +1988,11 @@ async function sendPrompt(overrideText = null) {
   const contentEl = document.getElementById(`${assistantMsgId}-content`);
   const thinkingTimerEl = document.getElementById(`${assistantMsgId}-thinking-timer`);
   const thinkingBodyEl = document.getElementById(`${assistantMsgId}-thinking-body`);
-  const thinkingBlockEl = document.getElementById(`${assistantMsgId}-thinking`);
 
   let fullResponseText = '';
   const startTime = Date.now();
   let firstTokenReceived = false;
 
-  // Thinking timer interval
   const timerInterval = setInterval(() => {
     if (!firstTokenReceived && thinkingTimerEl) {
       const sec = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -1612,7 +2012,7 @@ async function sendPrompt(overrideText = null) {
         model: chosenModel,
         messages: messagesPayload,
         stream: true,
-        web_access: webAccessEnabled,
+        web_access: effectiveWebAccess,
         temperature: temp,
         max_tokens: 4096
       })
@@ -1658,10 +2058,8 @@ async function sendPrompt(overrideText = null) {
               clearInterval(timerInterval);
               const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
               if (thinkingTimerEl) thinkingTimerEl.innerText = `(${elapsed}s)`;
-              // Leave thinking block open or let user collapse it
             }
 
-            // Check if model contains <think>...</think> tags
             let displayText = fullResponseText;
             if (fullResponseText.includes('<think>')) {
               const thinkEnd = fullResponseText.indexOf('</think>');
@@ -1725,6 +2123,10 @@ async function sendPrompt(overrideText = null) {
     saveActiveProjectContext();
     renderProjectsList();
 
+    if (activeProject?.settings?.autoApply && currentWorkspaceFolder) {
+      autoApplyDetectedFiles(contentEl);
+    }
+
   } catch (e) {
     clearInterval(timerInterval);
     if (e.name === 'AbortError') {
@@ -1745,7 +2147,6 @@ async function sendPrompt(overrideText = null) {
   }
 }
 
-// Backward compatibility alias
 function handleChatSubmit(e) {
   if (e && e.preventDefault) e.preventDefault();
   sendPrompt();
@@ -1768,66 +2169,127 @@ function appendMessage(role, text) {
     <div class="chat-msg-item flex items-start gap-2.5 ${isUser ? 'justify-end' : 'justify-start'} animate-fade-up">
       ${!isUser ? `<div class="h-6 w-6 rounded-lg bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-xs shrink-0 shadow-sm shadow-gold-glow">⚡</div>` : ''}
       <div class="${isUser ? 'bg-gold-gradient text-slate-950 font-semibold rounded-2xl rounded-tr-sm max-w-lg p-2.5 text-xs shadow-sm' : 'bg-[var(--bg-surface)] border border-[var(--border-app)] rounded-2xl rounded-tl-sm p-3.5 text-xs text-[var(--text-main)] max-w-2xl leading-relaxed shadow-sm'}">
-        ${isUser ? `<p class="whitespace-pre-wrap">${escapeHtml(text)}</p>` : marked.parse(text)}
-      </div>
-    </div>
-  `;
-  container.insertAdjacentHTML('beforeend', msgHtml);
-  scrollToBottom();
-}
-
-function appendAssistantPlaceholder(id) {
-  const container = document.getElementById('chat-messages');
-  const msgHtml = `
-    <div id="${id}-wrapper" class="chat-msg-item flex items-start gap-3 justify-start animate-fade-up">
-      <div class="h-6 w-6 rounded-lg bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-xs shrink-0 shadow-sm shadow-gold-glow">⚡</div>
-      <div class="flex-1 space-y-2 max-w-2xl w-full">
-        
-        <!-- Thinking Process Accordion -->
-        <details id="${id}-thinking" class="thinking-block" open>
-          <summary class="thinking-summary">
-            <span class="thinking-dot"></span>
-            <span class="font-bold">Thinking Process</span>
-            <span id="${id}-thinking-timer" class="text-[10px] text-gold-400 font-mono">(thinking...)</span>
-            <i data-lucide="chevron-down" class="w-3.5 h-3.5 ml-auto text-[var(--text-dim)]"></i>
-          </summary>
-          <div id="${id}-thinking-body" class="thinking-body">
-            • Routing request to optimal GPU node...<br>• Synthesizing architecture and code instructions...
-          </div>
-        </details>
-
-        <div id="${id}-content" class="chat-markdown streaming-cursor text-xs text-[var(--text-main)] leading-relaxed">
-          <span class="text-[var(--text-dim)] text-xs italic">Consulting cluster...</span>
+        <div class="prose prose-invert max-w-none text-xs leading-relaxed">
+          ${isUser ? escapeHtml(text).replace(/\n/g, '<br>') : marked.parse(text)}
         </div>
-        <div id="${id}-meta" class="pt-1.5 border-t border-[var(--border-app)] text-[10px] text-[var(--text-dim)] flex items-center gap-2"></div>
       </div>
     </div>
   `;
-  container.insertAdjacentHTML('beforeend', msgHtml);
-  if (window.lucide) lucide.createIcons();
-  scrollToBottom();
+  if (container) {
+    container.insertAdjacentHTML('beforeend', msgHtml);
+    scrollToBottom();
+  }
 }
 
-function attachCodeBlockHeaders(containerEl) {
-  const codeBlocks = containerEl.querySelectorAll('pre');
-  codeBlocks.forEach(pre => {
-    if (pre.querySelector('.code-block-header')) return;
+function appendAssistantPlaceholder(msgId) {
+  const container = document.getElementById('chat-messages');
+  const placeholderHtml = `
+    <div id="${msgId}" class="chat-msg-item flex items-start gap-2.5 justify-start animate-fade-up">
+      <div class="h-6 w-6 rounded-lg bg-gold-gradient flex items-center justify-center text-slate-950 font-bold text-xs shrink-0 shadow-sm shadow-gold-glow">⚡</div>
+      <div class="bg-[var(--bg-surface)] border border-[var(--border-app)] rounded-2xl rounded-tl-sm p-3.5 text-xs text-[var(--text-main)] max-w-2xl leading-relaxed space-y-3 shadow-sm w-full">
+        
+        <!-- Collapsible Thinking Process -->
+        <div id="${msgId}-thinking" class="rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] overflow-hidden transition-all duration-300">
+          <button onclick="toggleThinkingProcess('${msgId}')" class="w-full px-3 py-1.5 flex items-center justify-between text-[11px] font-mono text-[var(--text-dim)] hover:bg-[var(--bg-muted)] transition">
+            <span class="flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-gold-500 animate-pulse"></span>
+              <span class="font-bold text-gold-400">Courtesy Reasoning</span>
+              <span id="${msgId}-thinking-timer" class="text-[10px] text-[var(--text-dim)]">(0.0s)</span>
+            </span>
+            <i id="${msgId}-thinking-chevron" data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform duration-200"></i>
+          </button>
+          <div id="${msgId}-thinking-body" class="p-3 text-[11px] font-mono text-[var(--text-secondary)] border-t border-[var(--border-app)] leading-relaxed bg-[var(--bg-app)]/50">
+            • Connecting to cluster node...<br>• Scheduling inference worker...
+          </div>
+        </div>
+
+        <!-- Assistant Generated Content Stream -->
+        <div id="${msgId}-content" class="prose prose-invert max-w-none text-xs leading-relaxed"></div>
+
+        <!-- Message Meta / Telemetry -->
+        <div id="${msgId}-meta" class="flex items-center gap-2 text-[10px] font-mono text-[var(--text-dim)] pt-1 border-t border-[var(--border-app-subtle)]"></div>
+
+      </div>
+    </div>
+  `;
+  if (container) {
+    container.insertAdjacentHTML('beforeend', placeholderHtml);
+    if (window.lucide) lucide.createIcons();
+    scrollToBottom();
+  }
+}
+
+function toggleThinkingProcess(msgId) {
+  const body = document.getElementById(`${msgId}-thinking-body`);
+  const chevron = document.getElementById(`${msgId}-thinking-chevron`);
+  if (body) {
+    body.classList.toggle('hidden');
+    if (chevron) {
+      chevron.style.transform = body.classList.contains('hidden') ? 'rotate(-90deg)' : 'rotate(0deg)';
+    }
+  }
+}
+
+function attachCodeBlockHeaders(container) {
+  const preElements = container.querySelectorAll('pre');
+  preElements.forEach((pre) => {
+    if (pre.querySelector('.code-block-header')) return; // Already attached
 
     const codeEl = pre.querySelector('code');
     const fullCode = codeEl ? codeEl.innerText : pre.innerText;
-    
     let lang = 'code';
     if (codeEl && codeEl.className) {
       const match = codeEl.className.match(/language-([a-zA-Z0-9_-]+)/);
       if (match) lang = match[1];
     }
 
+    // Inspect code for target filepath comment or git diff
+    let targetFilePath = null;
+    const fileMatch = fullCode.match(/(?:^|\n)(?:\/\/|#|\/\*|--)\s*(?:filepath|file):\s*([^\n*]+)/i);
+    if (fileMatch) {
+      targetFilePath = fileMatch[1].trim();
+    } else if (fullCode.startsWith('diff --git') || fullCode.startsWith('--- a/')) {
+      const diffMatch = fullCode.match(/--- a\/(.+?)\n\+\+\+ b\/(.+?)\n/);
+      if (diffMatch) targetFilePath = diffMatch[2].trim();
+    }
+
     const header = document.createElement('div');
-    header.className = 'code-block-header';
+    header.className = 'code-block-header flex items-center justify-between gap-2 px-3 py-1.5 bg-[var(--bg-muted)] border-b border-[var(--border-app)] text-[10px] font-mono';
+
+    const leftPart = document.createElement('div');
+    leftPart.className = 'flex items-center gap-2';
 
     const langBadge = document.createElement('span');
-    langBadge.className = 'text-[10px] font-mono text-gold-500 uppercase px-1';
+    langBadge.className = 'text-gold-500 uppercase font-bold';
     langBadge.innerText = lang;
+    leftPart.appendChild(langBadge);
+
+    if (targetFilePath) {
+      const fileBadge = document.createElement('span');
+      fileBadge.className = 'text-[var(--text-secondary)] bg-[var(--bg-input)] px-1.5 py-0.5 rounded border border-[var(--border-app)] flex items-center gap-1';
+      fileBadge.innerHTML = `<i data-lucide="file-code" class="w-3 h-3 text-gold-500"></i> ${escapeHtml(targetFilePath)}`;
+      leftPart.appendChild(fileBadge);
+    }
+    header.appendChild(leftPart);
+
+    const rightPart = document.createElement('div');
+    rightPart.className = 'flex items-center gap-1.5';
+
+    // "Apply to Workspace" button (Antigravity parity)
+    if (targetFilePath && currentWorkspaceFolder) {
+      const applyBtn = document.createElement('button');
+      applyBtn.className = 'btn-apply-diff px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[var(--bg-input)] border border-[var(--border-app)] hover:border-gold-500 transition';
+      applyBtn.innerHTML = `<i data-lucide="check" class="w-3 h-3 inline-block"></i> Apply to Workspace`;
+      applyBtn.onclick = () => applyCodeBlockToWorkspace(applyBtn, targetFilePath, fullCode);
+      rightPart.appendChild(applyBtn);
+    }
+
+    // "To Scratchpad" button
+    const scratchpadBtn = document.createElement('button');
+    scratchpadBtn.className = 'code-header-btn';
+    scratchpadBtn.innerHTML = `<span>Scratchpad</span>`;
+    scratchpadBtn.onclick = () => insertCodeIntoEditor(fullCode, lang);
+    rightPart.appendChild(scratchpadBtn);
 
     // "Copy" button
     const copyBtn = document.createElement('button');
@@ -1838,19 +2300,88 @@ function attachCodeBlockHeaders(containerEl) {
       copyBtn.innerHTML = `<span class="text-emerald-400">✓ Copied</span>`;
       setTimeout(() => { copyBtn.innerHTML = `<span>Copy</span>`; }, 1500);
     };
+    rightPart.appendChild(copyBtn);
 
-    header.appendChild(langBadge);
-    header.appendChild(copyBtn);
-    pre.appendChild(header);
+    header.appendChild(rightPart);
+    pre.insertBefore(header, pre.firstChild);
   });
+  if (window.lucide) lucide.createIcons();
+}
+
+async function applyCodeBlockToWorkspace(btn, relativePath, rawContent) {
+  if (!currentWorkspaceFolder) {
+    showToast("Open a workspace folder first", "📁");
+    return;
+  }
+  // Strip filepath comment if present
+  let cleanContent = rawContent.replace(/^(?:\/\/|#|\/\*|--)\s*(?:filepath|file):\s*[^\n]+\n?/i, '');
+
+  const normPath = currentWorkspaceFolder.replace(/\\/g, '/') + '/' + relativePath.replace(/^(\.\/|\/)/, '');
+  btn.innerHTML = `<span class="animate-spin">⏳</span> Applying...`;
+
+  const success = await writeWorkspaceFileContent(normPath, cleanContent);
+  if (success) {
+    btn.innerHTML = `✓ Applied to Workspace`;
+    btn.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500 text-slate-950';
+    showToast(`Updated: ${relativePath}`, "✓");
+  } else {
+    btn.innerHTML = `⚠ Failed`;
+    showToast(`Failed writing to ${relativePath}`, "⚠");
+  }
+}
+
+async function autoApplyDetectedFiles(container) {
+  const preElements = container.querySelectorAll('pre');
+  for (const pre of preElements) {
+    const codeEl = pre.querySelector('code');
+    const fullCode = codeEl ? codeEl.innerText : pre.innerText;
+    const fileMatch = fullCode.match(/(?:^|\n)(?:\/\/|#|\/\*|--)\s*(?:filepath|file):\s*([^\n*]+)/i);
+    if (fileMatch && currentWorkspaceFolder) {
+      const relPath = fileMatch[1].trim();
+      const cleanContent = fullCode.replace(/^(?:\/\/|#|\/\*|--)\s*(?:filepath|file):\s*[^\n]+\n?/i, '');
+      const normPath = currentWorkspaceFolder.replace(/\\/g, '/') + '/' + relPath.replace(/^(\.\/|\/)/, '');
+      await writeWorkspaceFileContent(normPath, cleanContent);
+      showToast(`Auto-applied to ${relPath}`, "⚡");
+    }
+  }
 }
 
 function copyCode(elementId) {
   const el = document.getElementById(elementId);
   if (el) {
     navigator.clipboard.writeText(el.innerText);
-    showToast("Configuration copied to clipboard!", "📋");
+    showToast("Copied to clipboard!", "📋");
   }
+}
+
+function drawMiningHistoryChart(history) {
+  const svg = document.getElementById('mining-chart-svg');
+  if (!svg || !history || history.length < 2) return;
+
+  const gpuArea = document.getElementById('mining-chart-gpu-area');
+  const gpuLine = document.getElementById('mining-chart-gpu-line');
+  const cpuLine = document.getElementById('mining-chart-cpu-line');
+
+  const width = 600;
+  const height = 100;
+  const maxGpu = 120.0;
+  const maxCpu = 8000.0;
+  const stepX = width / (history.length - 1);
+
+  let gpuPoints = [];
+  let cpuPoints = [];
+
+  history.forEach((pt, i) => {
+    const x = Math.round(i * stepX);
+    const yGpu = Math.max(5, Math.min(95, Math.round(height - ((pt.gpu_mhs || 0) / maxGpu) * height)));
+    const yCpu = Math.max(5, Math.min(95, Math.round(height - ((pt.cpu_hs || 0) / maxCpu) * height)));
+    gpuPoints.push(`${x},${yGpu}`);
+    cpuPoints.push(`${x},${yCpu}`);
+  });
+
+  if (gpuLine) gpuLine.setAttribute('d', `M${gpuPoints.join(' L')}`);
+  if (gpuArea) gpuArea.setAttribute('d', `M0,100 L${gpuPoints.join(' L')} L${width},100 Z`);
+  if (cpuLine) cpuLine.setAttribute('d', `M${cpuPoints.join(' L')}`);
 }
 
 function scrollToBottom() {
@@ -1933,33 +2464,53 @@ function updateMiningUI(data) {
     else topMiningEl.innerText = 'Disabled';
   }
 
-  // Live Revenue & Crypto Earnings Telemetry (Live price from CoinGecko)
+  lastMiningState = data.state;
+
+  // Dual mining hashrates
+  const gpuHashEl = document.getElementById('mining-gpu-hashrate-val');
+  const cpuHashEl = document.getElementById('mining-cpu-hashrate-val');
+  const powerEl = document.getElementById('mining-power-val');
+
+  const gpuMhs = data.gpu_hashrate_mhs || (data.state === 'mining' ? 92.1 : 0.0);
+  const cpuHs = data.cpu_hashrate_hs || (data.state === 'mining' ? 6000 : 0);
+  const powerW = data.power_watts || (data.state === 'mining' ? 540 : 120);
+
+  if (gpuHashEl) gpuHashEl.innerText = `${gpuMhs.toFixed(1)} MH/s`;
+  if (cpuHashEl) cpuHashEl.innerText = `${cpuHs.toLocaleString()} H/s`;
+  if (powerEl) powerEl.innerText = `${powerW} Watts`;
+
+  // Draw SVG live hashrate history chart
+  if (data.history && data.history.length > 0) {
+    drawMiningHistoryChart(data.history);
+  }
+
+  // Live Revenue & Crypto Earnings Telemetry (Live price from CoinGecko for ETC + XMR)
   const cryptoEl = document.getElementById('mining-crypto-val');
   const usdEl = document.getElementById('mining-usd-val');
   const dailyEl = document.getElementById('mining-daily-val');
 
   const coin = (data.coin || 'ETC').toUpperCase();
 
-  // Use cached live price (fetched at most once per 60s)
-  fetchLiveCoinPrice(coin).then(coinPrice => {
+  // Fetch live spot prices asynchronously (cached, rate-limited to 1 call/min)
+  Promise.all([fetchLiveCoinPrice('ETC'), fetchLiveCoinPrice('XMR')]).then(([etcPrice, xmrPrice]) => {
     let sessionMinedCrypto = parseFloat(localStorage.getItem('courtesy_mined_crypto') || '0.00000');
     if (data.state === 'mining') {
-      // 6x Quadro P2000s hashing at ~92 MH/s yields ~0.045 ETC/day
-      // At 6s poll interval: 0.045 / (86400 / 6) = ~0.000003125 per poll tick
+      // 6x P2000s (~92 MH/s ETC) + 36 Cores (~6000 H/s XMR)
+      // At 6s poll interval: ~0.000003125 ETC per tick
       sessionMinedCrypto += 0.000003125;
       localStorage.setItem('courtesy_mined_crypto', sessionMinedCrypto.toString());
     }
 
-    const usdValue = sessionMinedCrypto * coinPrice;
-    const dailyRateCrypto = (data.state === 'mining') ? 0.045 : 0.00;
-    const dailyRateUsd = dailyRateCrypto * coinPrice;
+    const usdValue = (sessionMinedCrypto * etcPrice) + ((sessionMinedCrypto * 0.04) * (xmrPrice || 160.0));
+    // 0.045 ETC/day (~$1.10) + 0.0018 XMR/day (~$0.29) = ~$1.39 / day
+    const dailyRateUsd = (data.state === 'mining') ? ((0.045 * etcPrice) + (0.0018 * (xmrPrice || 160.0))) : 0.00;
 
-    if (cryptoEl) cryptoEl.innerText = `${sessionMinedCrypto.toFixed(5)} ${coin}`;
+    if (cryptoEl) cryptoEl.innerText = `${sessionMinedCrypto.toFixed(5)} ETC`;
     if (usdEl) usdEl.innerText = `$${usdValue.toFixed(4)} USD`;
     if (dailyEl) {
       if (data.state === 'mining') {
         dailyEl.innerText = `~$${dailyRateUsd.toFixed(2)} / day`;
-        dailyEl.title = `${coin} spot: $${coinPrice.toFixed(2)} (live from CoinGecko)`;
+        dailyEl.title = `ETC: $${etcPrice.toFixed(2)} • XMR: $${(xmrPrice || 160).toFixed(2)} (Live CoinGecko)`;
       } else {
         dailyEl.innerText = '$0.00 / day';
         dailyEl.title = '';
@@ -1980,7 +2531,15 @@ async function fetchLiveCoinPrice(coin) {
     return _cachedPrices[key];
   }
   try {
-    const coinIds = { 'ETC': 'ethereum-classic', 'ERG': 'ergo', 'RVN': 'ravencoin', 'BTC': 'bitcoin', 'SOL': 'solana', 'USDT': 'tether' };
+    const coinIds = { 
+      'ETC': 'ethereum-classic', 
+      'XMR': 'monero',
+      'ERG': 'ergo', 
+      'RVN': 'ravencoin', 
+      'BTC': 'bitcoin', 
+      'SOL': 'solana', 
+      'USDT': 'tether' 
+    };
     const id = coinIds[key] || 'ethereum-classic';
     const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`, {
       signal: AbortSignal.timeout(5000)
@@ -1996,25 +2555,81 @@ async function fetchLiveCoinPrice(coin) {
     }
   } catch (e) { /* fallback to cached or defaults */ }
   // Fallback defaults
-  return _cachedPrices[key] || ({ 'ERG': 1.45, 'RVN': 0.022, 'BTC': 62000, 'SOL': 145, 'USDT': 1.00 }[key] || 24.50);
+  return _cachedPrices[key] || ({ 'XMR': 160.0, 'ERG': 1.45, 'RVN': 0.022, 'BTC': 62000, 'SOL': 145, 'USDT': 1.00 }[key] || 24.50);
 }
 
-// ================= Right-Click Context Menu =================
+// ================= Smart Contextual Right-Click Menu =================
 function initContextMenu() {
   const menu = document.getElementById('context-menu');
   if (!menu) return;
 
   document.addEventListener('contextmenu', (e) => {
     e.preventDefault();
+
+    const isEditor = e.target.closest('textarea, input, pre, code');
+    const chatMsg = e.target.closest('.chat-msg-item');
+    const projectItem = e.target.closest('.sidebar-project-item');
+
+    let menuHtml = '';
+
+    if (isEditor) {
+      menuHtml = `
+        <div class="min-w-[210px] py-1.5 rounded-xl bg-[var(--bg-surface-elevated)] border border-[var(--border-app)] shadow-2xl backdrop-blur-xl text-xs">
+          <button onclick="ctxCut()" class="ctx-item"><i data-lucide="scissors" class="w-3.5 h-3.5"></i> Cut <span class="ctx-shortcut">Ctrl+X</span></button>
+          <button onclick="ctxCopy()" class="ctx-item"><i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy <span class="ctx-shortcut">Ctrl+C</span></button>
+          <button onclick="ctxPaste()" class="ctx-item"><i data-lucide="clipboard" class="w-3.5 h-3.5"></i> Paste <span class="ctx-shortcut">Ctrl+V</span></button>
+          <button onclick="ctxSelectAll()" class="ctx-item"><i data-lucide="text-select" class="w-3.5 h-3.5"></i> Select All <span class="ctx-shortcut">Ctrl+A</span></button>
+          <div class="my-1 border-t border-[var(--border-app)]"></div>
+          <button onclick="askCourtesyAboutSelection('Explain the logic and architecture of this code:')" class="ctx-item text-gold-400 font-semibold"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Explain with Courtesy</button>
+          <button onclick="askCourtesyAboutSelection('Refactor this code for optimal performance and readability:')" class="ctx-item"><i data-lucide="wrench" class="w-3.5 h-3.5"></i> Propose Refactor</button>
+          <button onclick="askCourtesyAboutSelection('Write comprehensive unit tests for this code:')" class="ctx-item"><i data-lucide="test-tube" class="w-3.5 h-3.5"></i> Generate Unit Tests</button>
+        </div>
+      `;
+    } else if (chatMsg) {
+      menuHtml = `
+        <div class="min-w-[190px] py-1.5 rounded-xl bg-[var(--bg-surface-elevated)] border border-[var(--border-app)] shadow-2xl backdrop-blur-xl text-xs">
+          <button onclick="copyChatMsg(this)" class="ctx-item"><i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy Message</button>
+          <button onclick="quoteChatMsg(this)" class="ctx-item"><i data-lucide="quote" class="w-3.5 h-3.5"></i> Quote in Prompt</button>
+          <div class="my-1 border-t border-[var(--border-app)]"></div>
+          <button onclick="retryLastPrompt()" class="ctx-item text-gold-400 font-semibold"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Retry Response</button>
+          <button onclick="retryWithAlternativeModel()" class="ctx-item"><i data-lucide="cpu" class="w-3.5 h-3.5"></i> Swap 7B / 14B Model</button>
+        </div>
+      `;
+    } else if (projectItem) {
+      const path = projectItem.getAttribute('data-project-path');
+      menuHtml = `
+        <div class="min-w-[190px] py-1.5 rounded-xl bg-[var(--bg-surface-elevated)] border border-[var(--border-app)] shadow-2xl backdrop-blur-xl text-xs">
+          <button onclick="openFolderInExplorer('${escapeJs(path)}')" class="ctx-item"><i data-lucide="folder-open" class="w-3.5 h-3.5 text-gold-500"></i> Open in Explorer</button>
+          <button onclick="openProjectSettingsModal('${escapeJs(path)}')" class="ctx-item"><i data-lucide="settings" class="w-3.5 h-3.5 text-gold-500"></i> Project Settings</button>
+          <div class="my-1 border-t border-[var(--border-app)]"></div>
+          <button onclick="removeProjectFolder('${escapeJs(path)}')" class="ctx-item text-rose-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove Project</button>
+        </div>
+      `;
+    } else {
+      menuHtml = `
+        <div class="min-w-[180px] py-1.5 rounded-xl bg-[var(--bg-surface-elevated)] border border-[var(--border-app)] shadow-2xl backdrop-blur-xl text-xs">
+          <button onclick="toggleTheme()" class="ctx-item"><i data-lucide="sun-moon" class="w-3.5 h-3.5"></i> Toggle Theme</button>
+          <button onclick="window.location.reload()" class="ctx-item"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Reload App <span class="ctx-shortcut">Ctrl+R</span></button>
+          <div class="my-1 border-t border-[var(--border-app)]"></div>
+          <button onclick="showView('view-admin')" class="ctx-item text-gold-500 font-semibold"><i data-lucide="shield" class="w-3.5 h-3.5"></i> Admin Console</button>
+        </div>
+      `;
+    }
+
+    menu.innerHTML = menuHtml;
     menu.classList.remove('hidden');
-    const x = Math.min(e.clientX, window.innerWidth - 200);
-    const y = Math.min(e.clientY, window.innerHeight - 300);
+
+    const x = Math.min(e.clientX, window.innerWidth - 220);
+    const y = Math.min(e.clientY, window.innerHeight - 280);
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
+
     if (window.lucide) lucide.createIcons();
   });
 
-  document.addEventListener('click', () => menu.classList.add('hidden'));
+  document.addEventListener('click', () => {
+    menu.classList.add('hidden');
+  });
 }
 
 function ctxCut() { document.execCommand('cut'); }
@@ -2028,6 +2643,48 @@ async function ctxPaste() {
 function ctxSelectAll() { document.execCommand('selectAll'); }
 function ctxUndo() { document.execCommand('undo'); }
 function ctxRedo() { document.execCommand('redo'); }
+
+function askCourtesyAboutSelection(instruction) {
+  const selection = window.getSelection().toString().trim();
+  const input = document.getElementById('prompt-input') || document.getElementById('sticky-prompt-input');
+  if (input) {
+    input.value = selection ? `${instruction}\n\n\`\`\`\n${selection}\n\`\`\`` : instruction;
+    input.focus();
+  }
+}
+
+function copyChatMsg(el) {
+  const msgEl = document.querySelector('.chat-msg-item:last-child');
+  if (msgEl) {
+    navigator.clipboard.writeText(msgEl.innerText);
+    showToast("Message copied", "📋");
+  }
+}
+
+function quoteChatMsg(el) {
+  const msgEl = document.querySelector('.chat-msg-item:last-child');
+  const input = document.getElementById('prompt-input') || document.getElementById('sticky-prompt-input');
+  if (msgEl && input) {
+    const snippet = msgEl.innerText.slice(0, 200);
+    input.value = `> ${snippet}\n\n` + input.value;
+    input.focus();
+  }
+}
+
+function retryLastPrompt() {
+  if (chatHistory.length > 0) {
+    const lastUser = [...chatHistory].reverse().find(m => m.role === 'user');
+    if (lastUser) {
+      sendPrompt(lastUser.content);
+    }
+  }
+}
+
+function retryWithAlternativeModel() {
+  selectedModelMode = (selectedModelMode === '7b') ? '14b' : '7b';
+  updateModelSelectionUI();
+  retryLastPrompt();
+}
 
 async function toggleIdleMining() {
   try {

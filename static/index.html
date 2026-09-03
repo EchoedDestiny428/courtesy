@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Courtesy • Antigravity AI Cluster & Codex</title>
+  <title>Courtesy • Antigravity AI Cluster & Workspace</title>
   <link rel="icon" href="courtesy-gold.png">
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -82,7 +82,7 @@
 
       <!-- Animated Sliding Logo (Transparent Gold PNG) - LARGER -->
       <div class="relative group cursor-pointer logo-slide-up w-44 h-44 flex items-center justify-center"
-        onclick="startStandardMode()" title="Click to Launch Courtesy Codex">
+        onclick="startStandardMode()" title="Click to Launch Courtesy">
         <div
           class="absolute -inset-6 rounded-full bg-gold-500/15 blur-2xl group-hover:bg-gold-500/25 transition duration-700">
         </div>
@@ -93,16 +93,16 @@
       <!-- Minimal Title -->
       <div class="space-y-1">
         <h1 class="text-3xl font-extrabold tracking-widest text-[var(--text-main)]">COURTESY</h1>
-        <p class="text-[11px] font-mono text-gold-500 uppercase tracking-widest">Autonomous Cluster Codex</p>
+        <p class="text-[11px] font-mono text-gold-500 uppercase tracking-widest">Autonomous Cluster Workspace</p>
       </div>
 
       <!-- Minimalist Action Buttons -->
       <div class="flex items-center gap-3 pt-2">
         <button onclick="startStandardMode()"
           class="px-5 py-2.5 rounded-2xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-xs shadow-md shadow-gold-glow hover-float flex items-center gap-2 transition"
-          title="Open Codex IDE">
+          title="Open Courtesy Workbench">
           <i data-lucide="sparkles" class="w-4 h-4"></i>
-          <span>Launch Codex</span>
+          <span>Launch Courtesy</span>
           <i data-lucide="arrow-right" class="w-3.5 h-3.5 stroke-[2.5]"></i>
         </button>
 
@@ -213,10 +213,13 @@
       <!-- Top Section -->
       <div class="p-3 space-y-3 overflow-y-auto flex-1">
 
-        <!-- App Title & Menus (File and View do nothing for now) -->
-        <div class="flex items-center gap-3.5 px-1 pt-0.5 select-none text-xs">
-          <span class="font-bold text-[var(--text-main)] tracking-tight text-[13px]">Courtesy</span>
-          <span class="text-[11px] text-[var(--text-muted)] cursor-default select-none">File</span>
+        <!-- App Title & Menus with Icon -->
+        <div class="flex items-center gap-2.5 px-1 pt-0.5 select-none text-xs">
+          <div class="flex items-center gap-1.5 cursor-pointer" onclick="returnToPortal()" title="Courtesy Home">
+            <img src="courtesy-gold.png" alt="Courtesy" class="w-4 h-4 object-contain shrink-0">
+            <span class="font-bold text-[var(--text-main)] tracking-tight text-[13px]">Courtesy</span>
+          </div>
+          <span class="text-[11px] text-[var(--text-muted)] cursor-default select-none ml-1">File</span>
           <span class="text-[11px] text-[var(--text-muted)] cursor-default select-none">View</span>
         </div>
 
@@ -293,13 +296,17 @@
       <header
         class="h-11 px-4 flex items-center justify-between border-b border-[var(--border-app)] bg-[var(--titlebar-bg)] backdrop-blur-md sticky top-0 z-30 text-xs titlebar-drag-region">
 
-        <!-- Left: Sidebar Toggle -->
-        <div class="flex items-center gap-2 no-drag">
+        <!-- Left: Sidebar Toggle + Courtesy Icon Brand -->
+        <div class="flex items-center gap-2.5 no-drag">
           <button onclick="toggleSidebar()"
             class="p-1.5 rounded-lg border border-[var(--border-app)] hover:border-gold hover:bg-[var(--bg-muted)] text-[var(--text-main)] transition"
             title="Toggle Sidebar (Ctrl+B)">
             <i data-lucide="panel-left" class="w-4 h-4"></i>
           </button>
+          <div class="flex items-center gap-1.5 cursor-pointer" onclick="returnToPortal()" title="Courtesy Home">
+            <img src="courtesy-gold.png" alt="Courtesy" class="w-4 h-4 object-contain shrink-0">
+            <span class="font-bold text-[var(--text-main)] tracking-tight text-[12px]">Courtesy</span>
+          </div>
         </div>
 
         <!-- Center: Active Folder Indicator (Launches File Explorer directly!) -->
@@ -411,18 +418,30 @@
               <!-- Inside Toolbar Controls -->
               <div class="flex items-center justify-between pt-1 border-t border-[var(--border-app-subtle)]">
 
-                <!-- Left: Attachments & Model Pill -->
-                <div class="flex items-center gap-2">
+                <!-- Left: Attachments, Plan Mode & Settings -->
+                <div class="flex items-center gap-1.5">
                   <button onclick="pickWorkspaceFolder()"
                     class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
                     title="Attach folder context / File Explorer">
-                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <i data-lucide="folder-plus" class="w-4 h-4"></i>
+                  </button>
+
+                  <button onclick="insertPromptPrefix('/plan ')"
+                    class="px-2 py-0.5 rounded-full border border-gold/30 bg-[var(--gold-subtle)] text-gold-400 font-mono text-[10px] hover:border-gold transition flex items-center gap-1"
+                    title="Generate Antigravity Implementation Plan">
+                    <i data-lucide="clipboard-list" class="w-3 h-3"></i>
+                    <span>/plan</span>
+                  </button>
+
+                  <button onclick="openProjectSettingsModal()"
+                    class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-gold-400 transition"
+                    title="Project Settings & Rules">
+                    <i data-lucide="settings" class="w-3.5 h-3.5"></i>
                   </button>
 
                   <div
                     class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--bg-muted)] border border-[var(--border-app)] text-[10px] font-mono text-gold-400">
                     <span id="active-model-display">🧠 Qwen 2.5 Coder 14B</span>
-                    <i data-lucide="chevron-down" class="w-2.5 h-2.5 text-[var(--text-dim)]"></i>
                   </div>
                 </div>
 
@@ -478,13 +497,24 @@
               onkeydown="handleStickyInputKey(event)"></textarea>
 
             <div class="flex items-center justify-between pt-1 border-t border-[var(--border-app-subtle)]">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-1.5">
                 <button onclick="pickWorkspaceFolder()"
                   class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
                   title="Choose Workspace Folder">
-                  <i data-lucide="plus" class="w-4 h-4"></i>
+                  <i data-lucide="folder-plus" class="w-4 h-4"></i>
                 </button>
-                <span class="text-[10px] font-mono text-gold-500" id="sticky-model-display">🧠 Qwen 2.5 Coder 14B</span>
+                <button onclick="insertPromptPrefix('/plan ')"
+                  class="px-2 py-0.5 rounded-full border border-gold/30 bg-[var(--gold-subtle)] text-gold-400 font-mono text-[10px] hover:border-gold transition flex items-center gap-1"
+                  title="Generate Antigravity Implementation Plan">
+                  <i data-lucide="clipboard-list" class="w-3 h-3"></i>
+                  <span>/plan</span>
+                </button>
+                <button onclick="openProjectSettingsModal()"
+                  class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-gold-400 transition"
+                  title="Project Settings & Rules">
+                  <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+                </button>
+                <span class="text-[10px] font-mono text-gold-500 hidden sm:inline" id="sticky-model-display">🧠 Qwen 2.5 Coder 14B</span>
               </div>
 
               <div class="flex items-center gap-2">
@@ -520,6 +550,7 @@
       <!-- Left: Logo, Title & Superuser Badge -->
       <div class="flex items-center gap-3 no-drag">
         <div class="flex items-center gap-2 cursor-pointer" onclick="showView('view-standard')">
+          <img src="courtesy-gold.png" alt="Courtesy" class="w-4 h-4 object-contain">
           <span class="font-extrabold tracking-wider text-xs text-[var(--text-main)]">COURTESY <span
               class="text-gold-500 font-mono">ADMIN</span></span>
         </div>
@@ -545,9 +576,9 @@
       <div class="flex items-center gap-2 no-drag">
         <button onclick="showView('view-standard')"
           class="px-2.5 py-1 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-[11px] flex items-center gap-1 transition shadow-sm"
-          title="Switch to Codex IDE">
+          title="Switch to Courtesy">
           <i data-lucide="sparkles" class="w-3 h-3"></i>
-          <span>Codex IDE</span>
+          <span>Courtesy</span>
         </button>
 
         <button onclick="terminateAllSessions()"
@@ -669,31 +700,73 @@
             </div>
           </div>
 
-          <!-- Revenue & Telemetry Strip (Crypto Mined & Money Made) -->
+          <!-- Revenue & Telemetry Strip (Dual GPU + CPU Mining & Micro/Nano Payouts) -->
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-xs font-mono">
             <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-gold/40 space-y-1">
-              <span class="text-[10px] text-[var(--text-dim)] block">Crypto Mined</span>
-              <span id="mining-crypto-val" class="font-bold text-gold-400 text-sm">0.00000 ETC</span>
+              <span class="text-[10px] text-[var(--text-dim)] block">GPU Hashrate</span>
+              <span id="mining-gpu-hashrate-val" class="font-bold text-gold-400 text-sm">92.1 MH/s</span>
+              <span class="text-[9px] text-[var(--text-dim)] block">6x P2000 (ETCHash)</span>
+            </div>
+            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-cyan-500/40 space-y-1">
+              <span class="text-[10px] text-[var(--text-dim)] block">CPU Hashrate</span>
+              <span id="mining-cpu-hashrate-val" class="font-bold text-cyan-400 text-sm">6,000 H/s</span>
+              <span class="text-[9px] text-[var(--text-dim)] block">36 Cores (RandomX)</span>
             </div>
             <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-emerald-500/40 space-y-1">
               <span class="text-[10px] text-[var(--text-dim)] block">Money Made (USD)</span>
               <span id="mining-usd-val" class="font-bold text-emerald-400 text-sm">$0.0000 USD</span>
+              <span id="mining-crypto-val" class="text-[9px] text-gold-400 block truncate">0.00000 ETC</span>
             </div>
             <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
               <span class="text-[10px] text-[var(--text-dim)] block">Daily Run-Rate</span>
               <span id="mining-daily-val" class="font-bold text-white text-xs">$0.00 / day</span>
+              <span class="text-[9px] text-emerald-400 block">~$1.39 / day at spot</span>
             </div>
             <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
-              <span class="text-[10px] text-[var(--text-dim)] block">Cluster Hashrate</span>
-              <span id="mining-hashrate-val" class="font-bold text-gold-500 text-sm">0.0 MH/s</span>
+              <span class="text-[10px] text-[var(--text-dim)] block">Payout Mechanism</span>
+              <span class="font-bold text-white text-xs">Nano / Micro Pool</span>
+              <span class="text-[9px] text-gold-500 block">Zero-Fee Micro Batches</span>
             </div>
             <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
-              <span class="text-[10px] text-[var(--text-dim)] block">AI Preemption</span>
-              <span class="font-bold text-emerald-400 text-sm">&lt;200ms</span>
+              <span class="text-[10px] text-[var(--text-dim)] block">Cluster Power</span>
+              <span id="mining-power-val" class="font-bold text-white text-xs">~540 Watts</span>
+              <span class="text-[9px] text-[var(--text-dim)] block">&lt;200ms Preemption</span>
             </div>
-            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
-              <span class="text-[10px] text-[var(--text-dim)] block">Mining Hardware</span>
-              <span id="mining-gpus-val" class="font-bold text-white text-xs">6x Quadro P2000s</span>
+          </div>
+
+          <!-- Live Hashrate History SVG Chart (Dual GPU & CPU Telemetry) -->
+          <div class="p-4 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-white flex items-center gap-1.5"><i data-lucide="activity" class="w-3.5 h-3.5 text-gold-500"></i> Live Hashrate History (Rolling Snapshots)</span>
+                <span class="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 rounded-full">Active</span>
+              </div>
+              <div class="flex items-center gap-3 text-[10px] font-mono">
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gold-400"></span> GPU Hashrate (MH/s)</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400"></span> CPU Hashrate (H/s)</span>
+              </div>
+            </div>
+            <div class="h-28 w-full relative pt-1">
+              <svg id="mining-chart-svg" class="w-full h-full" viewBox="0 0 600 100" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="gpuGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#D4AF37" stop-opacity="0.3"/>
+                    <stop offset="100%" stop-color="#D4AF37" stop-opacity="0.0"/>
+                  </linearGradient>
+                  <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.25"/>
+                    <stop offset="100%" stop-color="#22d3ee" stop-opacity="0.0"/>
+                  </linearGradient>
+                </defs>
+                <!-- Grid Lines -->
+                <line x1="0" y1="25" x2="600" y2="25" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3,3" />
+                <line x1="0" y1="50" x2="600" y2="50" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3,3" />
+                <line x1="0" y1="75" x2="600" y2="75" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3,3" />
+                <!-- Area and line paths populated dynamically by JS -->
+                <path id="mining-chart-gpu-area" fill="url(#gpuGrad)" d="M0,100 L600,100 Z" />
+                <path id="mining-chart-gpu-line" fill="none" stroke="#D4AF37" stroke-width="2" d="M0,100 L600,100" />
+                <path id="mining-chart-cpu-line" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="2,2" d="M0,100 L600,100" />
+              </svg>
             </div>
           </div>
 
@@ -702,17 +775,17 @@
             class="pt-3 border-t border-[var(--border-app)] flex flex-wrap items-center justify-between gap-3 text-xs">
             <div class="flex items-center gap-2 flex-1 min-w-[280px]">
               <span class="text-[11px] text-[var(--text-dim)] font-mono whitespace-nowrap">Wallet Address:</span>
-              <input id="mining-wallet-input" type="text" placeholder="Enter your public wallet address..."
+              <input id="mining-wallet-input" type="text" placeholder="Enter your public ETC / payout address..."
                 class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-lg px-3 py-1.5 text-xs font-mono text-gold-400 focus:outline-none focus:border-gold">
             </div>
 
             <div class="flex items-center gap-2">
               <select id="mining-coin-select"
                 class="bg-[var(--bg-input)] border border-[var(--border-app)] rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
-                <option value="ETC" selected>Ethereum Classic (ETC - ETCHash)</option>
-                <option value="ERG">Ergo (ERG - Autolykos2)</option>
+                <option value="ETC_XMR" selected>Dual Mining: ETCHash + RandomX (Nano Pool)</option>
+                <option value="ETC">ETC Only (Ethereum Classic - 2Miners)</option>
+                <option value="ERG">Ergo Only (ERG - HeroMiners)</option>
                 <option value="UNMINEABLE_BTC">Unmineable (Payout BTC)</option>
-                <option value="UNMINEABLE_SOL">Unmineable (Payout SOL)</option>
                 <option value="UNMINEABLE_USDT">Unmineable (Payout USDT)</option>
               </select>
               <button onclick="saveMiningSettings()"
@@ -916,10 +989,192 @@
   </div>
 
 
+  <!-- ================================================================
+       MODAL: DETAILED NODE INSPECTION DASHBOARD (BLURRED BACKDROP)
+       ================================================================ -->
+  <div id="modal-node-detail"
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl hidden animate-fade-in">
+    <div
+      class="max-w-4xl w-full luxury-card p-6 rounded-2xl space-y-5 border border-gold modal-animate-in relative shadow-2xl max-h-[92vh] overflow-y-auto">
+      
+      <!-- Close Button -->
+      <button onclick="closeNodeDetailModal()"
+        class="absolute top-4 right-4 text-[var(--text-dim)] hover:text-white transition p-1.5 rounded-lg hover:bg-[var(--bg-muted)]">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pr-8">
+        <div class="flex items-center gap-3">
+          <div id="node-detail-avatar" class="w-10 h-10 rounded-xl bg-gold-gradient text-slate-950 flex items-center justify-center font-bold text-base shadow-sm">
+            🖥️
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 id="node-detail-title" class="text-sm font-bold text-white">kraken • Compute Node 1</h2>
+              <span id="node-detail-status-pill" class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                Online (14ms)
+              </span>
+            </div>
+            <p id="node-detail-subtitle" class="text-[11px] font-mono text-[var(--text-dim)]">10.11.2.22:11434 • Assigned: 7B Fast Coder</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="node-detail-flush-btn" onclick="flushCurrentNodeVram()" class="px-3 py-1.5 rounded-xl border border-rose-800/40 bg-rose-950/20 hover:bg-rose-900/40 text-rose-300 text-xs font-mono flex items-center gap-1.5 transition" title="Offload models to free 100% VRAM">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-400"></i> Flush VRAM
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Metrics Grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+        <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
+          <span class="text-[10px] text-[var(--text-dim)] block">CPU Load</span>
+          <span id="node-detail-cpu-val" class="font-bold text-white text-sm">18.5%</span>
+        </div>
+        <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
+          <span class="text-[10px] text-[var(--text-dim)] block">System Memory</span>
+          <span id="node-detail-ram-val" class="font-bold text-white text-sm">8.4 / 32 GB (26%)</span>
+        </div>
+        <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-gold/40 space-y-1">
+          <span class="text-[10px] text-[var(--text-dim)] block">Total VRAM</span>
+          <span id="node-detail-vram-val" class="font-bold text-gold-400 text-sm">2.4 / 10.0 GB</span>
+        </div>
+        <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
+          <span class="text-[10px] text-[var(--text-dim)] block">Node State</span>
+          <span id="node-detail-state-val" class="font-bold text-emerald-400 text-sm">Inference Ready</span>
+        </div>
+      </div>
+
+      <!-- Dual GPUs Deep Telemetry Section -->
+      <div class="space-y-2">
+        <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
+          <i data-lucide="cpu" class="w-3.5 h-3.5 text-gold-500"></i> Dual NVIDIA Quadro P2000 Telemetry
+        </h3>
+        <div id="node-detail-gpus-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Top Processes Table -->
+      <div class="space-y-2">
+        <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
+          <i data-lucide="terminal" class="w-3.5 h-3.5 text-gold-500"></i> Active Node Processes (Top CPU/GPU)
+        </h3>
+        <div class="overflow-x-auto rounded-xl border border-[var(--border-app)] bg-[var(--bg-input)]">
+          <table class="w-full text-left font-mono text-[11px]">
+            <thead class="bg-[var(--bg-muted)] text-[10px] text-[var(--text-dim)] uppercase border-b border-[var(--border-app)]">
+              <tr>
+                <th class="px-3 py-1.5">PID</th>
+                <th class="px-3 py-1.5">User</th>
+                <th class="px-3 py-1.5">% CPU</th>
+                <th class="px-3 py-1.5">% MEM</th>
+                <th class="px-3 py-1.5">Command</th>
+              </tr>
+            </thead>
+            <tbody id="node-detail-processes-tbody" class="divide-y divide-[var(--border-app)] text-[var(--text-secondary)]">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Resident AI Models in Memory -->
+      <div class="space-y-2">
+        <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-gold-500"></i> Available & Resident Ollama Models
+        </h3>
+        <div id="node-detail-models-list" class="flex flex-wrap gap-2 text-xs font-mono">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+    </div>
+  </div>
 
 
+  <!-- ================================================================
+       MODAL: INDIVIDUAL PROJECT & WORKSPACE SETTINGS (ANTIGRAVITY PARITY)
+       ================================================================ -->
+  <div id="modal-project-settings"
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden animate-fade-in">
+    <div
+      class="max-w-lg w-full luxury-card p-6 rounded-2xl space-y-4 border border-gold modal-animate-in relative shadow-2xl">
+      <button onclick="closeProjectSettingsModal()"
+        class="absolute top-4 right-4 text-[var(--text-dim)] hover:text-white transition">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
 
-  <!-- Custom Right-Click Context Menu -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-gold-gradient text-slate-950 flex items-center justify-center font-bold text-sm shadow-sm">
+          ⚙️
+        </div>
+        <div>
+          <h2 class="text-xs font-bold text-white">Project Governance & Rules</h2>
+          <p id="project-settings-subtitle" class="text-[10px] text-[var(--text-dim)] font-mono truncate max-w-sm">Configure permissions for this workspace</p>
+        </div>
+      </div>
+
+      <form onsubmit="saveProjectSettings(event)" class="space-y-3.5 text-xs">
+        
+        <!-- Setting 1: Terminal Command Execution -->
+        <div class="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)]">
+          <div class="space-y-0.5">
+            <span class="font-bold text-white block">Allow Terminal Command Execution</span>
+            <span class="text-[10px] text-[var(--text-dim)] block">Allows Courtesy to run builds, tests, and bash scripts</span>
+          </div>
+          <input type="checkbox" id="setting-allow-commands" class="w-4 h-4 accent-gold-500 cursor-pointer">
+        </div>
+
+        <!-- Setting 2: Auto-Apply File Modifications -->
+        <div class="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)]">
+          <div class="space-y-0.5">
+            <span class="font-bold text-white block">Auto-Apply File Modifications</span>
+            <span class="text-[10px] text-[var(--text-dim)] block">Automatically write approved code edits directly to disk</span>
+          </div>
+          <input type="checkbox" id="setting-auto-apply" class="w-4 h-4 accent-gold-500 cursor-pointer">
+        </div>
+
+        <!-- Setting 3: Preferred Model for this project -->
+        <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
+          <label class="font-bold text-white block">Preferred AI Model Override</label>
+          <select id="setting-preferred-model" class="w-full bg-[var(--bg-muted)] border border-[var(--border-app)] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-gold">
+            <option value="auto">Cluster Auto (Context-Aware)</option>
+            <option value="7b">7B Fast Coder (Pinned to kraken)</option>
+            <option value="14b">14B Heavy Coder (Pinned to cst7)</option>
+          </select>
+        </div>
+
+        <!-- Setting 4: Web Docs Grounding -->
+        <div class="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)]">
+          <div class="space-y-0.5">
+            <span class="font-bold text-white block">Web Research Grounding</span>
+            <span class="text-[10px] text-[var(--text-dim)] block">Search documentation & external libraries when needed</span>
+          </div>
+          <input type="checkbox" id="setting-web-access" checked class="w-4 h-4 accent-gold-500 cursor-pointer">
+        </div>
+
+        <!-- Setting 5: Custom Project Instructions -->
+        <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1.5">
+          <label class="font-bold text-white block">Custom Project Rules & Instructions</label>
+          <p class="text-[10px] text-[var(--text-dim)]">Special architectural conventions, style rules, or guidelines for this repo</p>
+          <textarea id="setting-custom-rules" rows="3" placeholder="e.g. Always write unit tests in tests/, use TypeScript strict mode, follow Tailwind CSS..." class="w-full bg-[var(--bg-muted)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold resize-none font-sans"></textarea>
+        </div>
+
+        <div class="pt-2 flex items-center justify-end gap-2">
+          <button type="button" onclick="closeProjectSettingsModal()" class="px-3.5 py-1.5 rounded-xl border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-muted)] text-xs transition">
+            Cancel
+          </button>
+          <button type="submit" class="px-4 py-1.5 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-xs shadow-sm shadow-gold-glow transition">
+            Save Project Settings
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
   <div id="context-menu" class="fixed z-[999] hidden">
     <div
       class="min-w-[180px] py-1.5 rounded-xl bg-[var(--bg-surface-elevated)] border border-[var(--border-app)] shadow-2xl backdrop-blur-xl text-xs">
