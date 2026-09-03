@@ -200,6 +200,57 @@ def resolve_route(model_query: str = "auto", preferred_server: Optional[str] = N
     )
 
 
+async def ensure_vram_headroom(target: RouteTarget, client: httpx.AsyncClient):
+    """
+    If loading 14B or a model requiring full VRAM, proactively unloads other resident models
+    via Ollama's `keep_alive: 0` API to avoid CPU RAM spilling across dual Quadro P2000s.
+    """
+    is_heavy = "14b" in target.model_name.lower()
+    if not is_heavy:
+        return
+
+    try:
+        ps_url = f"{target.base_url}/api/ps"
+        resp = await client.get(ps_url, timeout=2.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            running = data.get("models", [])
+            for m in running:
+                m_name = m.get("name", "")
+                if m_name and m_name != target.model_name:
+                    logger.info(f"Proactively offloading resident model '{m_name}' on {target.server_id} to ensure full VRAM headroom for '{target.model_name}'")
+                    await client.post(
+                        f"{target.base_url}/api/generate",
+                        json={"model": m_name, "keep_alive": 0},
+                        timeout=5.0
+                    )
+    except Exception as e:
+        logger.debug(f"VRAM headroom offload check error on {target.server_id}: {e}")
+
+
+async def offload_server_models(server: Dict[str, Any]) -> List[str]:
+    """Unloads all currently resident models on a server to free 100% of VRAM."""
+    host = server.get("host", "127.0.0.1")
+    port = server.get("port", 11434)
+    base_url = f"http://{host}:{port}"
+    unloaded = []
+
+    async with httpx.AsyncClient(timeout=6.0) as client:
+        try:
+            resp = await client.get(f"{base_url}/api/ps")
+            if resp.status_code == 200:
+                data = resp.json()
+                for m in data.get("models", []):
+                    m_name = m.get("name")
+                    if m_name:
+                        await client.post(f"{base_url}/api/generate", json={"model": m_name, "keep_alive": 0})
+                        unloaded.append(m_name)
+        except Exception as e:
+            logger.error(f"Error offloading models on {server.get('id')}: {e}")
+
+    return unloaded
+
+
 async def execute_via_cst_proxy(url_path: str, payload: Dict[str, Any], stream: bool = False):
     """
     If running locally on Windows and unable to reach 10.11.x.x directly,

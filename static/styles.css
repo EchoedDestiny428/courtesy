@@ -1,6 +1,6 @@
 /* ==========================================================================
-   Courtesy Luxury Codex & AI Cluster Fleet - Antigravity IDE & Theme System
-   Obsidian & Champagne Gold Luxury Theme with Micro-Interactions & Fluid Animations
+   Courtesy Minimalist Codex & AI Cluster Fleet - Antigravity Theme
+   Clean, Modern, Monochromatic Obsidian & Champagne Gold
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
@@ -16,65 +16,64 @@
   --gold-500: #D4AF37; /* Primary Champagne Gold */
   --gold-600: #B89225;
   --gold-700: #947216;
-  --gold-glow: rgba(212, 175, 55, 0.28);
-  --gold-glow-subtle: rgba(212, 175, 55, 0.12);
-  --gold-glow-strong: rgba(212, 175, 55, 0.45);
+  --gold-glow: rgba(212, 175, 55, 0.24);
+  --gold-glow-subtle: rgba(212, 175, 55, 0.10);
+  --gold-glow-strong: rgba(212, 175, 55, 0.40);
   --gold-subtle: rgba(212, 175, 55, 0.08);
-  --gold-border: rgba(212, 175, 55, 0.26);
+  --gold-border: rgba(212, 175, 55, 0.22);
   --gold-gradient: linear-gradient(135deg, #FDE68A 0%, #D4AF37 50%, #947216 100%);
   --gold-gradient-hover: linear-gradient(135deg, #FFF0B3 0%, #E5C158 50%, #B89225 100%);
-  --gold-gradient-subtle: linear-gradient(135deg, rgba(253, 230, 138, 0.12) 0%, rgba(212, 175, 55, 0.06) 100%);
+  --gold-gradient-subtle: linear-gradient(135deg, rgba(253, 230, 138, 0.1) 0%, rgba(212, 175, 55, 0.04) 100%);
 
   /* Animation Physics */
   --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --trans-fast: 0.18s var(--ease-smooth);
-  --trans-normal: 0.28s var(--ease-smooth);
-  --trans-slow: 0.45s var(--ease-smooth);
+  --trans-fast: 0.15s var(--ease-smooth);
+  --trans-normal: 0.25s var(--ease-smooth);
+  --trans-slow: 0.4s var(--ease-smooth);
 }
 
-/* ================= DARK THEME (Default: Deep Obsidian & Gold) ================= */
+/* ================= DARK THEME (Obsidian & Gold) ================= */
 html.dark {
   --bg-app: #08080a;
   --bg-surface: #101014;
-  --bg-surface-elevated: #16161c;
-  --bg-card: rgba(16, 16, 21, 0.82);
-  --bg-card-hover: rgba(24, 24, 32, 0.95);
+  --bg-surface-elevated: #15151b;
+  --bg-card: rgba(16, 16, 21, 0.75);
+  --bg-card-hover: rgba(22, 22, 29, 0.95);
   --bg-input: #0b0b0e;
-  --bg-muted: #181820;
+  --bg-muted: #16161c;
   --border-app: rgba(255, 255, 255, 0.07);
   --border-app-subtle: rgba(255, 255, 255, 0.04);
   --border-hover: var(--gold-border);
   --text-main: #F4F4F5;
   --text-secondary: #D4D4D8;
-  --text-muted: #A1A1AA;
-  --text-dim: #71717A;
-  --titlebar-bg: rgba(8, 8, 10, 0.88);
-  --card-shadow: 0 12px 36px -10px rgba(0, 0, 0, 0.75);
+  --text-muted: #8E8E98;
+  --text-dim: #63636E;
+  --titlebar-bg: rgba(8, 8, 10, 0.92);
+  --card-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.75);
   --code-bg: #070709;
   --editor-bg: #09090d;
 }
 
-/* ================= LIGHT THEME (Crisp Porcelain White & Gold) ================= */
+/* ================= LIGHT THEME (Porcelain White & Gold) ================= */
 html.light {
   --bg-app: #F8F9FA;
   --bg-surface: #FFFFFF;
   --bg-surface-elevated: #F4F4F5;
-  --bg-card: rgba(255, 255, 255, 0.92);
+  --bg-card: rgba(255, 255, 255, 0.9);
   --bg-card-hover: #FFFFFF;
   --bg-input: #F1F1F4;
   --bg-muted: #E4E4E7;
   --border-app: rgba(0, 0, 0, 0.07);
   --border-app-subtle: rgba(0, 0, 0, 0.04);
-  --border-hover: rgba(184, 146, 37, 0.45);
+  --border-hover: rgba(184, 146, 37, 0.4);
   --text-main: #09090B;
   --text-secondary: #27272A;
-  --text-muted: #52525B;
-  --text-dim: #71717A;
-  --titlebar-bg: rgba(248, 249, 250, 0.88);
-  --card-shadow: 0 10px 32px -8px rgba(0, 0, 0, 0.08);
-  --code-bg: #131318;
+  --text-muted: #666672;
+  --text-dim: #7B7B87;
+  --titlebar-bg: rgba(248, 249, 250, 0.92);
+  --card-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.06);
+  --code-bg: #121217;
   --editor-bg: #FFFFFF;
 }
 
@@ -109,8 +108,8 @@ code, pre, .font-mono {
 
 /* Custom Smooth Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -140,13 +139,10 @@ code, pre, .font-mono {
   border-color: var(--gold-border);
 }
 .shadow-gold-glow {
-  box-shadow: 0 0 25px -4px var(--gold-glow);
-}
-.shadow-gold-glow-lg {
-  box-shadow: 0 0 35px -2px var(--gold-glow-strong);
+  box-shadow: 0 0 20px -3px var(--gold-glow);
 }
 
-/* Smooth Luxury Cards */
+/* Minimalist Luxury Cards */
 .luxury-card {
   background: var(--bg-card);
   border: 1px solid var(--border-app);
@@ -158,21 +154,43 @@ code, pre, .font-mono {
 }
 .luxury-card:hover {
   border-color: var(--border-hover);
-  box-shadow: 0 14px 40px -10px var(--gold-glow);
+  box-shadow: 0 10px 30px -8px var(--gold-glow);
 }
 
 /* Interactive Button Hover Physics */
 button, .interactive-btn {
-  transition: transform var(--trans-fast), background-color var(--trans-fast), border-color var(--trans-fast), box-shadow var(--trans-fast);
+  transition: transform var(--trans-fast), background-color var(--trans-fast), border-color var(--trans-fast), color var(--trans-fast);
 }
 button:active, .interactive-btn:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
 }
 
 /* Smooth Progress Bars */
 .gold-progress-bar {
   background: var(--gold-gradient);
-  transition: width 0.7s var(--ease-smooth);
+  transition: width 0.6s var(--ease-smooth);
+}
+
+/* Model Toggle Segmented Control */
+.model-pill-btn {
+  padding: 0.3rem 0.75rem;
+  border-radius: 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+  transition: all var(--trans-fast);
+}
+.model-pill-btn:hover {
+  color: var(--text-main);
+}
+.model-pill-btn.active {
+  background: var(--gold-gradient);
+  color: #09090b;
+  font-weight: 700;
+  box-shadow: 0 2px 10px -2px var(--gold-glow);
 }
 
 /* Streaming Blinking Cursor */
@@ -180,7 +198,7 @@ button:active, .interactive-btn:active {
   content: '▋';
   color: var(--gold-500);
   animation: blinkCursor 0.75s infinite;
-  margin-left: 3px;
+  margin-left: 2px;
   vertical-align: baseline;
 }
 
@@ -193,7 +211,7 @@ button:active, .interactive-btn:active {
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -202,13 +220,13 @@ button:active, .interactive-btn:active {
 }
 
 .animate-fade-up {
-  animation: fadeInUp 0.38s var(--ease-smooth) forwards;
+  animation: fadeInUp 0.3s var(--ease-smooth) forwards;
 }
 
 /* Pulse animation with gold glow */
 @keyframes goldPulse {
   0% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.45); }
-  70% { box-shadow: 0 0 0 8px rgba(212, 175, 55, 0); }
+  70% { box-shadow: 0 0 0 7px rgba(212, 175, 55, 0); }
   100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
 }
 .pulse-gold {
@@ -219,9 +237,9 @@ button:active, .interactive-btn:active {
 .ide-split-pane {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-  height: calc(100vh - 128px);
-  min-height: 600px;
+  gap: 1rem;
+  height: calc(100vh - 102px);
+  min-height: 550px;
 }
 
 @media (max-width: 1024px) {
@@ -243,7 +261,7 @@ button:active, .interactive-btn:active {
 }
 .ide-editor-container:focus-within {
   border-color: var(--gold-border);
-  box-shadow: 0 0 20px -3px var(--gold-glow-subtle);
+  box-shadow: 0 0 18px -3px var(--gold-glow-subtle);
 }
 
 .ide-editor-textarea {
@@ -253,8 +271,8 @@ button:active, .interactive-btn:active {
   color: var(--text-main);
   font-family: var(--font-mono);
   font-size: 0.8125rem;
-  line-height: 1.65;
-  padding: 1rem;
+  line-height: 1.6;
+  padding: 0.875rem 1rem;
   resize: none;
   border: none;
   outline: none;
@@ -266,49 +284,49 @@ button:active, .interactive-btn:active {
 
 /* Chat Markdown Formatting */
 .chat-markdown {
-  line-height: 1.7;
-  font-size: 0.875rem;
+  line-height: 1.65;
+  font-size: 0.85rem;
 }
 .chat-markdown p {
-  margin-bottom: 0.85rem;
+  margin-bottom: 0.75rem;
 }
 .chat-markdown p:last-child {
   margin-bottom: 0;
 }
 .chat-markdown pre {
-  margin: 1rem 0;
-  border-radius: 0.85rem;
+  margin: 0.85rem 0;
+  border-radius: 0.75rem;
   border: 1px solid var(--border-app);
   background-color: var(--code-bg);
   overflow-x: auto;
   position: relative;
-  box-shadow: 0 6px 18px -4px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 14px -3px rgba(0, 0, 0, 0.4);
 }
 .chat-markdown code:not(pre code) {
   font-family: var(--font-mono);
   background-color: var(--gold-subtle);
   color: var(--gold-500);
-  padding: 0.15rem 0.45rem;
+  padding: 0.12rem 0.38rem;
   border-radius: 0.35rem;
-  font-size: 0.835em;
+  font-size: 0.825em;
   border: 1px solid var(--gold-border);
 }
 .chat-markdown pre code {
   font-family: var(--font-mono);
-  font-size: 0.8125rem;
-  padding: 1.25rem 1rem 1rem 1rem;
+  font-size: 0.8rem;
+  padding: 1.25rem 0.875rem 0.875rem 0.875rem;
   display: block;
-  line-height: 1.6;
+  line-height: 1.55;
 }
 
 /* Code Block Action Header */
 .code-block-header {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 0.4rem;
+  right: 0.4rem;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   z-index: 10;
 }
 
@@ -316,15 +334,15 @@ button:active, .interactive-btn:active {
   background: rgba(18, 18, 22, 0.85);
   border: 1px solid var(--border-app);
   color: var(--text-muted);
-  padding: 0.2rem 0.55rem;
-  border-radius: 0.45rem;
-  font-size: 0.7rem;
+  padding: 0.18rem 0.5rem;
+  border-radius: 0.4rem;
+  font-size: 0.68rem;
   font-family: var(--font-mono);
   backdrop-filter: blur(8px);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.25rem;
   transition: all var(--trans-fast);
 }
 .code-header-btn:hover {
@@ -333,30 +351,43 @@ button:active, .interactive-btn:active {
   border-color: var(--gold-500);
 }
 
-/* Modal scale animation */
-@keyframes modalIn {
-  from {
-    opacity: 0;
-    transform: scale(0.96) translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
+/* Floating Toast Notification */
+#toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
 }
-.modal-animate-in {
-  animation: modalIn 0.24s var(--ease-smooth) forwards;
-}
-
-/* Cluster Activity Strip */
-.cluster-activity-strip {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-app);
-  border-radius: 0.875rem;
+.toast-msg {
+  pointer-events: auto;
   padding: 0.6rem 1rem;
+  border-radius: 0.75rem;
+  background: rgba(18, 18, 22, 0.95);
+  border: 1px solid var(--gold-border);
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(12px);
+  color: var(--text-main);
+  font-size: 0.75rem;
+  font-weight: 600;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  font-size: 0.75rem;
+  gap: 0.5rem;
+  animation: toastIn 0.25s var(--ease-spring) forwards;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Modal scale animation */
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.97) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal-animate-in {
+  animation: modalIn 0.22s var(--ease-smooth) forwards;
 }

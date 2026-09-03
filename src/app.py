@@ -16,6 +16,7 @@ from src.config import (
 )
 from src.collector import update_all_metrics, get_cached_metrics, get_cluster_summary
 from src.openai_proxy import router as openai_router
+from src.router import offload_server_models
 
 logging.basicConfig(
     level=logging.INFO,
@@ -213,6 +214,27 @@ async def api_get_models():
         "unique_models": summary.get("models", []),
         "detailed": detailed_models
     }
+
+
+@app.post("/api/cluster/offload")
+async def api_cluster_offload():
+    """Unloads all resident models across all GPU servers to free 100% of cluster VRAM."""
+    servers = [s for s in get_servers() if s.get("enabled") and s.get("type") == "ollama"]
+    tasks = [offload_server_models(s) for s in servers]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    asyncio.create_task(update_all_metrics())
+    return {"status": "success", "unloaded": results}
+
+
+@app.post("/api/servers/{server_id}/offload")
+async def api_server_offload(server_id: str):
+    """Unloads resident models on a specific node to free its VRAM."""
+    srv = get_server_by_id(server_id)
+    if not srv:
+        raise HTTPException(status_code=404, detail=f"Server '{server_id}' not found.")
+    unloaded = await offload_server_models(srv)
+    asyncio.create_task(update_all_metrics())
+    return {"status": "success", "server_id": server_id, "unloaded": unloaded}
 
 
 # --- WebSocket for Real-time Dashboard Telemetry ---

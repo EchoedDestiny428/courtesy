@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 import httpx
 
-from src.router import resolve_route, track_request_start, track_request_end, RouteTarget
+from src.router import resolve_route, track_request_start, track_request_end, RouteTarget, ensure_vram_headroom
 from src.collector import get_cached_metrics
 from src.config import get_servers
 
@@ -80,6 +80,7 @@ async def stream_ollama_openai(target: RouteTarget, payload: Dict[str, Any]) -> 
         can_direct = True
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
+                await ensure_vram_headroom(target, client)
                 async with client.stream("POST", endpoint, json=req_payload) as resp:
                     if resp.status_code == 200:
                         async for chunk in resp.aiter_text():
