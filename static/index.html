@@ -193,603 +193,106 @@
   </div>
 
 
-  <!-- Floating Sidebar Restore Button (Appears when sidebar is collapsed) -->
-  <button id="floating-sidebar-toggle" onclick="toggleSidebar()"
-    class="fixed left-3 top-3 z-40 p-2 rounded-xl bg-[var(--bg-surface)] border border-gold/40 text-gold-500 shadow-xl hover:scale-105 transition hidden"
-    title="Expand Sidebar (Ctrl+B)">
-    <i data-lucide="panel-left-open" class="w-4 h-4"></i>
-  </button>
-
-
-  <!-- ================================================================
-       MAIN WORKBENCH: EXACT ANTIGRAVITY CODEX DEX (PERSISTENT CONTEXT)
+    <!-- ================================================================
+       MINIMALIST CODEX IDE (BUILT FROM SCRATCH)
        ================================================================ -->
-  <main id="view-standard" class="h-screen flex overflow-hidden hidden">
+  <main id="view-standard" class="h-screen flex flex-col overflow-hidden hidden bg-[#FFFFFF] text-[#09090B]">
 
-    <!-- Left Sidebar (Antigravity Style - 256px) -->
-    <aside id="sidebar-antigravity"
-      class="w-64 flex flex-col justify-between border-r border-[var(--border-app)] bg-[var(--bg-surface)] text-xs select-none shrink-0 transition-all duration-300 z-20">
-
-      <!-- Top Section -->
-      <div class="p-3 space-y-3 overflow-y-auto flex-1">
-
-        <!-- App Title & Menus with Icon -->
-        <div class="flex items-center gap-2.5 px-1 pt-0.5 select-none text-xs">
-          <div class="flex items-center gap-1.5 cursor-pointer" onclick="returnToPortal()" title="Courtesy Home">
-            <img id="sidebar-brand-logo" src="courtesy-black.png" alt="Courtesy" class="w-4 h-4 object-contain shrink-0">
-            <span class="font-bold text-[var(--text-main)] tracking-tight text-[13px]">Courtesy</span>
-          </div>
-          <span class="text-[11px] text-[var(--text-muted)] cursor-default select-none ml-1">File</span>
-          <span class="text-[11px] text-[var(--text-muted)] cursor-default select-none">View</span>
+    <!-- Minimalist Top Bar (44px) -->
+    <header class="h-11 px-4 flex items-center justify-between border-b border-[#E4E4E7] bg-[#FFFFFF] z-30 text-xs titlebar-drag-region select-none">
+      
+      <!-- Left: Home/Portal + Brand + Active File -->
+      <div class="flex items-center gap-3 no-drag">
+        <div class="flex items-center gap-2 cursor-pointer hover:opacity-75 transition" onclick="returnToPortal()" title="Return to Landing Portal">
+          <img src="courtesy-black.png" alt="Courtesy" class="w-4 h-4 object-contain">
+          <span class="font-bold text-sm tracking-tight text-black">Courtesy</span>
         </div>
-
-        <!-- Sidebar Collapse Row -->
-        <div class="flex items-center gap-2 px-1 pt-1 text-[var(--text-muted)]">
-          <button onclick="toggleSidebar()"
-            class="p-1 rounded hover:bg-[var(--bg-muted)] hover:text-[var(--text-main)] transition"
-            title="Collapse Sidebar (Ctrl+B)">
-            <i data-lucide="panel-left" class="w-4 h-4"></i>
-          </button>
-        </div>
-
-        <!-- + New Conversation Button -->
-        <button onclick="newConversation()"
-          class="w-full py-2 px-3 rounded-xl border border-[var(--border-app)] hover:border-neutral-400 bg-[var(--bg-input)] hover:bg-[var(--bg-surface-elevated)] text-[var(--text-main)] text-xs font-semibold flex items-center gap-2 hover-float transition shadow-sm">
-          <i data-lucide="plus" class="w-3.5 h-3.5 text-neutral-900"></i>
-          <span>New Conversation</span>
-        </button>
-
-        <!-- Navigation Links -->
-        <div class="space-y-0.5 text-xs text-[var(--text-muted)] font-medium pt-1">
-          <button onclick="clearChat()"
-            class="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--bg-muted)] hover:text-[var(--text-main)] flex items-center gap-2 text-left transition">
-            <i data-lucide="history" class="w-3.5 h-3.5 text-[var(--text-dim)]"></i>
-            <span>Clear Conversation</span>
-          </button>
-        </div>
-
-        <!-- Projects Tree Section -->
-        <div class="pt-2 space-y-1.5">
-          <div
-            class="flex items-center justify-between px-2 text-[10px] font-mono text-[var(--text-dim)] uppercase tracking-wider">
-            <div class="flex items-center gap-2">
-              <span>Projects</span>
-              <span id="sidebar-folder-label" class="text-gold-500/80 font-normal lowercase truncate max-w-[90px]"></span>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <button onclick="pickWorkspaceFolder()" class="hover:text-[var(--text-main)] p-0.5 rounded transition"
-                title="Add Project Folder (Opens File Explorer)">
-                <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
-              </button>
-            </div>
-          </div>
-
-          <!-- Project Tree Items (Rendered Dynamically with Saved Context) -->
-          <div id="sidebar-projects-list" class="space-y-0.5 font-mono text-xs">
-            <!-- Dynamic project list loaded from localStorage -->
-          </div>
-        </div>
-
+        <span class="text-[#D4D4D8]">/</span>
+        <span id="current-file-title" class="font-mono text-xs text-[#27272A] font-medium">untitled.py</span>
       </div>
 
-      <!-- Sidebar Bottom Footer -->
-      <div
-        class="p-3 border-t border-[var(--border-app)] flex items-center justify-between text-xs text-[var(--text-muted)]">
-        <button onclick="openAdminLoginModal()"
-          class="flex items-center gap-1.5 hover:text-[var(--text-main)] p-1 rounded-lg transition"
-          title="Cluster Admin Console">
-          <i data-lucide="settings" class="w-4 h-4 text-gold-500"></i>
-          <span>Settings</span>
+      <!-- Center: Minimal Workspace / File Actions -->
+      <div class="flex items-center gap-2 no-drag">
+        <button onclick="pickWorkspaceFolder()" class="px-3 py-1 rounded-lg border border-[#E4E4E7] hover:border-black text-xs font-mono flex items-center gap-1.5 transition text-[#27272A]" title="Open Workspace Folder">
+          <i data-lucide="folder" class="w-3.5 h-3.5 text-[#71717A]"></i>
+          <span id="current-folder-label" class="max-w-[160px] truncate">Open Folder</span>
         </button>
-
-        <button onclick="toggleTheme()"
-          class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-gold-400 hover:text-[var(--text-main)] transition"
-          title="Toggle Light / Dark Mode">
-          <i data-lucide="sun-moon" class="w-4 h-4"></i>
+        <button onclick="saveActiveFile()" class="px-3 py-1 rounded-lg bg-black text-white hover:bg-neutral-800 text-xs font-medium flex items-center gap-1.5 shadow-sm transition" title="Save File (Ctrl+S)">
+          <i data-lucide="save" class="w-3.5 h-3.5"></i>
+          <span>Save</span>
         </button>
       </div>
 
-    </aside>
+      <!-- Right: Admin Switcher, Theme & Window Controls -->
+      <div class="flex items-center gap-2 no-drag">
+        <button onclick="showView('view-admin')" class="px-2.5 py-1 rounded-lg border border-[#E4E4E7] hover:border-black text-xs font-medium text-[#27272A] flex items-center gap-1.5 transition" title="Open Cluster Admin Console">
+          <i data-lucide="settings" class="w-3.5 h-3.5 text-[#71717A]"></i>
+          <span>Admin</span>
+        </button>
 
+        <button onclick="toggleTheme()" class="p-1.5 rounded-lg hover:bg-neutral-100 text-[#71717A] hover:text-black transition" title="Toggle Light / Dark theme">
+          <i data-lucide="sun-moon" class="w-3.5 h-3.5"></i>
+        </button>
 
-    <!-- Main Dex Workbench Area (Full Width Centered) -->
-    <div id="main-dex-area" class="flex-1 flex flex-col h-full overflow-hidden relative bg-[var(--bg-app)]">
-
-      <!-- Top Bar (44px) -->
-      <header
-        class="h-11 px-4 flex items-center justify-between border-b border-[var(--border-app)] bg-[var(--titlebar-bg)] backdrop-blur-md sticky top-0 z-30 text-xs titlebar-drag-region">
-
-        <!-- Left: Sidebar Toggle + Courtesy Brand + Simple IDE/Admin Navigation -->
-        <div class="flex items-center gap-2.5 no-drag">
-          <button onclick="toggleSidebar()"
-            class="p-1.5 rounded-lg border border-[var(--border-app)] hover:border-neutral-400 hover:bg-[var(--bg-muted)] text-[var(--text-main)] transition"
-            title="Toggle Sidebar (Ctrl+B)">
-            <i data-lucide="panel-left" class="w-4 h-4"></i>
+        <!-- Window Controls -->
+        <div class="flex items-center gap-0.5 pl-2 ml-1 border-l border-[#E4E4E7]">
+          <button onclick="windowMinimize()" class="p-1 hover:bg-neutral-100 text-[#71717A] hover:text-black rounded transition" title="Minimize">
+            <i data-lucide="minus" class="w-3.5 h-3.5"></i>
           </button>
-          <div class="flex items-center gap-1.5 mr-1 cursor-pointer" onclick="returnToPortal()" title="Courtesy Home">
-            <img src="courtesy-black.png" alt="Courtesy" class="w-4 h-4 object-contain shrink-0" id="main-header-logo">
-            <span class="font-bold text-[var(--text-main)] tracking-tight text-[13px]">Courtesy</span>
-          </div>
-
-          <!-- Simple Minimalist Mode Switcher: IDE | Admin -->
-          <div class="flex items-center p-0.5 rounded-lg bg-[var(--bg-muted)] border border-[var(--border-app)] text-[11px]">
-            <button onclick="showView('view-standard')" id="topbar-btn-ide"
-              class="px-2.5 py-1 rounded-md font-semibold bg-black text-white shadow-sm transition">
-              IDE
-            </button>
-            <button onclick="showView('view-admin')" id="topbar-btn-admin"
-              class="px-2.5 py-1 rounded-md font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] transition">
-              Admin
-            </button>
-          </div>
-        </div>
-
-        <!-- Center: Active Folder Indicator & 3-Way Layout Switcher -->
-        <div class="flex items-center gap-2 no-drag">
-          <button onclick="pickWorkspaceFolder()"
-            class="px-3 py-1 rounded-xl bg-[var(--bg-muted)] border border-[var(--border-app)] hover:border-gold text-[var(--text-main)] font-mono text-xs flex items-center gap-1.5 hover-float transition shadow-sm"
-            title="Click to select workspace folder">
-            <i data-lucide="folder" class="w-3.5 h-3.5 text-gold-500"></i>
-            <span id="current-folder-label" class="max-w-[130px] truncate">Select Workspace</span>
-            <i data-lucide="chevron-down" class="w-3 h-3 text-[var(--text-dim)]"></i>
+          <button onclick="windowMaximize()" class="p-1 hover:bg-neutral-100 text-[#71717A] hover:text-black rounded transition" title="Maximize">
+            <i data-lucide="square" class="w-3 h-3"></i>
           </button>
-
-          <!-- 3-Way Mode Switcher: Chat | Split | IDE -->
-          <div class="flex items-center p-0.5 rounded-xl bg-[var(--bg-muted)] border border-[var(--border-app)] text-[10px] font-mono">
-            <button id="view-mode-btn-chat" onclick="setIdeViewMode('chat')" class="ide-view-btn px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1.5 active" title="Chat Only Mode (Ctrl+\)">
-              <i data-lucide="message-square" class="w-3 h-3"></i>
-              <span class="hidden md:inline">Chat</span>
-            </button>
-            <button id="view-mode-btn-split" onclick="setIdeViewMode('split')" class="ide-view-btn px-2.5 py-1 rounded-lg font-medium transition flex items-center gap-1.5 text-[var(--text-muted)] hover:text-white" title="Side-by-Side Split: Editor & Chat (Ctrl+\)">
-              <i data-lucide="columns-2" class="w-3 h-3"></i>
-              <span class="hidden md:inline">Split</span>
-            </button>
-            <button id="view-mode-btn-ide" onclick="setIdeViewMode('ide')" class="ide-view-btn px-2.5 py-1 rounded-lg font-medium transition flex items-center gap-1.5 text-[var(--text-muted)] hover:text-white" title="Full IDE Workspace (Ctrl+\)">
-              <i data-lucide="code-2" class="w-3 h-3"></i>
-              <span class="hidden md:inline">IDE</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Right: Connected Node, Model & Controls -->
-        <div class="flex items-center gap-2 no-drag">
-
-          <!-- Model Pills (7B Fast vs 14B Heavy) -->
-          <div
-            class="flex items-center p-0.5 rounded-xl bg-[var(--bg-muted)] border border-[var(--border-app)] text-[10px]">
-            <button onclick="selectModelMode('7b')" id="std-mode-btn-7b" class="model-pill-btn active"
-              title="Fast Qwen 2.5 Coder 7B (Pinned to kraken)">7B Fast</button>
-            <button onclick="selectModelMode('14b')" id="std-mode-btn-14b" class="model-pill-btn"
-              title="Heavy Qwen 2.5 Coder 14B (Pinned to cst7)">14B Heavy</button>
-          </div>
-
-          <!-- Sticky Pinned Node Badge (Always Connected to Same Node) -->
-          <button onclick="cyclePinnedNode()"
-            class="px-2 py-1 rounded-md text-[10px] font-mono border border-[var(--border-app)] bg-[var(--bg-muted)] hover:border-black text-[var(--text-main)] flex items-center gap-1.5 transition"
-            title="Click to swap between pinned nodes without unloading context">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            <span id="std-connected-node-label">Pinned: kraken (7B)</span>
-            <i data-lucide="refresh-cw" class="w-2.5 h-2.5 text-[var(--text-dim)]"></i>
+          <button onclick="windowClose()" class="p-1 hover:bg-rose-600 hover:text-white text-[#71717A] rounded transition" title="Close">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
           </button>
-
-          <!-- Flush / Terminate Session Button -->
-          <button onclick="terminateActiveSession()"
-            class="px-2 py-1 rounded-md border border-[var(--border-app)] hover:border-rose-500 hover:text-rose-600 text-[var(--text-muted)] text-[10px] font-mono flex items-center gap-1 transition"
-            title="Clear conversation context & flush GPU VRAM">
-            <i data-lucide="power" class="w-3 h-3"></i>
-            <span class="hidden sm:inline">Flush</span>
-          </button>
-
-          <!-- Web Docs Toggle -->
-          <button id="std-web-toggle-btn" onclick="toggleWebAccess()"
-            class="p-1.5 rounded-md border border-[var(--border-app)] hover:border-black bg-[var(--bg-muted)] text-[var(--text-main)] transition"
-            title="Toggle Web Docs Grounding">
-            <i data-lucide="globe" class="w-3.5 h-3.5"></i>
-          </button>
-
-          <!-- Day / Night Toggle -->
-          <button onclick="toggleTheme()"
-            class="p-1.5 rounded-md border border-[var(--border-app)] hover:border-black text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
-            title="Toggle Light / Dark theme">
-            <i data-lucide="sun-moon" class="w-3.5 h-3.5"></i>
-          </button>
-
-          <!-- Window Controls (Electron) -->
-          <div class="flex items-center gap-1 pl-1 border-l border-[var(--border-app)]">
-            <button onclick="windowMinimize()"
-              class="p-1 hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] rounded transition">
-              <i data-lucide="minus" class="w-3 h-3"></i>
-            </button>
-            <button onclick="windowMaximize()"
-              class="p-1 hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] rounded transition">
-              <i data-lucide="square" class="w-2.5 h-2.5"></i>
-            </button>
-            <button onclick="windowClose()"
-              class="p-1 hover:bg-rose-900 text-[var(--text-dim)] hover:text-[var(--text-main)] rounded transition">
-              <i data-lucide="x" class="w-3 h-3"></i>
-            </button>
-          </div>
-
         </div>
-      </header>
+      </div>
+    </header>
 
-      <!-- Workbench Body: Supports Chat Mode, Split Mode, and Full IDE Mode -->
-      <div id="standard-workbench-body" class="flex-1 flex overflow-hidden relative">
-
-        <!-- ================= COURTESY IDE WORKSPACE PANEL ================= -->
-        <div id="courtesy-ide-panel" class="hidden flex-1 h-full overflow-hidden flex flex-row relative bg-[var(--bg-app)]">
-
-          <!-- IDE File Tree Sidebar (Collapsible) -->
-          <div id="ide-file-tree-sidebar" class="w-56 md:w-60 h-full border-r border-[var(--border-app)] bg-[var(--bg-surface)] flex flex-col select-none shrink-0 transition-all duration-200">
-            <!-- File Tree Header -->
-            <div class="h-9 px-3 border-b border-[var(--border-app)] flex items-center justify-between text-xs font-mono">
-              <span class="font-bold text-[var(--text-main)] flex items-center gap-1.5 truncate text-[11px]">
-                <i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0"></i>
-                <span id="ide-tree-root-label" class="truncate">Workspace</span>
-              </span>
-              <div class="flex items-center gap-1 shrink-0">
-                <button onclick="createNewFilePrompt()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="New File">
-                  <i data-lucide="file-plus" class="w-3.5 h-3.5"></i>
-                </button>
-                <button onclick="createNewFolderPrompt()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="New Folder">
-                  <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
-                </button>
-                <button onclick="refreshWorkspaceTree()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="Refresh Tree">
-                  <i data-lucide="refresh-cw" class="w-3 h-3"></i>
-                </button>
-                <button onclick="toggleWorkspaceSearchDrawer()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="Search Code (Ctrl+Shift+F)">
-                  <i data-lucide="search" class="w-3.5 h-3.5"></i>
-                </button>
-              </div>
-            </div>
-
-            <!-- Quick File Filter Input -->
-            <div class="p-2 border-b border-[var(--border-app-subtle)]">
-              <div class="relative flex items-center">
-                <i data-lucide="filter" class="w-3 h-3 text-[var(--text-dim)] absolute left-2 pointer-events-none"></i>
-                <input id="ide-tree-filter-input" type="text" placeholder="Filter files..." oninput="filterFileTreeInput(this.value)"
-                  class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-lg pl-7 pr-2 py-1 text-[11px] font-mono text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none focus:border-gold">
-              </div>
-            </div>
-
-            <!-- Workspace Code Search Box (Collapsible) -->
-            <div id="ide-workspace-search-box" class="hidden p-2 border-b border-[var(--border-app)] space-y-1.5 bg-[var(--bg-input)]">
-              <div class="flex items-center justify-between text-[10px] font-mono text-[var(--text-dim)]">
-                <span>SEARCH IN WORKSPACE</span>
-                <button onclick="toggleWorkspaceSearchDrawer(false)" class="hover:text-white"><i data-lucide="x" class="w-3 h-3"></i></button>
-              </div>
-              <div class="flex items-center gap-1">
-                <input id="ide-code-search-input" type="text" placeholder="Search text..." onkeydown="handleCodeSearchKey(event)"
-                  class="flex-1 bg-[var(--bg-surface)] border border-[var(--border-app)] rounded px-2 py-1 text-[11px] font-mono text-white focus:outline-none focus:border-gold">
-                <button onclick="executeCodeSearch()" class="px-2 py-1 rounded bg-gold-gradient text-slate-950 font-bold text-[10px]">
-                  Find
-                </button>
-              </div>
-              <div id="ide-search-results-list" class="max-h-36 overflow-y-auto space-y-1 text-[10px] font-mono pr-1"></div>
-            </div>
-
-            <!-- The File Tree Structure -->
-            <div id="ide-file-tree" class="flex-1 overflow-y-auto p-1 font-mono text-xs space-y-0.5">
-              <div class="p-3 text-center text-[var(--text-dim)] text-[11px]">Loading workspace...</div>
-            </div>
-          </div>
-
-          <!-- Resizer: File Tree Sidebar Drag Handle -->
-          <div id="ide-sidebar-resizer" class="w-1.5 hover:w-2 bg-transparent hover:bg-gold-500/50 active:bg-gold-500 cursor-col-resize transition-all shrink-0 z-20 select-none flex items-center justify-center group" title="Drag to resize file tree (Double-click to reset)">
-            <div class="w-0.5 h-6 rounded-full bg-[var(--border-app)] group-hover:bg-gold-400 transition-colors"></div>
-          </div>
-
-          <!-- IDE Main Editor Column -->
-          <div class="flex-1 flex flex-col h-full overflow-hidden bg-[var(--editor-bg)]">
-
-            <!-- Tab Bar (Horizontal Tabs) -->
-            <div class="h-9 border-b border-[var(--border-app)] bg-[var(--bg-surface)] flex items-center justify-between px-2 overflow-x-auto select-none shrink-0">
-              <div id="ide-tab-bar" class="flex items-center gap-1 h-full overflow-x-auto pr-2">
-                <!-- Populated dynamically by JS -->
-              </div>
-              <div class="flex items-center gap-1 shrink-0 pl-1 border-l border-[var(--border-app)]">
-                <button onclick="createNewBufferTab()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="New Scratch Buffer">
-                  <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-                </button>
-                <button onclick="toggleFileTreeSidebar()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Toggle File Tree">
-                  <i data-lucide="sidebar" class="w-3.5 h-3.5"></i>
-                </button>
-              </div>
-            </div>
-
-            <!-- Editor Action Bar / Toolbar -->
-            <div class="h-9 px-3 border-b border-[var(--border-app)] bg-[var(--bg-surface-elevated)] flex items-center justify-between text-xs shrink-0 select-none">
-              <!-- Left: Breadcrumb Path -->
-              <div class="flex items-center gap-2 font-mono text-[11px] text-[var(--text-dim)] truncate">
-                <span id="ide-file-breadcrumb" class="truncate text-white font-medium">scratchpad.py</span>
-                <span id="ide-dirty-badge" class="hidden w-2 h-2 rounded-full bg-gold-400" title="Unsaved changes"></span>
-              </div>
-
-              <!-- Center & Right: AI Tools & Action Buttons -->
-              <div class="flex items-center gap-1.5 font-mono text-[11px]">
-                <!-- Language Selector -->
-                <select id="editor-language-select" onchange="changeEditorLanguage(this.value)"
-                  class="bg-[var(--bg-input)] border border-[var(--border-app)] rounded-md px-2 py-0.5 text-[10px] text-white focus:outline-none focus:border-gold">
-                  <option value="python">Python</option>
-                  <option value="javascript">JavaScript</option>
-                  <option value="typescript">TypeScript</option>
-                  <option value="html">HTML</option>
-                  <option value="css">CSS</option>
-                  <option value="json">JSON</option>
-                  <option value="markdown">Markdown</option>
-                  <option value="rust">Rust</option>
-                  <option value="go">Go</option>
-                  <option value="cpp">C++</option>
-                  <option value="bash">Shell / Bash</option>
-                  <option value="sql">SQL</option>
-                  <option value="yaml">YAML</option>
-                </select>
-
-                <!-- AI Quick Tools -->
-                <div class="hidden sm:flex items-center gap-1 pl-1 border-l border-[var(--border-app)]">
-                  <button onclick="sendEditorCodeToAI('explain')" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:border-gold hover:text-gold-400 text-[var(--text-muted)] text-[10px] transition flex items-center gap-1" title="Explain Selected/Active Code">
-                    <i data-lucide="help-circle" class="w-2.5 h-2.5"></i>
-                    <span>Explain</span>
-                  </button>
-                  <button onclick="sendEditorCodeToAI('refactor')" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:border-gold hover:text-gold-400 text-[var(--text-muted)] text-[10px] transition flex items-center gap-1" title="Refactor for Clean Architecture">
-                    <i data-lucide="wand-2" class="w-2.5 h-2.5"></i>
-                    <span>Refactor</span>
-                  </button>
-                  <button onclick="sendEditorCodeToAI('bugs')" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:border-gold hover:text-gold-400 text-[var(--text-muted)] text-[10px] transition flex items-center gap-1" title="Audit Code & Find Bugs">
-                    <i data-lucide="bug" class="w-2.5 h-2.5"></i>
-                    <span>Bugs</span>
-                  </button>
-                  <button onclick="sendEditorCodeToAI('tests')" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:border-gold hover:text-gold-400 text-[var(--text-muted)] text-[10px] transition flex items-center gap-1" title="Generate Unit Tests">
-                    <i data-lucide="test-tube-2" class="w-2.5 h-2.5"></i>
-                    <span>Tests</span>
-                  </button>
-                </div>
-
-                <!-- Primary Action Buttons -->
-                <div class="flex items-center gap-1 pl-1 border-l border-[var(--border-app)]">
-                  <button onclick="toggleFindReplace()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Find & Replace (Ctrl+F)">
-                    <i data-lucide="search" class="w-3.5 h-3.5"></i>
-                  </button>
-                  <button onclick="saveActiveFile()" class="px-2.5 py-0.5 rounded-md bg-black text-white hover:bg-neutral-800 font-medium text-[10px] shadow-sm transition flex items-center gap-1" title="Save to Disk (Ctrl+S)">
-                    <i data-lucide="save" class="w-3 h-3 stroke-[2.5]"></i>
-                    <span class="hidden sm:inline">Save</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Find & Replace Overlay Bar (Floating) -->
-            <div id="ide-find-replace-bar" class="hidden px-3 py-1.5 border-b border-[var(--border-app)] bg-[var(--bg-surface-elevated)] flex flex-wrap items-center gap-2 text-xs font-mono select-none animate-fade-in">
-              <div class="flex items-center gap-1.5 flex-1 min-w-[180px]">
-                <span class="text-[10px] text-[var(--text-dim)]">Find:</span>
-                <input id="ide-find-input" type="text" placeholder="Search in editor..." onkeydown="handleFindInputKey(event)"
-                  class="flex-1 bg-[var(--bg-input)] border border-[var(--border-app)] rounded px-2 py-0.5 text-xs text-[var(--text-main)] focus:outline-none focus:border-black">
-              </div>
-              <div class="flex items-center gap-1.5 flex-1 min-w-[180px]">
-                <span class="text-[10px] text-[var(--text-dim)]">Replace:</span>
-                <input id="ide-replace-input" type="text" placeholder="Replace with..."
-                  class="flex-1 bg-[var(--bg-input)] border border-[var(--border-app)] rounded px-2 py-0.5 text-xs text-[var(--text-main)] focus:outline-none focus:border-black">
-              </div>
-              <div class="flex items-center gap-1 text-[10px]">
-                <button onclick="findNextOccurrence(false)" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-main)]">Prev</button>
-                <button onclick="findNextOccurrence(true)" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-main)]">Next</button>
-                <button onclick="replaceCurrentOccurrence()" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-main)]">Replace</button>
-                <button onclick="replaceAllOccurrences()" class="px-2 py-0.5 rounded bg-black text-white hover:bg-neutral-800 font-medium">All</button>
-                <button onclick="toggleFindReplace(false)" class="p-1 hover:text-[var(--text-main)] text-[var(--text-dim)]"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
-              </div>
-            </div>
-
-            <!-- Editor Canvas with Synchronized Line Numbers Gutter -->
-            <div class="flex-1 flex flex-row overflow-hidden relative font-mono text-xs">
-              <div id="editor-gutter" class="editor-gutter select-none">1</div>
-              <textarea id="ide-code-textarea" spellcheck="false"
-                class="ide-editor-textarea"
-                oninput="handleEditorInput()"
-                onkeydown="handleEditorKeydown(event)"
-                onscroll="syncEditorGutterScroll()"
-                onclick="updateCursorPositionStats()"
-                onkeyup="updateCursorPositionStats()"></textarea>
-            </div>
-
-            <!-- IDE Status Bar -->
-            <div id="ide-status-bar" class="h-6 px-3 border-t border-[var(--border-app)] bg-[var(--bg-surface)] flex items-center justify-between text-[10px] font-mono text-[var(--text-dim)] shrink-0 select-none whitespace-nowrap overflow-hidden">
-              <!-- Left Stats -->
-              <div class="flex items-center gap-2.5 truncate">
-                <span id="ide-stat-cursor" class="hover:text-[var(--text-main)] cursor-pointer transition-colors" onclick="focusEditor()" title="Cursor position">Ln 1, Col 1</span>
-                <span>•</span>
-                <span id="ide-stat-lines" class="hover:text-[var(--text-main)] cursor-pointer transition-colors" onclick="promptGoToLine()" title="Total lines">0 lines</span>
-                <span>•</span>
-                <span id="ide-stat-size" class="hover:text-[var(--text-main)] cursor-pointer transition-colors" title="Buffer Size">0 KB</span>
-              </div>
-
-              <!-- Right Info -->
-              <div class="flex items-center gap-2.5 shrink-0">
-                <span id="ide-stat-git" class="hidden sm:flex items-center gap-1 hover:text-[var(--text-main)] cursor-pointer transition-colors" onclick="runCommandShortcut('git status -s')" title="Git status">
-                  <i data-lucide="git-branch" class="w-2.5 h-2.5 text-[var(--text-muted)]"></i>
-                  <span id="ide-git-branch-label">main</span>
-                </span>
-                <span class="hidden sm:inline">•</span>
-                <span id="ide-stat-spaces" class="hidden md:inline hover:text-[var(--text-main)] cursor-pointer transition-colors" onclick="toggleIndentSpaces()" title="Indentation">Spaces: 2</span>
-                <span class="hidden md:inline">•</span>
-                <span id="ide-stat-encoding" class="hover:text-[var(--text-main)] cursor-pointer transition-colors" onclick="showEncodingInfo()" title="File Encoding">UTF-8</span>
-                <span>•</span>
-                <span id="ide-stat-lang" class="text-[var(--text-main)] font-semibold uppercase hover:underline cursor-pointer transition-colors" onclick="focusLanguageSelect()" title="Language Mode">PYTHON</span>
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-
-        <!-- Resizer: Split Mode (IDE / Chat Copilot) Drag Handle -->
-        <div id="ide-chat-resizer" class="hidden w-1.5 hover:w-2 bg-transparent hover:bg-gold-500/50 active:bg-gold-500 cursor-col-resize transition-all shrink-0 z-30 select-none flex items-center justify-center group" title="Drag to resize split panes (Double-click for 50/50)">
-          <div class="w-0.5 h-10 rounded-full bg-[var(--border-app)] group-hover:bg-gold-400 transition-colors"></div>
-        </div>
-
-        <!-- ================= COURTESY CHAT / DEX PANEL ================= -->
-        <div id="courtesy-chat-panel" class="flex-1 flex flex-col h-full overflow-hidden relative">
-
-          <!-- Dex Main Scrollable Body -->
-          <div class="flex-1 overflow-y-auto flex flex-col justify-between p-4 md:p-6 max-w-3xl w-full mx-auto space-y-6">
-
-            <!-- Conversation Feed -->
-            <div id="chat-messages" class="space-y-5 text-xs flex-1">
-
-              <!-- Empty State: Antigravity Center Welcome Card -->
-              <div id="empty-chat-placeholder"
-                class="min-h-[50vh] flex flex-col items-center justify-center text-center space-y-6 animate-fade-in pt-8">
-
-                <!-- Floating Workspace Folder Selector -->
-                <button onclick="pickWorkspaceFolder()"
-                  class="px-4 py-1.5 rounded-full border border-[var(--border-app)] bg-[var(--bg-surface-elevated)] hover:border-gold text-[var(--text-main)] font-mono text-xs flex items-center gap-2 hover-float transition shadow-sm"
-                  title="Click to open Windows File Explorer">
-                  <i data-lucide="folder" class="w-3.5 h-3.5 text-gold-500"></i>
-                  <span id="center-folder-label">courtesy</span>
-                  <i data-lucide="chevron-down" class="w-3 h-3 text-[var(--text-dim)]"></i>
-                </button>
-
-                <!-- Antigravity Center Input Pill -->
-                <div class="w-full antigravity-input-pill p-3.5 text-left space-y-3 relative hover-float">
-
-                  <!-- Textarea Prompt Input -->
-                  <textarea id="prompt-input" rows="3" placeholder="Ask Courtesy, or instruct code changes"
-                    class="w-full bg-transparent text-xs text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none resize-none font-sans leading-relaxed"
-                    onkeydown="handleInputKey(event)"></textarea>
-
-                  <!-- Inside Toolbar Controls -->
-                  <div class="flex items-center justify-between pt-1 border-t border-[var(--border-app-subtle)]">
-
-                    <!-- Left: Attachments, Plan Mode & Settings -->
-                    <div class="flex items-center gap-1.5">
-                      <button onclick="pickWorkspaceFolder()"
-                        class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
-                        title="Attach folder context / File Explorer">
-                        <i data-lucide="folder-plus" class="w-4 h-4"></i>
-                      </button>
-
-                      <button onclick="insertPromptPrefix('/plan ')"
-                        class="px-2 py-0.5 rounded-full border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-main)] font-mono text-[10px] hover:border-black transition flex items-center gap-1"
-                        title="Generate Antigravity Implementation Plan">
-                        <i data-lucide="clipboard-list" class="w-3 h-3"></i>
-                        <span>/plan</span>
-                      </button>
-
-                      <button onclick="openProjectSettingsModal()"
-                        class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
-                        title="Project Settings & Rules">
-                        <i data-lucide="settings" class="w-3.5 h-3.5"></i>
-                      </button>
-
-                      <div
-                        class="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--bg-muted)] border border-[var(--border-app)] text-[10px] font-mono text-[var(--text-main)]">
-                        <span id="active-model-display">🧠 Qwen 2.5 Coder 14B</span>
-                      </div>
-                    </div>
-
-                    <!-- Right: Voice Mic & Send Button -->
-                    <div class="flex items-center gap-2">
-                      <button onclick="startVoiceInput('prompt-input')"
-                        class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
-                        title="Voice Input (Speech to Text)">
-                        <i data-lucide="mic" class="w-3.5 h-3.5"></i>
-                      </button>
-
-                      <button id="stop-stream-btn" onclick="stopGenerating()"
-                        class="hidden px-2.5 py-1 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 text-[10px] font-bold border border-rose-800 transition flex items-center gap-1">
-                        <i data-lucide="square" class="w-2.5 h-2.5 fill-current"></i>
-                        <span>Stop</span>
-                      </button>
-
-                      <button id="send-prompt-btn" onclick="sendPrompt()"
-                        class="w-7 h-7 rounded-full bg-black hover:bg-neutral-800 text-white flex items-center justify-center font-bold transition shadow-sm hover:scale-105"
-                        title="Send (Enter)">
-                        <i data-lucide="arrow-right" class="w-3.5 h-3.5 stroke-[2.5]"></i>
-                      </button>
-                    </div>
-
-                  </div>
-
-                </div>
-
-                <!-- Sub-pill: Local / Cluster Target -->
-                <div class="flex items-center gap-2 text-[10px] font-mono text-[var(--text-dim)]">
-                  <span
-                    class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--bg-surface)] border border-[var(--border-app)]">
-                    <i data-lucide="hard-drive" class="w-3 h-3 text-gold-500"></i>
-                    <span>Local Workspace</span>
-                  </span>
-                  <span>•</span>
-                  <span
-                    class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--bg-surface)] border border-[var(--border-app)]">
-                    <i data-lucide="cpu" class="w-3 h-3 text-emerald-400"></i>
-                    <span>6x Quadro P2000 Cluster (cst)</span>
-                  </span>
-                </div>
-
-              </div>
-
-            </div>
-
-            <!-- Sticky Floating Input for Ongoing Conversations -->
-            <div id="sticky-chat-input-bar" class="hidden pt-2 sticky bottom-0 z-10 w-full bg-[var(--bg-app)]">
-              <div class="antigravity-input-pill p-3 text-left space-y-2 hover-float">
-                <textarea id="sticky-prompt-input" rows="2" placeholder="Ask Courtesy, or instruct code changes"
-                  class="w-full bg-transparent text-xs text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none resize-none font-sans leading-relaxed"
-                  onkeydown="handleStickyInputKey(event)"></textarea>
-
-                <div class="flex items-center justify-between pt-1 border-t border-[var(--border-app-subtle)]">
-                  <div class="flex items-center gap-1.5">
-                    <button onclick="pickWorkspaceFolder()"
-                      class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
-                      title="Choose Workspace Folder">
-                      <i data-lucide="folder-plus" class="w-4 h-4"></i>
-                    </button>
-                    <button onclick="insertPromptPrefix('/plan ')"
-                      class="px-2 py-0.5 rounded-full border border-gold/30 bg-[var(--gold-subtle)] text-gold-400 font-mono text-[10px] hover:border-gold transition flex items-center gap-1"
-                      title="Generate Antigravity Implementation Plan">
-                      <i data-lucide="clipboard-list" class="w-3 h-3"></i>
-                      <span>/plan</span>
-                    </button>
-                    <button onclick="openProjectSettingsModal()"
-                      class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
-                      title="Project Settings & Rules">
-                      <i data-lucide="settings" class="w-3.5 h-3.5"></i>
-                    </button>
-                    <span class="text-[10px] font-mono text-[var(--text-main)] hidden sm:inline" id="sticky-model-display">🧠 Qwen 2.5 Coder 14B</span>
-                  </div>
-
-                  <div class="flex items-center gap-2">
-                    <button onclick="startVoiceInput('sticky-prompt-input')"
-                      class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
-                      title="Voice Input (Speech to Text)">
-                      <i data-lucide="mic" class="w-3.5 h-3.5"></i>
-                    </button>
-                    <button id="sticky-stop-btn" onclick="stopGenerating()"
-                      class="hidden px-2.5 py-1 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 text-[10px] font-bold border border-rose-800 transition flex items-center gap-1">
-                      <i data-lucide="square" class="w-2.5 h-2.5 fill-current"></i> Stop
-                    </button>
-                    <button id="sticky-send-btn" onclick="sendStickyPrompt()"
-                      class="w-7 h-7 rounded-full bg-black hover:bg-neutral-800 text-white flex items-center justify-center font-bold transition shadow-sm hover:scale-105"
-                      title="Send (Enter)">
-                      <i data-lucide="arrow-right" class="w-3.5 h-3.5 stroke-[2.5]"></i>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-
+    <!-- Minimalist Editor Body (From Scratch) -->
+    <div class="flex-1 flex overflow-hidden relative bg-[#FFFFFF]">
+      
+      <!-- Minimal Line Number Gutter -->
+      <div id="editor-gutter"
+        class="w-12 py-3 px-2 text-right select-none font-mono text-xs text-[#A1A1AA] border-r border-[#F4F4F5] bg-[#FAFAFA] overflow-hidden shrink-0 leading-6 font-normal">
+        1
       </div>
 
+      <!-- Minimal Code Editor Canvas -->
+      <div class="flex-1 flex flex-col h-full relative overflow-hidden bg-[#FFFFFF]">
+        <textarea id="editor-textarea" spellcheck="false"
+          placeholder="Start typing your code here..."
+          class="flex-1 w-full h-full p-3 font-mono text-xs leading-6 bg-transparent text-[#09090B] placeholder-[#A1A1AA] resize-none focus:outline-none border-none select-text whitespace-pre overflow-auto"
+          oninput="syncEditorGutter(); onEditorInput(this.value);"
+          onscroll="syncEditorGutterScroll()"
+          onclick="updateCursorPositionStats()"
+          onkeyup="updateCursorPositionStats()"></textarea>
+      </div>
+
+    </div>
+
+    <!-- Minimalist Status Bar (24px) -->
+    <div id="ide-status-bar" class="h-6 px-4 border-t border-[#E4E4E7] bg-[#FAFAFA] flex items-center justify-between text-[11px] font-mono text-[#71717A] shrink-0 select-none">
+      <div class="flex items-center gap-3">
+        <span id="ide-stat-cursor">Ln 1, Col 1</span>
+        <span>•</span>
+        <span id="ide-stat-lines">1 line</span>
+        <span>•</span>
+        <span id="ide-stat-size">0 B</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="ide-stat-spaces">Spaces: 2</span>
+        <span>•</span>
+        <span id="ide-stat-encoding">UTF-8</span>
+        <span>•</span>
+        <span id="ide-stat-lang" class="font-semibold text-black uppercase">PYTHON</span>
+      </div>
     </div>
 
   </main>
 
 
-  <!-- ================================================================
+<!-- ================================================================
        VIEW 4: ADMIN CONSOLE (SUPERUSER CONTROL CENTER)
        ================================================================ -->
   <div id="view-admin" class="min-h-screen flex flex-col hidden animate-fade-in">

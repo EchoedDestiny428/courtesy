@@ -67,44 +67,20 @@ let pinnedNode = localStorage.getItem('pinned_cluster_node') || 'kraken';
 
 function showView(viewId) {
   const views = ['view-portal', 'view-standard', 'view-admin'];
-  // Safety guard: ensure viewId is valid, default to view-portal to avoid softlocks
   const targetView = views.includes(viewId) ? viewId : 'view-portal';
   views.forEach(v => {
     const el = document.getElementById(v);
     if (el) {
       if (v === targetView) {
         el.classList.remove('hidden');
+        el.style.display = 'flex';
       } else {
         el.classList.add('hidden');
+        el.style.display = 'none';
       }
     }
   });
   currentView = targetView.replace('view-', '');
-  
-  // Synchronize Topbar Minimalist Mode Buttons
-  const ideBtn = document.getElementById('topbar-btn-ide');
-  const adminBtn = document.getElementById('topbar-btn-admin');
-  if (ideBtn) {
-    if (targetView === 'view-standard') {
-      ideBtn.className = "px-2.5 py-1 rounded-md font-semibold bg-black text-white shadow-sm transition";
-    } else {
-      ideBtn.className = "px-2.5 py-1 rounded-md font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] transition";
-    }
-  }
-  if (adminBtn) {
-    if (targetView === 'view-admin') {
-      adminBtn.className = "px-2.5 py-1 rounded-md font-semibold bg-black text-white shadow-sm transition";
-    } else {
-      adminBtn.className = "px-2.5 py-1 rounded-md font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] transition";
-    }
-  }
-
-  if (targetView === 'view-standard') {
-    updatePinnedNodeUI();
-    if (currentWorkspaceFolder) {
-      loadWorkspaceFileTree();
-    }
-  }
   if (window.lucide) lucide.createIcons();
 }
 
@@ -114,15 +90,14 @@ function returnToPortal() {
 
 function startStandardMode() {
   showView('view-standard');
-  const savedViewMode = localStorage.getItem('courtesy_ide_view_mode') || 'split';
-  setIdeViewMode(savedViewMode);
-  if (!currentWorkspaceFolder || workspaceProjects.length === 0) {
-    pickWorkspaceFolder();
-  } else {
-    loadActiveProjectContext();
-    loadWorkspaceFileTree();
+  const editor = document.getElementById('editor-textarea');
+  if (editor) {
+    if (!editor.value) {
+      editor.value = "# Courtesy Minimalist IDE\n# Built from scratch\n\ndef main():\n    print('Hello, Courtesy')\n\nif __name__ == '__main__':\n    main()\n";
+    }
+    syncEditorGutter();
+    updateCursorPositionStats();
   }
-  updatePinnedNodeUI();
 }
 
 // ================= Sticky Compute Node Pinning =================
@@ -4345,10 +4320,11 @@ document.addEventListener('DOMContentLoaded', () => {
           showView('view-admin');
         } else {
           sessionStorage.removeItem('admin_token');
-          showView('view-portal');
+          if (currentView === 'admin') showView('view-portal');
         }
       }).catch(() => {
-        showView('view-portal');
+        sessionStorage.removeItem('admin_token');
+        if (currentView === 'admin') showView('view-portal');
       });
     }
   } else {
