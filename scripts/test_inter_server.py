@@ -14,7 +14,7 @@ if hasattr(sys.stdout, 'reconfigure'):
 
 SERVERS = [
     {"id": "kraken", "name": "kraken (Node 1)", "host": "10.11.2.22", "port": 11434},
-    {"id": "cst6", "name": "cst6 (Node 2)", "host": "10.11.2.21", "port": 11434},
+    {"id": "cst6", "name": "cst6 (Node 2)", "host": "10.11.16.29", "port": 11434},
     {"id": "cst7", "name": "cst7 (Node 3)", "host": "10.11.2.12", "port": 11434},
 ]
 

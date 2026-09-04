@@ -52,7 +52,7 @@
       "name": "cst6 (Inference Node 2)",
       "role": "inference",
       "type": "ollama",
-      "host": "10.11.2.21",
+      "host": "10.11.16.29",
       "port": 11434,
       "ssh_host": "cst6.local",
       "ssh_user": "cst6",
