@@ -307,6 +307,16 @@ pool1 = asia-xmr.2miners.com:2222
 pool2 = xmr.2miners.com:2222
 cpuThreads = {cpu_threads}
 """
+        elif wallet.startswith("0x") or "ETC" in coin:
+            # RandomX CPU mining payout directly in ETC via Unmineable
+            ini += f"""
+[RandomX]
+coin = XMR
+wallet = ETC:{wallet}.courtesy-{node_id}-cpu#courtesy
+rigName = courtesy-{node_id}-cpu
+pool1 = rx.unmineable.com:3333
+cpuThreads = {cpu_threads}
+"""
         elif wallet.startswith("nano_") or "NANO" in coin:
             # RandomX CPU mining payout in NANO via Unmineable
             ini += f"""

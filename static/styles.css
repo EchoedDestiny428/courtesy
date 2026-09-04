@@ -3,11 +3,11 @@
    Clean, Modern, Monochromatic Obsidian & Champagne Gold
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
 :root {
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
 
   /* Metallic Champagne Gold Palette */
   --gold-200: #FEF3C7;
@@ -55,33 +55,33 @@ html.dark {
   --editor-bg: #09090d;
 }
 
-/* ================= LIGHT THEME (Porcelain White & Gold) ================= */
+/* ================= LIGHT THEME (Minimalist Pure White & Black) ================= */
 html.light {
-  --bg-app: #F8F9FA;
+  --bg-app: #FFFFFF;
   --bg-surface: #FFFFFF;
-  --bg-surface-elevated: #FFFFFF;
+  --bg-surface-elevated: #FAFAFA;
   --bg-card: #FFFFFF;
-  --bg-card-hover: #F9FAFB;
-  --bg-input: #F3F4F6;
-  --bg-muted: #E5E7EB;
-  --border-app: rgba(0, 0, 0, 0.09);
-  --border-app-subtle: rgba(0, 0, 0, 0.05);
-  --border-hover: rgba(184, 146, 37, 0.5);
+  --bg-card-hover: #F8F9FA;
+  --bg-input: #F4F4F6;
+  --bg-muted: #EEEEF1;
+  --border-app: #E4E4E7;
+  --border-app-subtle: #F0F0F2;
+  --border-hover: #18181B;
   --text-main: #09090B;
-  --text-secondary: #27272A;
-  --text-muted: #4B5563;
-  --text-dim: #6B7280;
-  --titlebar-bg: rgba(255, 255, 255, 0.96);
-  --card-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.06);
-  --code-bg: #F1F3F5;
+  --text-secondary: #18181B;
+  --text-muted: #52525B;
+  --text-dim: #71717A;
+  --titlebar-bg: rgba(255, 255, 255, 0.98);
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  --code-bg: #F8F9FA;
   --editor-bg: #FFFFFF;
 }
 
 html.light .chat-markdown pre {
-  background-color: #F1F3F5 !important;
+  background-color: #F8F9FA !important;
   color: #09090B !important;
-  border: 1px solid rgba(0, 0, 0, 0.09) !important;
-  box-shadow: 0 2px 10px -2px rgba(0, 0, 0, 0.04) !important;
+  border: 1px solid #E4E4E7 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
 }
 
 html.light .chat-markdown pre code {
@@ -90,21 +90,75 @@ html.light .chat-markdown pre code {
 }
 
 html.light .chat-markdown code:not(pre code) {
-  background-color: rgba(212, 175, 55, 0.12) !important;
-  color: #947216 !important;
-  border: 1px solid rgba(212, 175, 55, 0.3) !important;
+  background-color: #F4F4F6 !important;
+  color: #09090B !important;
+  border: 1px solid #E4E4E7 !important;
+  font-weight: 500;
 }
 
 html.light .code-header-btn {
-  background: rgba(255, 255, 255, 0.95) !important;
-  color: #374151 !important;
-  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  background: #FFFFFF !important;
+  color: #18181B !important;
+  border: 1px solid #E4E4E7 !important;
 }
 
 html.light .luxury-card {
   background: #FFFFFF !important;
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.05) !important;
+  border: 1px solid #E4E4E7 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Light Mode Component Overrides */
+html.light .ide-view-btn.active {
+  background: #09090B !important;
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+}
+
+html.light .model-pill-btn.active {
+  background: #09090B !important;
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+}
+
+html.light .ide-tab.active {
+  background: #FFFFFF !important;
+  border-top: 2px solid #09090B !important;
+  border-left-color: #E4E4E7 !important;
+  border-right-color: #E4E4E7 !important;
+  color: #09090B !important;
+  font-weight: 600;
+}
+
+html.light .file-tree-item.active {
+  background: #F4F4F6 !important;
+  color: #09090B !important;
+  font-weight: 600 !important;
+  border-left: 2px solid #09090B !important;
+}
+
+html.light .antigravity-input-pill {
+  background: #FFFFFF !important;
+  border: 1px solid #E4E4E7 !important;
+  box-shadow: 0 2px 12px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .antigravity-input-pill:focus-within {
+  border-color: #09090B !important;
+  box-shadow: 0 0 0 1px #09090B, 0 4px 16px -2px rgba(0, 0, 0, 0.08) !important;
+}
+
+html.light #send-prompt-btn,
+html.light #sticky-send-btn {
+  background: #09090B !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.2) !important;
+}
+
+html.light #send-prompt-btn:hover,
+html.light #sticky-send-btn:hover {
+  background: #27272A !important;
 }
 
 /* Base resets & typography */

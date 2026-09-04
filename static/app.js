@@ -80,8 +80,30 @@ function showView(viewId) {
     }
   });
   currentView = targetView.replace('view-', '');
+  
+  // Synchronize Topbar Minimalist Mode Buttons
+  const ideBtn = document.getElementById('topbar-btn-ide');
+  const adminBtn = document.getElementById('topbar-btn-admin');
+  if (ideBtn) {
+    if (targetView === 'view-standard') {
+      ideBtn.className = "px-2.5 py-1 rounded-md font-semibold bg-black text-white shadow-sm transition";
+    } else {
+      ideBtn.className = "px-2.5 py-1 rounded-md font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] transition";
+    }
+  }
+  if (adminBtn) {
+    if (targetView === 'view-admin') {
+      adminBtn.className = "px-2.5 py-1 rounded-md font-semibold bg-black text-white shadow-sm transition";
+    } else {
+      adminBtn.className = "px-2.5 py-1 rounded-md font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] transition";
+    }
+  }
+
   if (targetView === 'view-standard') {
     updatePinnedNodeUI();
+    if (currentWorkspaceFolder) {
+      loadWorkspaceFileTree();
+    }
   }
   if (window.lucide) lucide.createIcons();
 }
@@ -851,7 +873,7 @@ function showToast(message, icon = "⚡") {
 
 // ================= Dark / Light Theme Toggle =================
 function initTheme() {
-  const saved = localStorage.getItem('courtesy-theme') || 'dark';
+  const saved = localStorage.getItem('courtesy-theme') || 'light';
   applyTheme(saved);
 }
 
@@ -874,10 +896,13 @@ function applyTheme(theme) {
     if (hljsTheme) hljsTheme.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css";
   }
 
+  const logoSrc = (theme === 'light') ? 'courtesy-black.png' : 'courtesy-gold.png';
   const portalLogo = document.getElementById('portal-logo-img');
-  if (portalLogo) {
-    portalLogo.src = (theme === 'light') ? 'courtesy-black.png' : 'courtesy-gold.png';
-  }
+  if (portalLogo) portalLogo.src = logoSrc;
+  const mainHeaderLogo = document.getElementById('main-header-logo');
+  if (mainHeaderLogo) mainHeaderLogo.src = logoSrc;
+  const sidebarBrandLogo = document.getElementById('sidebar-brand-logo');
+  if (sidebarBrandLogo) sidebarBrandLogo.src = logoSrc;
 
   localStorage.setItem('courtesy-theme', theme);
   if (window.lucide) lucide.createIcons();
@@ -4313,14 +4338,16 @@ document.addEventListener('DOMContentLoaded', () => {
           showView('view-admin');
         } else {
           sessionStorage.removeItem('admin_token');
-          showView('view-portal');
+          showView('view-standard');
         }
       }).catch(() => {
-        showView('view-portal');
+        showView('view-standard');
       });
     }
   } else {
-    showView('view-portal');
+    showView('view-standard');
+    const savedViewMode = localStorage.getItem('courtesy_ide_view_mode') || 'split';
+    setIdeViewMode(savedViewMode);
   }
 
   if (window.lucide) lucide.createIcons();
