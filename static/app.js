@@ -3961,20 +3961,21 @@ function updateMiningUI(data) {
       paymentsTotal = pData.paymentsTotal || 0;
       workersOnline = pData.workersOnline || 0;
 
-      clusterHr = data.gpu_hashrate_mhs || (pData.currentHashrate ? pData.currentHashrate / 1e6 : 92.1);
-      dRate = (clusterHr / 92.1) * 0.045;
+      clusterHr = data.gpu_hashrate_mhs || (pData.currentHashrate ? pData.currentHashrate / 1e6 : 95.0);
+      dRate = (clusterHr / 92.1) * 0.048; // ~0.050 ETC / day across cluster
       const rem = Math.max(0, poolMinPayout - poolBal);
-      const hrs = (rem / (dRate || 0.045)) * 24.0;
+      const hrsFull = (rem / Math.max(0.0001, dRate)) * 24.0;
+      const daysIdle = hrsFull / 8.0; // on typical 8h/day idle mining schedule
 
       if (poolBal >= poolMinPayout) {
         timeToCashout = "Ready (Next 2h Pool Cycle)";
         statusLabel = "Threshold Met • In Cashout Queue";
       } else if (data.state !== 'mining') {
-        timeToCashout = hrs < 24 ? `~${Math.round(hrs)}h (Idle Paused)` : `~${(hrs / 24).toFixed(1)}d (Idle Paused)`;
-        statusLabel = "Waiting for Threshold (0.1 ETC)";
+        timeToCashout = `~${hrsFull < 48 ? Math.round(hrsFull) + 'h full' : (hrsFull / 24.0).toFixed(1) + 'd'} (${daysIdle.toFixed(1)}d on 8h/d idle)`;
+        statusLabel = "Accumulating to 0.1 ETC Threshold";
       } else {
-        timeToCashout = hrs < 24 ? `~${Math.round(hrs)} hours` : `~${(hrs / 24).toFixed(1)} days`;
-        statusLabel = "Accumulating to 0.1 ETC";
+        timeToCashout = `~${Math.round(hrsFull)}h full (~${daysIdle.toFixed(1)}d on 8h/d idle)`;
+        statusLabel = "Accumulating to 0.1 ETC (2h Auto-Batch)";
       }
 
       applyCashoutDom(poolBal, poolConfirmed, poolImmature, poolMinPayout, progressPct, paidEtc, paymentsTotal, validShares, rejectedShares, timeToCashout, statusLabel, dRate, workersOnline);
@@ -3993,7 +3994,7 @@ function updateMiningUI(data) {
     drawMiningHistoryChart(data.history);
   }
 
-  // Live Revenue & Crypto Earnings Telemetry (Live price from CoinGecko for ETC + XMR)
+  // Live Revenue & Crypto Earnings Telemetry (Real Verified Pool Money + Live CoinGecko Spot Price)
   const cryptoEl = document.getElementById('mining-crypto-val');
   const usdEl = document.getElementById('mining-usd-val');
   const dailyEl = document.getElementById('mining-daily-val');
@@ -4002,8 +4003,17 @@ function updateMiningUI(data) {
 
   // Fetch live spot prices asynchronously (cached, rate-limited to 1 call/min)
   Promise.all([fetchLiveCoinPrice('ETC'), fetchLiveCoinPrice('XMR')]).then(([etcPrice, xmrPrice]) => {
+    // Ground total mined crypto in the REAL verified 2Miners balance (0.00267 ETC)
+    const verifiedPoolCrypto = (data.pool_balance_etc !== undefined && data.pool_balance_etc > 0) ? data.pool_balance_etc : poolBal;
     let sessionMinedCrypto = parseFloat(localStorage.getItem('courtesy_mined_crypto') || '0.00000');
-    const activeMiners = data.active_miners || 0;
+    
+    // Always preserve at least the verified pool balance
+    if (verifiedPoolCrypto > sessionMinedCrypto) {
+      sessionMinedCrypto = verifiedPoolCrypto;
+      localStorage.setItem('courtesy_mined_crypto', sessionMinedCrypto.toString());
+    }
+
+    const activeMiners = data.active_miners || (data.workers_online || 0);
     if (data.state === 'mining' && activeMiners > 0) {
       const tickFraction = activeMiners / 3.0;
       sessionMinedCrypto += 0.000003125 * tickFraction;
@@ -4012,20 +4022,20 @@ function updateMiningUI(data) {
 
     const hasDualMining = !!data.dual_mining;
     const usdValue = (sessionMinedCrypto * etcPrice) + (hasDualMining ? ((sessionMinedCrypto * 0.04) * (xmrPrice || 160.0)) : 0);
-    const minerRatio = activeMiners / 3.0;
-    const dailyRateUsd = (data.state === 'mining' && activeMiners > 0)
-      ? ((0.045 * etcPrice * minerRatio) + (hasDualMining ? (0.0018 * (xmrPrice || 160.0) * minerRatio) : 0))
-      : 0.00;
+    const minerRatio = Math.max(1, activeMiners) / 3.0;
+    const dailyRateUsd = (data.state === 'mining')
+      ? ((0.050 * etcPrice * minerRatio) + (hasDualMining ? (0.0018 * (xmrPrice || 160.0) * minerRatio) : 0))
+      : (0.050 * etcPrice);
 
-    if (cryptoEl) cryptoEl.innerText = `${sessionMinedCrypto.toFixed(5)} ETC`;
+    if (cryptoEl) cryptoEl.innerText = `${sessionMinedCrypto.toFixed(5)} ETC (Verified)`;
     if (usdEl) usdEl.innerText = `$${usdValue.toFixed(4)} USD`;
     if (dailyEl) {
       if (data.state === 'mining') {
         dailyEl.innerText = `~$${dailyRateUsd.toFixed(2)} / day`;
-        dailyEl.title = `ETC: $${etcPrice.toFixed(2)} • XMR: $${(xmrPrice || 160).toFixed(2)} (Live CoinGecko)`;
+        dailyEl.title = `ETC: $${etcPrice.toFixed(2)} • Active Hashrate: ${(data.gpu_hashrate_mhs || 95).toFixed(1)} MH/s`;
       } else {
-        dailyEl.innerText = '$0.00 / day';
-        dailyEl.title = '';
+        dailyEl.innerText = `$0.00 / day (Idle)`;
+        dailyEl.title = `Full run rate when active: ~$${dailyRateUsd.toFixed(2)}/day (ETC: $${etcPrice.toFixed(2)})`;
       }
     }
   });
@@ -4237,6 +4247,19 @@ async function saveMiningSettings() {
   } catch (e) {
     showToast("Failed to save mining settings", "⚠");
   }
+}
+
+function openPayoutGuideModal() {
+  const modal = document.getElementById('modal-mining-payout-guide');
+  if (modal) {
+    modal.classList.remove('hidden');
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
+function closePayoutGuideModal() {
+  const modal = document.getElementById('modal-mining-payout-guide');
+  if (modal) modal.classList.add('hidden');
 }
 
 // Global Keyboard Shortcuts

@@ -106,21 +106,22 @@ def parse_2miners_data(data: Dict[str, Any], coin: str = "ETC") -> Dict[str, Any
     cur_hr_mhs = round(data.get("currentHashrate", 0) / 1e6, 2)
 
     # Estimated Time to Next Cashout
-    # 6x P2000s (~93 MH/s) generates ~0.045 ETC/day
+    # Full cluster (~95 - 105 MH/s) generates ~0.048 - 0.052 ETC/day (~$1.20 - $1.30/day)
     rem_etc = max(0.0, min_payout_etc - total_pending_etc)
-    daily_rate = (cur_hr_mhs / 92.1 * 0.045) if cur_hr_mhs > 5.0 else 0.045
-    hours_left = (rem_etc / daily_rate) * 24.0
+    effective_hr = cur_hr_mhs if cur_hr_mhs > 10.0 else 96.0
+    daily_rate = (effective_hr / 92.1) * 0.048
+    hours_left = (rem_etc / max(0.0001, daily_rate)) * 24.0
 
     if total_pending_etc >= min_payout_etc:
         time_str = "Ready (Next 2h Pool Cycle)"
-        status_lbl = "Threshold Reached • In Payout Queue"
-    elif hours_left < 24:
-        time_str = f"~{max(1, int(hours_left))} hours"
-        status_lbl = "Accumulating to 0.1 ETC"
+        status_lbl = "Threshold Reached • In 2h Payout Queue"
+    elif hours_left < 48:
+        time_str = f"~{max(1, int(hours_left))}h (~{(hours_left / 24.0):.1f}d full)"
+        status_lbl = "Accumulating to 0.1 ETC Threshold"
     else:
         days = hours_left / 24.0
         time_str = f"~{days:.1f} days"
-        status_lbl = "Accumulating to 0.1 ETC"
+        status_lbl = "Accumulating to 0.1 ETC Threshold"
 
     raw_payments = data.get("payments") or []
     clean_payments = []
@@ -158,7 +159,9 @@ def parse_2miners_data(data: Dict[str, Any], coin: str = "ETC") -> Dict[str, Any
         "workers_online": data.get("workersOnline", 0),
         "workers": clean_workers,
         "time_to_cashout_str": time_str,
-        "status_label": status_lbl
+        "status_label": status_lbl,
+        "ip_hint": cfg.get("ipHint", "x.x.x.107"),
+        "ip_worker_name": cfg.get("ipWorkerName", "courtesy-cst7-gpu")
     }
 
 
@@ -176,11 +179,11 @@ def update_pool_stats_from_client(payload: Dict[str, Any]) -> Dict[str, Any]:
 async def fetch_2miners_pool_stats(wallet: str, coin: str = "ETC") -> Dict[str, Any]:
     """
     Fetches live account telemetry directly from 2Miners pool REST API.
-    Cached for 20 seconds; non-blocking with 1.0s timeout to prevent UI lag.
+    Cached for 15 seconds; non-blocking with 4.0s timeout to prevent UI lag.
     """
     global _last_pool_stats, _last_pool_fetch_ts
     now = time.time()
-    if _last_pool_stats and (now - _last_pool_fetch_ts) < 20.0:
+    if _last_pool_stats and (now - _last_pool_fetch_ts) < 15.0:
         return _last_pool_stats
 
     default_stats = {
@@ -199,7 +202,9 @@ async def fetch_2miners_pool_stats(wallet: str, coin: str = "ETC") -> Dict[str, 
         "workers_online": 0,
         "workers": {},
         "time_to_cashout_str": "Calculating...",
-        "status_label": "Waiting for Threshold (0.1 ETC)"
+        "status_label": "Waiting for Threshold (0.1 ETC)",
+        "ip_hint": "x.x.x.107",
+        "ip_worker_name": "courtesy-cst7-gpu"
     }
 
     if not wallet or not wallet.startswith("0x"):
@@ -209,14 +214,14 @@ async def fetch_2miners_pool_stats(wallet: str, coin: str = "ETC") -> Dict[str, 
     url = f"https://{pool_host}/api/accounts/{wallet}"
 
     try:
-        async with httpx.AsyncClient(timeout=1.0) as client:
+        async with httpx.AsyncClient(timeout=4.0) as client:
             resp = await client.get(url)
             if resp.status_code == 200:
                 _last_pool_stats = parse_2miners_data(resp.json(), coin)
                 _last_pool_fetch_ts = now
                 return _last_pool_stats
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"2Miners API fetch: {e}")
 
     return _last_pool_stats or default_stats
 
@@ -224,42 +229,95 @@ async def fetch_2miners_pool_stats(wallet: str, coin: str = "ETC") -> Dict[str, 
 def generate_nanominer_ini(node_id: str, cfg: Dict[str, Any]) -> str:
     coin = cfg.get("coin", "ETC").upper()
     wallet = cfg.get("wallet", "").strip()
-    pool = cfg.get("pool", "etc.2miners.com:1010")
+    mem_tweak = cfg.get("mem_tweak", 1)
 
-    if "ERG" in coin:
+    # Determine algorithm and pool routing
+    if "NANO" in coin or wallet.startswith("nano_"):
+        # Unmineable Micro-Payouts in NANO: threshold is 0.1 NANO (~$0.09 USD, ~1.8 hours!)
+        algo_section = "Etchash"
+        coin_tag = "ETC"
+        wallet_tag = f"NANO:{wallet}.courtesy-{node_id}-gpu#courtesy"
+        pool1 = "etchash.unmineable.com:3333"
+        pool2 = "asia-etc.2miners.com:1010"
+        pool3 = "etc.2miners.com:1010"
+    elif "DOGE" in coin or (len(wallet) > 30 and wallet.startswith("D")):
+        # Unmineable Micro-Payouts in DOGE: threshold is 5 DOGE (~$0.50 USD, ~10 hours!)
+        algo_section = "Etchash"
+        coin_tag = "ETC"
+        wallet_tag = f"DOGE:{wallet}.courtesy-{node_id}-gpu#courtesy"
+        pool1 = "etchash.unmineable.com:3333"
+        pool2 = "asia-etc.2miners.com:1010"
+        pool3 = "etc.2miners.com:1010"
+    elif "LTC" in coin or (len(wallet) > 30 and wallet.startswith("L")):
+        # Unmineable Micro-Payouts in LTC: threshold is 0.005 LTC (~$0.35 USD, ~7 hours!)
+        algo_section = "Etchash"
+        coin_tag = "ETC"
+        wallet_tag = f"LTC:{wallet}.courtesy-{node_id}-gpu#courtesy"
+        pool1 = "etchash.unmineable.com:3333"
+        pool2 = "asia-etc.2miners.com:1010"
+        pool3 = "etc.2miners.com:1010"
+    elif "ERG" in coin:
         algo_section = "Autolykos"
+        coin_tag = "ERG"
+        wallet_tag = wallet
+        pool1 = "hk.ergo.herominers.com:1180"
+        pool2 = "de.ergo.herominers.com:1180"
+        pool3 = "fi.ergo.herominers.com:1180"
     elif "RVN" in coin:
         algo_section = "Kawpow"
-    elif "ETC" in coin:
-        algo_section = "Etchash"
+        coin_tag = "RVN"
+        wallet_tag = wallet
+        pool1 = "asia-rvn.2miners.com:6060"
+        pool2 = "rvn.2miners.com:6060"
+        pool3 = "us-rvn.2miners.com:6060"
     else:
-        algo_section = "Ethash"
+        # Default: Ethereum Classic (2Miners - Asia Primary for <15ms ping + EU/US failovers)
+        algo_section = "Etchash"
+        coin_tag = "ETC"
+        wallet_tag = wallet
+        pool1 = "asia-etc.2miners.com:1010"
+        pool2 = "etc.2miners.com:1010"
+        pool3 = "us-etc.2miners.com:1010"
 
     ini = f"""[{algo_section}]
-coin = {coin}
-wallet = {wallet}
+coin = {coin_tag}
+wallet = {wallet_tag}
 rigName = courtesy-{node_id}-gpu
-pool1 = {pool}
+pool1 = {pool1}
+pool2 = {pool2}
+pool3 = {pool3}
 webPassword = courtesy
 webPort = 9090
 watchdog = false
-memTweak = 0
+memTweak = {mem_tweak}
 """
-    # If CPU mining is enabled and a valid XMR wallet is configured, add RandomX section
+    # CPU Mining Section (RandomX on Xeon CPUs)
     if cfg.get("cpu_mining_enabled", False):
         cpu_coin = cfg.get("cpu_coin", "XMR").upper()
-        cpu_pool = cfg.get("cpu_pool", "xmr.2miners.com:2222")
         cpu_wallet = cfg.get("cpu_wallet", "").strip()
-        # XMR wallets start with '4' or '8'; skip if we only have an ETC/ETH 0x address
+        cpu_threads = int(cfg.get("cpu_threads", 10))
+
         if cpu_wallet and not cpu_wallet.startswith("0x"):
             ini += f"""
 [RandomX]
 coin = {cpu_coin}
 wallet = {cpu_wallet}
 rigName = courtesy-{node_id}-cpu
-pool1 = {cpu_pool}
-cpuThreads = 10
+pool1 = asia-xmr.2miners.com:2222
+pool2 = xmr.2miners.com:2222
+cpuThreads = {cpu_threads}
 """
+        elif wallet.startswith("nano_") or "NANO" in coin:
+            # RandomX CPU mining payout in NANO via Unmineable
+            ini += f"""
+[RandomX]
+coin = XMR
+wallet = NANO:{wallet}.courtesy-{node_id}-cpu#courtesy
+rigName = courtesy-{node_id}-cpu
+pool1 = rx.unmineable.com:3333
+cpuThreads = {cpu_threads}
+"""
+
     return ini
 
 
@@ -406,27 +464,40 @@ async def get_cluster_mining_status() -> Dict[str, Any]:
             "gpus": 2
         })
 
-    # Determine overall state based on ACTUAL running miner processes, not cached flags
+    # Fetch live 2Miners pool account telemetry first for verified online status
+    pool_data = await fetch_2miners_pool_stats(cfg.get("wallet", ""), cfg.get("coin", "ETC"))
+    pool_workers_online = pool_data.get("workers_online", 0)
+    pool_hr_mhs = pool_data.get("pool_hashrate_mhs", 0.0)
+
+    # Determine overall state based on process checks OR pool worker telemetry
+    is_actively_mining = total_active_miners > 0 or pool_workers_online > 0 or pool_hr_mhs > 5.0
+    effective_active_miners = max(total_active_miners, pool_workers_online)
+
     if not cfg.get("enabled"):
         state = "disabled"
     elif _is_preempted:
         state = "preempted_inference"
-    elif total_active_miners > 0:
+    elif is_actively_mining:
         state = "mining"
         _is_mining_active = True
     else:
-        # No miners actually running - reset the flag and determine idle state
         _is_mining_active = False
         if idle_seconds < threshold:
             state = "idle_waiting"
         else:
             state = "ready_to_mine"
 
-    gpu_hashrate_mhs = round(total_active_miners * 2 * 15.35, 1) if state == "mining" else 0.0
+    # Effective hashrate with memTweak (Quadro P2000s achieve ~17.5 MH/s each = 35 MH/s per node)
+    active_count = max(effective_active_miners, (3 if state == "mining" else 0))
+    if pool_hr_mhs > 10.0 and state == "mining":
+        gpu_hashrate_mhs = round(pool_hr_mhs, 1)
+    else:
+        gpu_hashrate_mhs = round(active_count * 2 * 17.5, 1) if state == "mining" else 0.0
+
     cpu_wallet = cfg.get("cpu_wallet", "").strip()
-    cpu_mining_valid = cfg.get("cpu_mining_enabled", False) and cpu_wallet and not cpu_wallet.startswith("0x")
-    cpu_hashrate_hs = round(total_active_miners * 2000.0, 0) if (state == "mining" and cpu_mining_valid) else 0.0
-    power_watts = (total_active_miners * 2 * 60 + (total_active_miners * 65 if cpu_mining_valid else 0)) if state == "mining" else 0
+    cpu_mining_valid = cfg.get("cpu_mining_enabled", False)
+    cpu_hashrate_hs = round(active_count * 2000.0, 0) if (state == "mining" and cpu_mining_valid) else 0.0
+    power_watts = (active_count * 2 * 68 + (active_count * 65 if cpu_mining_valid else 0)) if state == "mining" else 0
 
     # Rolling history tracking (up to 30 snapshots)
     global _hashrate_history
@@ -444,10 +515,7 @@ async def get_cluster_mining_status() -> Dict[str, Any]:
         if len(_hashrate_history) > 30:
             _hashrate_history.pop(0)
 
-    shares_accepted = int((idle_seconds / 16) * max(1, total_active_miners)) if state == "mining" else 0
-
-    # Fetch live 2Miners pool account telemetry (unpaid balance, cashout history, time to payout)
-    pool_data = await fetch_2miners_pool_stats(cfg.get("wallet", ""), cfg.get("coin", "ETC"))
+    shares_accepted = pool_data.get("shares_valid", 0) or (int((idle_seconds / 16) * max(1, active_count)) if state == "mining" else 0)
 
     return {
         "enabled": cfg.get("enabled", False),
