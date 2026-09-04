@@ -252,7 +252,10 @@
         <div class="pt-2 space-y-1.5">
           <div
             class="flex items-center justify-between px-2 text-[10px] font-mono text-[var(--text-dim)] uppercase tracking-wider">
-            <span>Projects</span>
+            <div class="flex items-center gap-2">
+              <span>Projects</span>
+              <span id="sidebar-folder-label" class="text-gold-500/80 font-normal lowercase truncate max-w-[90px]"></span>
+            </div>
             <div class="flex items-center gap-1.5">
               <button onclick="pickWorkspaceFolder()" class="hover:text-[var(--text-main)] p-0.5 rounded transition"
                 title="Add Project Folder (Opens File Explorer)">
@@ -865,13 +868,14 @@
       <div class="hidden md:flex items-center gap-4 text-[11px] font-mono text-[var(--text-dim)] no-drag">
         <div class="flex items-center gap-1.5">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-          <span>Cluster: 6x Quadro P2000 (30GB)</span>
+          <span>Cluster: 6x Quadro P2000 (<span id="titlebar-gpus">30GB</span>)</span>
         </div>
         <span>•</span>
         <div class="flex items-center gap-1.5">
           <span class="text-gold-500">Mining:</span>
           <span id="admin-top-mining-status" class="text-white">Idle (Ready)</span>
         </div>
+        <div id="gpu-activity-meters" class="flex items-center gap-1.5"></div>
       </div>
 
       <!-- Right: Admin Action Buttons, Logout & Window Controls -->
@@ -927,7 +931,7 @@
         <div class="flex items-center gap-2">
           <button onclick="switchAdminTab('fleet')" id="admin-tab-btn-fleet"
             class="px-3 py-1 rounded-lg font-bold transition bg-gold-gradient text-slate-950 shadow-sm">
-            🖥️ Rigs & Fleet
+            🖥️ Rigs & Fleet (<span id="tab-fleet-count">3</span>)
           </button>
           <button onclick="switchAdminTab('mining')" id="admin-tab-btn-mining"
             class="px-3 py-1 rounded-lg font-medium transition text-[var(--text-muted)] hover:text-white">
@@ -960,9 +964,9 @@
               class="px-3 py-1.5 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-[11px] flex items-center gap-1.5 shadow-sm shadow-gold-glow transition">
               <i data-lucide="plus" class="w-3.5 h-3.5 stroke-[3]"></i> Add Compute Node
             </button>
-            <button onclick="fetchServersRest()"
+            <button onclick="triggerManualRefresh()"
               class="px-3 py-1.5 rounded-xl border border-[var(--border-app)] hover:border-gold text-white font-mono text-[11px] flex items-center gap-1.5 transition">
-              <i data-lucide="refresh-cw" class="w-3 h-3 text-gold-500"></i> Refresh Fleet
+              <i id="refresh-icon" data-lucide="refresh-cw" class="w-3 h-3 text-gold-500"></i> Refresh Fleet
             </button>
           </div>
         </div>
@@ -1239,6 +1243,13 @@
               </div>
 
               <div class="flex items-center gap-2">
+                <select id="swarm-iterations-select"
+                  class="px-2.5 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] text-[11px] font-mono text-[var(--text-main)] focus:border-gold outline-none transition"
+                  title="Autonomous Swarm Refinement Loops">
+                  <option value="1">1 Loop (Fast)</option>
+                  <option value="3" selected>3 Loops (Standard)</option>
+                  <option value="5">5 Loops (Deep)</option>
+                </select>
                 <button id="swarm-stop-btn" onclick="stopCurrentSwarm()"
                   class="hidden px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 font-bold text-xs border border-rose-700/50">
                   Stop Swarm
@@ -1671,7 +1682,8 @@
         </button>
       </div>
     </div>
-  </div>
+  <!-- Context Menu Container -->
+  <div id="context-menu" class="fixed z-[999] hidden">
     <div
       class="min-w-[180px] py-1.5 rounded-xl bg-[var(--bg-surface-elevated)] border border-[var(--border-app)] shadow-2xl backdrop-blur-xl text-xs">
       <button onclick="ctxCut()" class="ctx-item"><i data-lucide="scissors" class="w-3.5 h-3.5"></i> Cut <span

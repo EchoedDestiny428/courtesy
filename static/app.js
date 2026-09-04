@@ -119,20 +119,39 @@ function updatePinnedNodeUI() {
 }
 
 function cyclePinnedNode() {
-  pinnedNode = (pinnedNode === 'kraken') ? 'cst7' : 'kraken';
+  const nodes = ['kraken', 'cst6', 'cst7'];
+  const idx = nodes.indexOf(pinnedNode);
+  pinnedNode = nodes[(idx >= 0 ? idx + 1 : 0) % nodes.length];
   localStorage.setItem('pinned_cluster_node', pinnedNode);
-  selectModelMode(pinnedNode === 'kraken' ? '7b' : '14b');
+  const mode = (pinnedNode === 'cst7') ? '14b' : '7b';
+  selectModelMode(mode);
 }
 
 function selectModelMode(mode) {
   selectedModelMode = mode;
-  const btn7 = document.getElementById('std-mode-btn-7b');
-  const btn14 = document.getElementById('std-mode-btn-14b');
+  ['7b', '14b', 'auto'].forEach(m => {
+    const btn = document.getElementById(`mode-btn-${m}`);
+    const stdBtn = document.getElementById(`std-mode-btn-${m}`);
+    if (btn) btn.classList.toggle('active', m === mode);
+    if (stdBtn) stdBtn.classList.toggle('active', m === mode);
+  });
 
-  if (btn7) btn7.classList.toggle('active', mode === '7b');
-  if (btn14) btn14.classList.toggle('active', mode === '14b');
+  const modelLabels = {
+    '7b': '⚡ Qwen 2.5 Coder 7B',
+    '14b': '🧠 Qwen 2.5 Coder 14B',
+    'auto': '✨ Auto Cluster Routing'
+  };
 
-  pinnedNode = (mode === '14b') ? 'cst7' : 'kraken';
+  const activeDisplay = document.getElementById('active-model-display');
+  const stickyDisplay = document.getElementById('sticky-model-display');
+  if (activeDisplay) activeDisplay.innerText = modelLabels[mode] || mode;
+  if (stickyDisplay) stickyDisplay.innerText = modelLabels[mode] || mode;
+
+  if (mode === '14b') {
+    pinnedNode = 'cst7';
+  } else if (mode === '7b' && pinnedNode !== 'cst6') {
+    pinnedNode = 'kraken';
+  }
   localStorage.setItem('pinned_cluster_node', pinnedNode);
   updatePinnedNodeUI();
   showToast(`Pinned: ${pinnedNode} (${mode.toUpperCase()})`, "⚡");
@@ -780,49 +799,6 @@ async function restartClusterService() {
 }
 
 // ================= Model Mode & Node Pinning =================
-function selectModelMode(mode) {
-  selectedModelMode = mode;
-  ['7b', '14b', 'auto'].forEach(m => {
-    const btn = document.getElementById(`mode-btn-${m}`);
-    const stdBtn = document.getElementById(`std-mode-btn-${m}`);
-    if (btn) btn.className = m === mode ? "model-pill-btn active" : "model-pill-btn";
-    if (stdBtn) stdBtn.className = m === mode ? "model-pill-btn active" : "model-pill-btn";
-  });
-
-  const modelLabels = {
-    '7b': '⚡ Qwen 2.5 Coder 7B',
-    '14b': '🧠 Qwen 2.5 Coder 14B',
-    'auto': '✨ Auto Cluster Routing'
-  };
-
-  const activeDisplay = document.getElementById('active-model-display');
-  const stickyDisplay = document.getElementById('sticky-model-display');
-  if (activeDisplay) activeDisplay.innerText = modelLabels[mode] || mode;
-  if (stickyDisplay) stickyDisplay.innerText = modelLabels[mode] || mode;
-
-  const detailEl = document.getElementById('chat-route-detail');
-  if (mode === '7b') {
-    if (detailEl) detailEl.innerText = "⚡ qwen2.5-coder:7b (Fast)";
-    showToast("Target: 7B Fast Coder");
-  } else if (mode === '14b') {
-    if (detailEl) detailEl.innerText = "🧠 qwen2.5-coder:14b (Heavy)";
-    showToast("Target: 14B Heavy Coder");
-  } else {
-    if (detailEl) detailEl.innerText = "✨ Auto Cluster Routing";
-    showToast("Target: Auto Cluster Routing");
-  }
-}
-
-function handleNodeTargetChange() {
-  const sel = document.getElementById('node-target-select');
-  selectedNodeTarget = sel ? sel.value : 'all';
-  if (selectedNodeTarget !== 'all') {
-    showToast(`Pinned to node: ${selectedNodeTarget}`);
-  } else {
-    showToast("Cluster load-balancing active");
-  }
-}
-
 function getEffectiveModelTarget() {
   const modelName = (selectedModelMode === '14b' || pinnedNode === 'cst7') ? 'qwen2.5-coder:14b' : 'qwen2.5-coder:7b';
   const node = pinnedNode || 'kraken';
@@ -886,21 +862,15 @@ function toggleTheme() {
 
 function applyTheme(theme) {
   const html = document.documentElement;
-  const sunIcon = document.getElementById('theme-icon-sun');
-  const moonIcon = document.getElementById('theme-icon-moon');
   const hljsTheme = document.getElementById('hljs-theme');
 
   if (theme === 'light') {
     html.classList.remove('dark');
     html.classList.add('light');
-    if (sunIcon) sunIcon.classList.remove('hidden');
-    if (moonIcon) moonIcon.classList.add('hidden');
     if (hljsTheme) hljsTheme.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css";
   } else {
     html.classList.remove('light');
     html.classList.add('dark');
-    if (sunIcon) sunIcon.classList.add('hidden');
-    if (moonIcon) moonIcon.classList.remove('hidden');
     if (hljsTheme) hljsTheme.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css";
   }
 
@@ -1314,7 +1284,7 @@ function renderGpuActivityStrip(metricsMap) {
 
 function renderServers(metricsMap) {
   lastMetricsMap = metricsMap;
-  const container = document.getElementById('admin-servers-grid') || document.getElementById('servers-grid');
+  const container = document.getElementById('admin-servers-grid');
   if (!container) return;
 
   const serverIds = Object.keys(metricsMap);
@@ -1337,7 +1307,7 @@ function renderServers(metricsMap) {
 }
 
 function renderServersFromRest(serversList) {
-  const container = document.getElementById('admin-servers-grid') || document.getElementById('servers-grid');
+  const container = document.getElementById('admin-servers-grid');
   if (!container) return;
 
   const metricsMap = {};
@@ -1689,7 +1659,7 @@ let ideFileTreeData = [];
 let ideExpandedFolders = new Set();
 
 function getScratchpad() {
-  return document.getElementById('ide-code-textarea') || document.getElementById('scratchpad-editor') || document.getElementById('ide-code-area');
+  return document.getElementById('ide-code-textarea');
 }
 
 function getEditorGutter() {
@@ -2915,7 +2885,7 @@ function sendEditorCodeToAI(action) {
   // Switch to Split Mode so user sees reasoning and answer live alongside code
   setIdeViewMode('split');
 
-  const promptInput = document.getElementById('prompt-input') || document.getElementById('chat-input');
+  const promptInput = document.getElementById('prompt-input') || document.getElementById('sticky-prompt-input');
   if (promptInput) {
     promptInput.value = promptText;
     promptInput.focus();
@@ -3169,22 +3139,16 @@ function toggleWebAccess() {
   webAccessEnabled = !webAccessEnabled;
 
   const stdBtn = document.getElementById('std-web-toggle-btn');
-  const stdText = document.getElementById('std-web-status-text');
-  const adminBtn = document.getElementById('web-access-btn');
-  const adminText = document.getElementById('web-access-label');
-
-  if (webAccessEnabled) {
-    if (stdBtn) stdBtn.className = "px-2.5 py-1 rounded-xl text-[11px] font-mono flex items-center gap-1.5 transition border border-emerald-500/40 bg-emerald-950/40 text-emerald-400";
-    if (stdText) stdText.innerText = "Web Docs: ON";
-    if (adminBtn) adminBtn.className = "px-2 py-0.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition bg-emerald-500/10 border border-emerald-500/30 text-emerald-400";
-    if (adminText) adminText.innerText = "Web Docs: ON";
-    showToast("Live Web Docs Grounding: Enabled", "🌐");
-  } else {
-    if (stdBtn) stdBtn.className = "px-2.5 py-1 rounded-xl text-[11px] font-mono flex items-center gap-1.5 transition border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-dim)]";
-    if (stdText) stdText.innerText = "Web Docs: OFF";
-    if (adminBtn) adminBtn.className = "px-2 py-0.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition bg-[var(--bg-input)] border border-[var(--border-app)] text-[var(--text-dim)]";
-    if (adminText) adminText.innerText = "Web Docs: OFF";
-    showToast("Live Web Docs Grounding: Disabled", "⚪");
+  if (stdBtn) {
+    if (webAccessEnabled) {
+      stdBtn.className = "p-1.5 rounded-lg border border-gold bg-[var(--gold-subtle)] text-gold-400 hover-float transition";
+      stdBtn.title = "Live Web Docs Grounding: Enabled (Click to Disable)";
+      showToast("Live Web Docs Grounding: Enabled", "🌐");
+    } else {
+      stdBtn.className = "p-1.5 rounded-lg border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-dim)] hover-float transition";
+      stdBtn.title = "Live Web Docs Grounding: Disabled (Click to Enable)";
+      showToast("Live Web Docs Grounding: Disabled", "⚪");
+    }
   }
   if (window.lucide) lucide.createIcons();
 }
@@ -3849,9 +3813,6 @@ function updateMiningUI(data) {
   const text = document.getElementById('mining-status-text');
   const toggleBtn = document.getElementById('mining-toggle-btn');
   const toggleLabel = document.getElementById('mining-toggle-label');
-  const hashrateVal = document.getElementById('mining-hashrate-val');
-  const idleVal = document.getElementById('mining-idle-val');
-  const gpusVal = document.getElementById('mining-gpus-val');
   const walletInput = document.getElementById('mining-wallet-input');
   const coinSelect = document.getElementById('mining-coin-select');
 
@@ -3860,10 +3821,6 @@ function updateMiningUI(data) {
     if (coinSelect && data.coin) coinSelect.value = data.coin;
     initialMiningLoaded = true;
   }
-
-  if (hashrateVal) hashrateVal.innerText = `${(data.estimated_hashrate_mhs || 0).toFixed(1)} MH/s`;
-  if (idleVal) idleVal.innerText = `${data.idle_seconds || 0}s / ${data.idle_threshold || 180}s`;
-  if (gpusVal) gpusVal.innerText = `${data.active_miners || 0} / 3 Nodes (${(data.active_miners || 0) * 2} P2000s)`;
 
   if (data.state === 'mining') {
     if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping";
@@ -4088,9 +4045,10 @@ function initContextMenu() {
   document.addEventListener('contextmenu', (e) => {
     e.preventDefault();
 
-    const isEditor = e.target.closest('textarea, input, pre, code');
-    const chatMsg = e.target.closest('.chat-msg-item');
-    const projectItem = e.target.closest('.sidebar-project-item');
+    const targetEl = (e.target && e.target.nodeType === 1) ? e.target : (e.target && e.target.parentElement) ? e.target.parentElement : null;
+    const isEditor = targetEl && typeof targetEl.closest === 'function' ? targetEl.closest('textarea, input, pre, code') : null;
+    const chatMsg = targetEl && typeof targetEl.closest === 'function' ? targetEl.closest('.chat-msg-item') : null;
+    const projectItem = targetEl && typeof targetEl.closest === 'function' ? targetEl.closest('.sidebar-project-item') : null;
 
     let menuHtml = '';
 
@@ -4285,10 +4243,10 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     returnToPortal();
   }
-  // Ctrl+L: Focus chat input
+  // Ctrl+L: Focus chat prompt input
   if (e.ctrlKey && e.key === 'l' && currentView === 'standard') {
     e.preventDefault();
-    const input = document.getElementById('chat-input');
+    const input = document.getElementById('prompt-input') || document.getElementById('sticky-prompt-input');
     if (input) input.focus();
   }
   // Ctrl+\ or Ctrl+E: Cycle IDE Layout (Chat -> Split -> IDE)
