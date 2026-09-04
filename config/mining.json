@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "coin": "ETC",
+  "coin": "MATIC",
   "wallet": "0xcC324D93f2F4d61c59a33A11C24eD2F6DF223439",
-  "pool": "asia-etc.2miners.com:1010",
+  "pool": "etchash.unmineable.com:3333",
   "algo": "etchash",
   "power_limit_watts": 68,
   "idle_threshold_seconds": 120,
@@ -12,7 +12,7 @@
   "cpu_threads": 10,
   "cpu_coin": "XMR",
   "cpu_wallet": "",
-  "cpu_pool": "asia-xmr.2miners.com:2222",
+  "cpu_pool": "rx.unmineable.com:3333",
   "nano_payout": false,
   "nodes": ["kraken", "cst6", "cst7"]
 }

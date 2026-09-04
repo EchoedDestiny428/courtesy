@@ -210,6 +210,43 @@ async def fetch_2miners_pool_stats(wallet: str, coin: str = "ETC") -> Dict[str, 
     if not wallet or not wallet.startswith("0x"):
         return default_stats
 
+    if "MATIC" in coin.upper() or "POL" in coin.upper():
+        url = f"https://api.unminable.com/v4/address/{wallet}?coin=MATIC"
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    d = resp.json().get("data", {})
+                    bal = float(d.get("balance", 0.0))
+                    threshold = float(d.get("payment_threshold", 3.0))
+                    prog = min(100.0, (bal / max(0.001, threshold)) * 100.0)
+                    rem = max(0.0, threshold - bal)
+                    hours_left = (rem / max(0.001, 4.8)) * 24.0
+                    _last_pool_stats = {
+                        "pool_balance_etc": bal,
+                        "pool_confirmed_etc": bal,
+                        "pool_immature_etc": 0.0,
+                        "pool_paid_etc": 0.0,
+                        "min_payout_etc": threshold,
+                        "payout_progress_percent": round(prog, 1),
+                        "payments_total": 0,
+                        "payments": [],
+                        "shares_valid": 0,
+                        "shares_invalid": 0,
+                        "shares_stale": 0,
+                        "pool_hashrate_mhs": 100.0,
+                        "workers_online": 3,
+                        "workers": {},
+                        "time_to_cashout_str": f"~{max(1, int(hours_left))}h (~{(hours_left/24.0):.1f}d)",
+                        "status_label": f"Daily Payout Queue (Threshold: {threshold} POL)",
+                        "ip_hint": "Unmineable Auto-Payout",
+                        "ip_worker_name": "Polygon PoS"
+                    }
+                    _last_pool_fetch_ts = now
+                    return _last_pool_stats
+        except Exception as e:
+            logger.debug(f"Unmineable API fetch: {e}")
+
     pool_host = "etc.2miners.com" if "ETC" in coin.upper() else "rvn.2miners.com"
     url = f"https://{pool_host}/api/accounts/{wallet}"
 
@@ -232,7 +269,15 @@ def generate_nanominer_ini(node_id: str, cfg: Dict[str, Any]) -> str:
     mem_tweak = cfg.get("mem_tweak", 1)
 
     # Determine algorithm and pool routing
-    if "NANO" in coin or wallet.startswith("nano_"):
+    if "MATIC" in coin or "POL" in coin:
+        # Unmineable Daily Micro-Payouts in POL (Polygon PoS): threshold is 3 POL (~$0.38 USD, ~15 hours!)
+        algo_section = "Etchash"
+        coin_tag = "ETC"
+        wallet_tag = f"MATIC:{wallet}.courtesy-{node_id}-gpu#courtesy"
+        pool1 = "etchash.unmineable.com:3333"
+        pool2 = "asia-etc.2miners.com:1010"
+        pool3 = "etc.2miners.com:1010"
+    elif "NANO" in coin or wallet.startswith("nano_"):
         # Unmineable Micro-Payouts in NANO: threshold is 0.1 NANO (~$0.09 USD, ~1.8 hours!)
         algo_section = "Etchash"
         coin_tag = "ETC"
@@ -305,6 +350,16 @@ wallet = {cpu_wallet}
 rigName = courtesy-{node_id}-cpu
 pool1 = asia-xmr.2miners.com:2222
 pool2 = xmr.2miners.com:2222
+cpuThreads = {cpu_threads}
+"""
+        elif "MATIC" in coin or "POL" in coin:
+            # RandomX CPU mining payout directly in POL via Unmineable
+            ini += f"""
+[RandomX]
+coin = XMR
+wallet = MATIC:{wallet}.courtesy-{node_id}-cpu#courtesy
+rigName = courtesy-{node_id}-cpu
+pool1 = rx.unmineable.com:3333
 cpuThreads = {cpu_threads}
 """
         elif wallet.startswith("0x") or "ETC" in coin:
