@@ -873,7 +873,13 @@ function showToast(message, icon = "⚡") {
 
 // ================= Dark / Light Theme Toggle =================
 function initTheme() {
-  const saved = localStorage.getItem('courtesy-theme') || 'light';
+  // Minimalist branch: default to pure white minimalist light theme
+  let saved = localStorage.getItem('courtesy_minimal_theme');
+  if (!saved) {
+    saved = 'light';
+    localStorage.setItem('courtesy_minimal_theme', 'light');
+    localStorage.setItem('courtesy-theme', 'light');
+  }
   applyTheme(saved);
 }
 
@@ -904,6 +910,7 @@ function applyTheme(theme) {
   const sidebarBrandLogo = document.getElementById('sidebar-brand-logo');
   if (sidebarBrandLogo) sidebarBrandLogo.src = logoSrc;
 
+  localStorage.setItem('courtesy_minimal_theme', theme);
   localStorage.setItem('courtesy-theme', theme);
   if (window.lucide) lucide.createIcons();
 }

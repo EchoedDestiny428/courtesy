@@ -40,7 +40,7 @@ function createWindow() {
     minHeight: 700,
     frame: false, // Frameless for modern custom titlebar
     titleBarStyle: 'hidden',
-    backgroundColor: '#08080a',
+    backgroundColor: '#FFFFFF',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

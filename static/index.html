@@ -365,39 +365,31 @@
 
           <!-- Sticky Pinned Node Badge (Always Connected to Same Node) -->
           <button onclick="cyclePinnedNode()"
-            class="px-2 py-1 rounded-full text-[10px] font-mono border border-gold/40 bg-[var(--bg-muted)] hover:border-gold text-[var(--text-main)] flex items-center gap-1.5 transition"
+            class="px-2 py-1 rounded-md text-[10px] font-mono border border-[var(--border-app)] bg-[var(--bg-muted)] hover:border-black text-[var(--text-main)] flex items-center gap-1.5 transition"
             title="Click to swap between pinned nodes without unloading context">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             <span id="std-connected-node-label">Pinned: kraken (7B)</span>
-            <i data-lucide="refresh-cw" class="w-2.5 h-2.5 text-gold-500"></i>
+            <i data-lucide="refresh-cw" class="w-2.5 h-2.5 text-[var(--text-dim)]"></i>
           </button>
 
           <!-- Flush / Terminate Session Button -->
           <button onclick="terminateActiveSession()"
-            class="px-2 py-1 rounded-lg border border-rose-800/40 bg-rose-950/20 hover:bg-rose-900/40 text-rose-300 text-[10px] font-mono flex items-center gap-1 transition"
+            class="px-2 py-1 rounded-md border border-[var(--border-app)] hover:border-rose-500 hover:text-rose-600 text-[var(--text-muted)] text-[10px] font-mono flex items-center gap-1 transition"
             title="Clear conversation context & flush GPU VRAM">
-            <i data-lucide="power" class="w-3 h-3 text-rose-400"></i>
+            <i data-lucide="power" class="w-3 h-3"></i>
             <span class="hidden sm:inline">Flush</span>
           </button>
 
           <!-- Web Docs Toggle -->
           <button id="std-web-toggle-btn" onclick="toggleWebAccess()"
-            class="p-1.5 rounded-lg border border-gold bg-[var(--gold-subtle)] text-gold-400 hover-float transition"
+            class="p-1.5 rounded-md border border-[var(--border-app)] hover:border-black bg-[var(--bg-muted)] text-[var(--text-main)] transition"
             title="Toggle Web Docs Grounding">
             <i data-lucide="globe" class="w-3.5 h-3.5"></i>
           </button>
 
-          <!-- Open Admin -->
-          <button onclick="openAdminLoginModal()"
-            class="px-2.5 py-1 rounded-lg bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-[11px] flex items-center gap-1 shadow-sm transition"
-            title="Admin Cluster Fleet">
-            <i data-lucide="shield" class="w-3 h-3 stroke-[2.5]"></i>
-            <span>Admin</span>
-          </button>
-
           <!-- Day / Night Toggle -->
           <button onclick="toggleTheme()"
-            class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-gold-400 hover:text-[var(--text-main)] transition"
+            class="p-1.5 rounded-md border border-[var(--border-app)] hover:border-black text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
             title="Toggle Light / Dark theme">
             <i data-lucide="sun-moon" class="w-3.5 h-3.5"></i>
           </button>
@@ -431,21 +423,21 @@
           <div id="ide-file-tree-sidebar" class="w-56 md:w-60 h-full border-r border-[var(--border-app)] bg-[var(--bg-surface)] flex flex-col select-none shrink-0 transition-all duration-200">
             <!-- File Tree Header -->
             <div class="h-9 px-3 border-b border-[var(--border-app)] flex items-center justify-between text-xs font-mono">
-              <span class="font-bold text-white flex items-center gap-1.5 truncate text-[11px]">
-                <i data-lucide="folder" class="w-3.5 h-3.5 text-gold-500 shrink-0"></i>
+              <span class="font-bold text-[var(--text-main)] flex items-center gap-1.5 truncate text-[11px]">
+                <i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0"></i>
                 <span id="ide-tree-root-label" class="truncate">Workspace</span>
               </span>
               <div class="flex items-center gap-1 shrink-0">
-                <button onclick="createNewFilePrompt()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="New File">
+                <button onclick="createNewFilePrompt()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="New File">
                   <i data-lucide="file-plus" class="w-3.5 h-3.5"></i>
                 </button>
-                <button onclick="createNewFolderPrompt()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="New Folder">
+                <button onclick="createNewFolderPrompt()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="New Folder">
                   <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
                 </button>
-                <button onclick="refreshWorkspaceTree()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Refresh Tree">
+                <button onclick="refreshWorkspaceTree()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="Refresh Tree">
                   <i data-lucide="refresh-cw" class="w-3 h-3"></i>
                 </button>
-                <button onclick="toggleWorkspaceSearchDrawer()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Search Code (Ctrl+Shift+F)">
+                <button onclick="toggleWorkspaceSearchDrawer()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition" title="Search Code (Ctrl+Shift+F)">
                   <i data-lucide="search" class="w-3.5 h-3.5"></i>
                 </button>
               </div>
@@ -613,23 +605,23 @@
               <!-- Terminal Header -->
               <div class="h-7 px-3 border-b border-[var(--border-app)] bg-[var(--bg-surface-elevated)] flex items-center justify-between text-[11px] font-mono">
                 <div class="flex items-center gap-2">
-                  <span class="font-bold text-white flex items-center gap-1">
-                    <i data-lucide="terminal" class="w-3 h-3 text-gold-500"></i>
+                  <span class="font-bold text-[var(--text-main)] flex items-center gap-1">
+                    <i data-lucide="terminal" class="w-3 h-3 text-[var(--text-muted)]"></i>
                     <span>Terminal</span>
                   </span>
                   <span id="terminal-cwd-label" class="text-[10px] text-[var(--text-dim)] truncate max-w-[200px]">~/workspace</span>
                 </div>
                 <div class="flex items-center gap-1.5">
-                  <button onclick="runActiveFile()" class="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[10px] flex items-center gap-1" title="Execute Active File">
+                  <button onclick="runActiveFile()" class="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 text-[10px] flex items-center gap-1" title="Execute Active File">
                     <i data-lucide="play" class="w-2.5 h-2.5 fill-current"></i> Run
                   </button>
-                  <button onclick="runCommandShortcut('git status -s')" class="px-2 py-0.5 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white text-[10px]" title="Check Git Status">
+                  <button onclick="runCommandShortcut('git status -s')" class="px-2 py-0.5 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] text-[10px]" title="Check Git Status">
                     git status
                   </button>
-                  <button onclick="clearTerminalOutput()" class="p-1 hover:text-white text-[var(--text-dim)]" title="Clear Terminal">
+                  <button onclick="clearTerminalOutput()" class="p-1 hover:text-[var(--text-main)] text-[var(--text-dim)]" title="Clear Terminal">
                     <i data-lucide="trash" class="w-3 h-3"></i>
                   </button>
-                  <button onclick="toggleTerminalPanel()" class="p-1 hover:text-white text-[var(--text-dim)]" title="Minimize Terminal">
+                  <button onclick="toggleTerminalPanel()" class="p-1 hover:text-[var(--text-main)] text-[var(--text-dim)]" title="Minimize Terminal">
                     <i id="terminal-toggle-icon" data-lucide="chevron-down" class="w-3 h-3"></i>
                   </button>
                 </div>
@@ -642,11 +634,11 @@
 
               <!-- Terminal Command Input Bar -->
               <div class="p-1.5 border-t border-[var(--border-app)] bg-[var(--bg-input)] flex items-center gap-2">
-                <span class="text-gold-500 font-mono font-bold text-xs pl-1.5">$</span>
+                <span class="text-[var(--text-muted)] font-mono font-bold text-xs pl-1.5">$</span>
                 <input id="terminal-command-input" type="text" placeholder="Enter shell command (e.g. python main.py, git status, pytest)..."
                   onkeydown="handleTerminalInputKey(event)"
-                  class="flex-1 bg-transparent text-xs font-mono text-white placeholder-[var(--text-dim)] focus:outline-none">
-                <button onclick="submitTerminalCommand()" class="px-2.5 py-0.5 rounded bg-gold-gradient text-slate-950 font-bold text-[10px]">
+                  class="flex-1 bg-transparent text-xs font-mono text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none">
+                <button onclick="submitTerminalCommand()" class="px-2.5 py-0.5 rounded bg-black text-white hover:bg-neutral-800 font-medium text-[10px] transition">
                   Send
                 </button>
               </div>
@@ -734,20 +726,20 @@
                       </button>
 
                       <button onclick="insertPromptPrefix('/plan ')"
-                        class="px-2 py-0.5 rounded-full border border-gold/30 bg-[var(--gold-subtle)] text-gold-400 font-mono text-[10px] hover:border-gold transition flex items-center gap-1"
+                        class="px-2 py-0.5 rounded-full border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-main)] font-mono text-[10px] hover:border-black transition flex items-center gap-1"
                         title="Generate Antigravity Implementation Plan">
                         <i data-lucide="clipboard-list" class="w-3 h-3"></i>
                         <span>/plan</span>
                       </button>
 
                       <button onclick="openProjectSettingsModal()"
-                        class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-gold-400 transition"
+                        class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
                         title="Project Settings & Rules">
                         <i data-lucide="settings" class="w-3.5 h-3.5"></i>
                       </button>
 
                       <div
-                        class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--bg-muted)] border border-[var(--border-app)] text-[10px] font-mono text-gold-400">
+                        class="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--bg-muted)] border border-[var(--border-app)] text-[10px] font-mono text-[var(--text-main)]">
                         <span id="active-model-display">🧠 Qwen 2.5 Coder 14B</span>
                       </div>
                     </div>
@@ -767,7 +759,7 @@
                       </button>
 
                       <button id="send-prompt-btn" onclick="sendPrompt()"
-                        class="w-7 h-7 rounded-full bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 flex items-center justify-center font-bold transition shadow-sm shadow-gold-glow hover:scale-105"
+                        class="w-7 h-7 rounded-full bg-black hover:bg-neutral-800 text-white flex items-center justify-center font-bold transition shadow-sm hover:scale-105"
                         title="Send (Enter)">
                         <i data-lucide="arrow-right" class="w-3.5 h-3.5 stroke-[2.5]"></i>
                       </button>
@@ -817,11 +809,11 @@
                       <span>/plan</span>
                     </button>
                     <button onclick="openProjectSettingsModal()"
-                      class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-gold-400 transition"
+                      class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
                       title="Project Settings & Rules">
                       <i data-lucide="settings" class="w-3.5 h-3.5"></i>
                     </button>
-                    <span class="text-[10px] font-mono text-gold-500 hidden sm:inline" id="sticky-model-display">🧠 Qwen 2.5 Coder 14B</span>
+                    <span class="text-[10px] font-mono text-[var(--text-main)] hidden sm:inline" id="sticky-model-display">🧠 Qwen 2.5 Coder 14B</span>
                   </div>
 
                   <div class="flex items-center gap-2">
@@ -835,7 +827,7 @@
                       <i data-lucide="square" class="w-2.5 h-2.5 fill-current"></i> Stop
                     </button>
                     <button id="sticky-send-btn" onclick="sendStickyPrompt()"
-                      class="w-7 h-7 rounded-full bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 flex items-center justify-center font-bold transition shadow-sm hover:scale-105"
+                      class="w-7 h-7 rounded-full bg-black hover:bg-neutral-800 text-white flex items-center justify-center font-bold transition shadow-sm hover:scale-105"
                       title="Send (Enter)">
                       <i data-lucide="arrow-right" class="w-3.5 h-3.5 stroke-[2.5]"></i>
                     </button>
