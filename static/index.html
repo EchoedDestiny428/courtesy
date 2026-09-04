@@ -55,7 +55,7 @@
        LANDING LAUNCH PORTAL (RESTORED CLEAN INITIAL SCREEN)
        ================================================================ -->
   <section id="view-portal"
-    class="min-h-screen flex flex-col items-center justify-center p-6 relative z-10 transition-opacity duration-300 hidden">
+    class="min-h-screen flex flex-col items-center justify-center p-6 relative z-10 transition-opacity duration-300">
     <!-- Portal Titlebar Drag Region + Window Controls -->
     <div class="fixed top-0 left-0 right-0 h-10 z-50 titlebar-drag-region flex items-center justify-end px-2">
       <div class="flex items-center gap-0.5 no-drag">
@@ -204,7 +204,7 @@
   <!-- ================================================================
        MAIN WORKBENCH: EXACT ANTIGRAVITY CODEX DEX (PERSISTENT CONTEXT)
        ================================================================ -->
-  <main id="view-standard" class="h-screen flex overflow-hidden">
+  <main id="view-standard" class="h-screen flex overflow-hidden hidden">
 
     <!-- Left Sidebar (Antigravity Style - 256px) -->
     <aside id="sidebar-antigravity"
@@ -550,13 +550,9 @@
                   <button onclick="toggleFindReplace()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Find & Replace (Ctrl+F)">
                     <i data-lucide="search" class="w-3.5 h-3.5"></i>
                   </button>
-                  <button onclick="saveActiveFile()" class="px-2.5 py-0.5 rounded-md bg-gold-gradient text-slate-950 font-bold text-[10px] hover:brightness-110 shadow-sm transition flex items-center gap-1" title="Save to Disk (Ctrl+S)">
+                  <button onclick="saveActiveFile()" class="px-2.5 py-0.5 rounded-md bg-black text-white hover:bg-neutral-800 font-medium text-[10px] shadow-sm transition flex items-center gap-1" title="Save to Disk (Ctrl+S)">
                     <i data-lucide="save" class="w-3 h-3 stroke-[2.5]"></i>
                     <span class="hidden sm:inline">Save</span>
-                  </button>
-                  <button onclick="runActiveFile()" class="px-2.5 py-0.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-[10px] transition flex items-center gap-1" title="Run in Terminal (F5)">
-                    <i data-lucide="play" class="w-3 h-3 fill-current"></i>
-                    <span>Run</span>
                   </button>
                 </div>
               </div>
@@ -567,19 +563,19 @@
               <div class="flex items-center gap-1.5 flex-1 min-w-[180px]">
                 <span class="text-[10px] text-[var(--text-dim)]">Find:</span>
                 <input id="ide-find-input" type="text" placeholder="Search in editor..." onkeydown="handleFindInputKey(event)"
-                  class="flex-1 bg-[var(--bg-input)] border border-[var(--border-app)] rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-gold">
+                  class="flex-1 bg-[var(--bg-input)] border border-[var(--border-app)] rounded px-2 py-0.5 text-xs text-[var(--text-main)] focus:outline-none focus:border-black">
               </div>
               <div class="flex items-center gap-1.5 flex-1 min-w-[180px]">
                 <span class="text-[10px] text-[var(--text-dim)]">Replace:</span>
                 <input id="ide-replace-input" type="text" placeholder="Replace with..."
-                  class="flex-1 bg-[var(--bg-input)] border border-[var(--border-app)] rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-gold">
+                  class="flex-1 bg-[var(--bg-input)] border border-[var(--border-app)] rounded px-2 py-0.5 text-xs text-[var(--text-main)] focus:outline-none focus:border-black">
               </div>
               <div class="flex items-center gap-1 text-[10px]">
                 <button onclick="findNextOccurrence(false)" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-main)]">Prev</button>
                 <button onclick="findNextOccurrence(true)" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-main)]">Next</button>
                 <button onclick="replaceCurrentOccurrence()" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-main)]">Replace</button>
-                <button onclick="replaceAllOccurrences()" class="px-2 py-0.5 rounded bg-gold-gradient text-slate-950 font-bold">All</button>
-                <button onclick="toggleFindReplace(false)" class="p-1 hover:text-white text-[var(--text-dim)]"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                <button onclick="replaceAllOccurrences()" class="px-2 py-0.5 rounded bg-black text-white hover:bg-neutral-800 font-medium">All</button>
+                <button onclick="toggleFindReplace(false)" class="p-1 hover:text-[var(--text-main)] text-[var(--text-dim)]"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
               </div>
             </div>
 
@@ -595,83 +591,29 @@
                 onkeyup="updateCursorPositionStats()"></textarea>
             </div>
 
-            <!-- Resizer: Terminal Drawer Drag Handle -->
-            <div id="ide-terminal-resizer" class="h-1.5 hover:h-2 bg-transparent hover:bg-gold-500/50 active:bg-gold-500 cursor-row-resize transition-all shrink-0 z-20 select-none flex items-center justify-center group" title="Drag to resize terminal (Double-click to reset)">
-              <div class="h-0.5 w-8 rounded-full bg-[var(--border-app)] group-hover:bg-gold-400 transition-colors"></div>
-            </div>
-
-            <!-- Collapsible Integrated Terminal Drawer -->
-            <div id="ide-terminal-drawer" class="h-44 border-t border-[var(--border-app)] bg-[var(--bg-surface)] flex flex-col select-none shrink-0 transition-all duration-200">
-              <!-- Terminal Header -->
-              <div class="h-7 px-3 border-b border-[var(--border-app)] bg-[var(--bg-surface-elevated)] flex items-center justify-between text-[11px] font-mono">
-                <div class="flex items-center gap-2">
-                  <span class="font-bold text-[var(--text-main)] flex items-center gap-1">
-                    <i data-lucide="terminal" class="w-3 h-3 text-[var(--text-muted)]"></i>
-                    <span>Terminal</span>
-                  </span>
-                  <span id="terminal-cwd-label" class="text-[10px] text-[var(--text-dim)] truncate max-w-[200px]">~/workspace</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <button onclick="runActiveFile()" class="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 text-[10px] flex items-center gap-1" title="Execute Active File">
-                    <i data-lucide="play" class="w-2.5 h-2.5 fill-current"></i> Run
-                  </button>
-                  <button onclick="runCommandShortcut('git status -s')" class="px-2 py-0.5 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] text-[10px]" title="Check Git Status">
-                    git status
-                  </button>
-                  <button onclick="clearTerminalOutput()" class="p-1 hover:text-[var(--text-main)] text-[var(--text-dim)]" title="Clear Terminal">
-                    <i data-lucide="trash" class="w-3 h-3"></i>
-                  </button>
-                  <button onclick="toggleTerminalPanel()" class="p-1 hover:text-[var(--text-main)] text-[var(--text-dim)]" title="Minimize Terminal">
-                    <i id="terminal-toggle-icon" data-lucide="chevron-down" class="w-3 h-3"></i>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Terminal Output Log -->
-              <div id="terminal-output-log" class="flex-1 p-2 overflow-y-auto font-mono text-[11px] text-[var(--text-secondary)] space-y-1 select-text">
-                <div class="text-[var(--text-dim)] italic text-[10px]">Courtesy Terminal ready. Type a command below or click Run.</div>
-              </div>
-
-              <!-- Terminal Command Input Bar -->
-              <div class="p-1.5 border-t border-[var(--border-app)] bg-[var(--bg-input)] flex items-center gap-2">
-                <span class="text-[var(--text-muted)] font-mono font-bold text-xs pl-1.5">$</span>
-                <input id="terminal-command-input" type="text" placeholder="Enter shell command (e.g. python main.py, git status, pytest)..."
-                  onkeydown="handleTerminalInputKey(event)"
-                  class="flex-1 bg-transparent text-xs font-mono text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none">
-                <button onclick="submitTerminalCommand()" class="px-2.5 py-0.5 rounded bg-black text-white hover:bg-neutral-800 font-medium text-[10px] transition">
-                  Send
-                </button>
-              </div>
-            </div>
-
             <!-- IDE Status Bar -->
-            <div id="ide-status-bar" class="h-6 px-3 border-t border-[var(--border-app)] bg-[var(--bg-surface)] flex items-center justify-between text-[10px] font-mono text-[var(--text-dim)] shrink-0 select-none">
+            <div id="ide-status-bar" class="h-6 px-3 border-t border-[var(--border-app)] bg-[var(--bg-surface)] flex items-center justify-between text-[10px] font-mono text-[var(--text-dim)] shrink-0 select-none whitespace-nowrap overflow-hidden">
               <!-- Left Stats -->
-              <div class="flex items-center gap-3">
-                <span id="ide-stat-cursor" class="hover:text-white cursor-pointer transition-colors" onclick="focusEditor()" title="Cursor position (Click to focus)">Ln 1, Col 1</span>
+              <div class="flex items-center gap-2.5 truncate">
+                <span id="ide-stat-cursor" class="hover:text-[var(--text-main)] cursor-pointer transition-colors" onclick="focusEditor()" title="Cursor position">Ln 1, Col 1</span>
                 <span>•</span>
-                <span id="ide-stat-lines" class="hover:text-white cursor-pointer transition-colors" onclick="promptGoToLine()" title="Total lines (Click to Jump to Line)">0 lines</span>
+                <span id="ide-stat-lines" class="hover:text-[var(--text-main)] cursor-pointer transition-colors" onclick="promptGoToLine()" title="Total lines">0 lines</span>
                 <span>•</span>
-                <span id="ide-stat-size" class="hover:text-white cursor-pointer transition-colors" title="Buffer Size">0 KB</span>
+                <span id="ide-stat-size" class="hover:text-[var(--text-main)] cursor-pointer transition-colors" title="Buffer Size">0 KB</span>
               </div>
 
               <!-- Right Info -->
-              <div class="flex items-center gap-3">
-                <span id="ide-stat-git" class="flex items-center gap-1 hover:text-white cursor-pointer transition-colors" onclick="runCommandShortcut('git status -s')" title="Click to check git status">
-                  <i data-lucide="git-branch" class="w-2.5 h-2.5 text-gold-500"></i>
+              <div class="flex items-center gap-2.5 shrink-0">
+                <span id="ide-stat-git" class="hidden sm:flex items-center gap-1 hover:text-[var(--text-main)] cursor-pointer transition-colors" onclick="runCommandShortcut('git status -s')" title="Git status">
+                  <i data-lucide="git-branch" class="w-2.5 h-2.5 text-[var(--text-muted)]"></i>
                   <span id="ide-git-branch-label">main</span>
                 </span>
+                <span class="hidden sm:inline">•</span>
+                <span id="ide-stat-spaces" class="hidden md:inline hover:text-[var(--text-main)] cursor-pointer transition-colors" onclick="toggleIndentSpaces()" title="Indentation">Spaces: 2</span>
+                <span class="hidden md:inline">•</span>
+                <span id="ide-stat-encoding" class="hover:text-[var(--text-main)] cursor-pointer transition-colors" onclick="showEncodingInfo()" title="File Encoding">UTF-8</span>
                 <span>•</span>
-                <span id="ide-stat-spaces" class="hover:text-white cursor-pointer transition-colors" onclick="toggleIndentSpaces()" title="Click to toggle indentation spaces">Spaces: 2</span>
-                <span>•</span>
-                <span id="ide-stat-encoding" class="hover:text-white cursor-pointer transition-colors" onclick="showEncodingInfo()" title="File Encoding">UTF-8</span>
-                <span>•</span>
-                <span id="ide-stat-lang" class="text-gold-400 font-bold uppercase hover:underline cursor-pointer transition-colors" onclick="focusLanguageSelect()" title="Language Mode (Click to change)">PYTHON</span>
-                <span>•</span>
-                <button onclick="toggleTerminalPanel()" class="hover:text-white flex items-center gap-1 transition-colors" title="Toggle Terminal Drawer (Ctrl+`)">
-                  <i data-lucide="terminal" class="w-2.5 h-2.5"></i>
-                  <span>Terminal</span>
-                </button>
+                <span id="ide-stat-lang" class="text-[var(--text-main)] font-semibold uppercase hover:underline cursor-pointer transition-colors" onclick="focusLanguageSelect()" title="Language Mode">PYTHON</span>
               </div>
             </div>
 

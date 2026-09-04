@@ -4345,16 +4345,14 @@ document.addEventListener('DOMContentLoaded', () => {
           showView('view-admin');
         } else {
           sessionStorage.removeItem('admin_token');
-          showView('view-standard');
+          showView('view-portal');
         }
       }).catch(() => {
-        showView('view-standard');
+        showView('view-portal');
       });
     }
   } else {
-    showView('view-standard');
-    const savedViewMode = localStorage.getItem('courtesy_ide_view_mode') || 'split';
-    setIdeViewMode(savedViewMode);
+    showView('view-portal');
   }
 
   if (window.lucide) lucide.createIcons();
