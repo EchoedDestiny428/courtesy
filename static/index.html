@@ -309,14 +309,32 @@
           </div>
         </div>
 
-        <!-- Center: Active Folder Indicator (Launches File Explorer directly!) -->
-        <button onclick="pickWorkspaceFolder()"
-          class="px-3 py-1 rounded-xl bg-[var(--bg-muted)] border border-[var(--border-app)] hover:border-gold text-[var(--text-main)] font-mono text-xs flex items-center gap-2 hover-float transition shadow-sm no-drag"
-          title="Click to open Windows File Explorer">
-          <i data-lucide="folder" class="w-3.5 h-3.5 text-gold-500"></i>
-          <span id="current-folder-label">Select Workspace Folder</span>
-          <i data-lucide="chevron-down" class="w-3 h-3 text-[var(--text-dim)]"></i>
-        </button>
+        <!-- Center: Active Folder Indicator & 3-Way Layout Switcher -->
+        <div class="flex items-center gap-2 no-drag">
+          <button onclick="pickWorkspaceFolder()"
+            class="px-3 py-1 rounded-xl bg-[var(--bg-muted)] border border-[var(--border-app)] hover:border-gold text-[var(--text-main)] font-mono text-xs flex items-center gap-1.5 hover-float transition shadow-sm"
+            title="Click to select workspace folder">
+            <i data-lucide="folder" class="w-3.5 h-3.5 text-gold-500"></i>
+            <span id="current-folder-label" class="max-w-[130px] truncate">Select Workspace</span>
+            <i data-lucide="chevron-down" class="w-3 h-3 text-[var(--text-dim)]"></i>
+          </button>
+
+          <!-- 3-Way Mode Switcher: Chat | Split | IDE -->
+          <div class="flex items-center p-0.5 rounded-xl bg-[var(--bg-muted)] border border-[var(--border-app)] text-[10px] font-mono">
+            <button id="view-mode-btn-chat" onclick="setIdeViewMode('chat')" class="ide-view-btn px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1.5 active" title="Chat Only Mode (Ctrl+\)">
+              <i data-lucide="message-square" class="w-3 h-3"></i>
+              <span class="hidden md:inline">Chat</span>
+            </button>
+            <button id="view-mode-btn-split" onclick="setIdeViewMode('split')" class="ide-view-btn px-2.5 py-1 rounded-lg font-medium transition flex items-center gap-1.5 text-[var(--text-muted)] hover:text-white" title="Side-by-Side Split: Editor & Chat (Ctrl+\)">
+              <i data-lucide="columns-2" class="w-3 h-3"></i>
+              <span class="hidden md:inline">Split</span>
+            </button>
+            <button id="view-mode-btn-ide" onclick="setIdeViewMode('ide')" class="ide-view-btn px-2.5 py-1 rounded-lg font-medium transition flex items-center gap-1.5 text-[var(--text-muted)] hover:text-white" title="Full IDE Workspace (Ctrl+\)">
+              <i data-lucide="code-2" class="w-3 h-3"></i>
+              <span class="hidden md:inline">IDE</span>
+            </button>
+          </div>
+        </div>
 
         <!-- Right: Connected Node, Model & Controls -->
         <div class="flex items-center gap-2 no-drag">
@@ -388,147 +406,431 @@
         </div>
       </header>
 
-      <!-- Dex Main Scrollable Body -->
-      <div class="flex-1 overflow-y-auto flex flex-col justify-between p-4 md:p-6 max-w-3xl w-full mx-auto space-y-6">
+      <!-- Workbench Body: Supports Chat Mode, Split Mode, and Full IDE Mode -->
+      <div id="standard-workbench-body" class="flex-1 flex overflow-hidden relative">
 
-        <!-- Conversation Feed -->
-        <div id="chat-messages" class="space-y-5 text-xs flex-1">
+        <!-- ================= COURTESY IDE WORKSPACE PANEL ================= -->
+        <div id="courtesy-ide-panel" class="hidden flex-1 h-full overflow-hidden flex flex-row relative bg-[var(--bg-app)]">
 
-          <!-- Empty State: Antigravity Center Welcome Card -->
-          <div id="empty-chat-placeholder"
-            class="min-h-[50vh] flex flex-col items-center justify-center text-center space-y-6 animate-fade-in pt-8">
-
-            <!-- Floating Workspace Folder Selector -->
-            <button onclick="pickWorkspaceFolder()"
-              class="px-4 py-1.5 rounded-full border border-[var(--border-app)] bg-[var(--bg-surface-elevated)] hover:border-gold text-[var(--text-main)] font-mono text-xs flex items-center gap-2 hover-float transition shadow-sm"
-              title="Click to open Windows File Explorer">
-              <i data-lucide="folder" class="w-3.5 h-3.5 text-gold-500"></i>
-              <span id="center-folder-label">courtesy</span>
-              <i data-lucide="chevron-down" class="w-3 h-3 text-[var(--text-dim)]"></i>
-            </button>
-
-            <!-- Antigravity Center Input Pill -->
-            <div class="w-full antigravity-input-pill p-3.5 text-left space-y-3 relative hover-float">
-
-              <!-- Textarea Prompt Input -->
-              <textarea id="prompt-input" rows="3" placeholder="Ask Courtesy, or instruct code changes"
-                class="w-full bg-transparent text-xs text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none resize-none font-sans leading-relaxed"
-                onkeydown="handleInputKey(event)"></textarea>
-
-              <!-- Inside Toolbar Controls -->
-              <div class="flex items-center justify-between pt-1 border-t border-[var(--border-app-subtle)]">
-
-                <!-- Left: Attachments, Plan Mode & Settings -->
-                <div class="flex items-center gap-1.5">
-                  <button onclick="pickWorkspaceFolder()"
-                    class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
-                    title="Attach folder context / File Explorer">
-                    <i data-lucide="folder-plus" class="w-4 h-4"></i>
-                  </button>
-
-                  <button onclick="insertPromptPrefix('/plan ')"
-                    class="px-2 py-0.5 rounded-full border border-gold/30 bg-[var(--gold-subtle)] text-gold-400 font-mono text-[10px] hover:border-gold transition flex items-center gap-1"
-                    title="Generate Antigravity Implementation Plan">
-                    <i data-lucide="clipboard-list" class="w-3 h-3"></i>
-                    <span>/plan</span>
-                  </button>
-
-                  <button onclick="openProjectSettingsModal()"
-                    class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-gold-400 transition"
-                    title="Project Settings & Rules">
-                    <i data-lucide="settings" class="w-3.5 h-3.5"></i>
-                  </button>
-
-                  <div
-                    class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--bg-muted)] border border-[var(--border-app)] text-[10px] font-mono text-gold-400">
-                    <span id="active-model-display">🧠 Qwen 2.5 Coder 14B</span>
-                  </div>
-                </div>
-
-                <!-- Right: Voice Mic & Send Button -->
-                <div class="flex items-center gap-2">
-                  <button onclick="showToast('Voice prompt active on cluster', '🎙️')"
-                    class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
-                    title="Voice Input">
-                    <i data-lucide="mic" class="w-3.5 h-3.5"></i>
-                  </button>
-
-                  <button id="stop-stream-btn" onclick="stopGenerating()"
-                    class="hidden px-2.5 py-1 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 text-[10px] font-bold border border-rose-800 transition flex items-center gap-1">
-                    <i data-lucide="square" class="w-2.5 h-2.5 fill-current"></i>
-                    <span>Stop</span>
-                  </button>
-
-                  <button id="send-prompt-btn" onclick="sendPrompt()"
-                    class="w-7 h-7 rounded-full bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 flex items-center justify-center font-bold transition shadow-sm shadow-gold-glow hover:scale-105"
-                    title="Send (Enter)">
-                    <i data-lucide="arrow-right" class="w-3.5 h-3.5 stroke-[2.5]"></i>
-                  </button>
-                </div>
-
+          <!-- IDE File Tree Sidebar (Collapsible) -->
+          <div id="ide-file-tree-sidebar" class="w-56 md:w-60 h-full border-r border-[var(--border-app)] bg-[var(--bg-surface)] flex flex-col select-none shrink-0 transition-all duration-200">
+            <!-- File Tree Header -->
+            <div class="h-9 px-3 border-b border-[var(--border-app)] flex items-center justify-between text-xs font-mono">
+              <span class="font-bold text-white flex items-center gap-1.5 truncate text-[11px]">
+                <i data-lucide="folder" class="w-3.5 h-3.5 text-gold-500 shrink-0"></i>
+                <span id="ide-tree-root-label" class="truncate">Workspace</span>
+              </span>
+              <div class="flex items-center gap-1 shrink-0">
+                <button onclick="createNewFilePrompt()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="New File">
+                  <i data-lucide="file-plus" class="w-3.5 h-3.5"></i>
+                </button>
+                <button onclick="createNewFolderPrompt()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="New Folder">
+                  <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
+                </button>
+                <button onclick="refreshWorkspaceTree()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Refresh Tree">
+                  <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+                </button>
+                <button onclick="toggleWorkspaceSearchDrawer()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Search Code (Ctrl+Shift+F)">
+                  <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                </button>
               </div>
-
             </div>
 
-            <!-- Sub-pill: Local / Cluster Target -->
-            <div class="flex items-center gap-2 text-[10px] font-mono text-[var(--text-dim)]">
-              <span
-                class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--bg-surface)] border border-[var(--border-app)]">
-                <i data-lucide="hard-drive" class="w-3 h-3 text-gold-500"></i>
-                <span>Local Workspace</span>
-              </span>
-              <span>•</span>
-              <span
-                class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--bg-surface)] border border-[var(--border-app)]">
-                <i data-lucide="cpu" class="w-3 h-3 text-emerald-400"></i>
-                <span>6x Quadro P2000 Cluster (cst)</span>
-              </span>
+            <!-- Quick File Filter Input -->
+            <div class="p-2 border-b border-[var(--border-app-subtle)]">
+              <div class="relative flex items-center">
+                <i data-lucide="filter" class="w-3 h-3 text-[var(--text-dim)] absolute left-2 pointer-events-none"></i>
+                <input id="ide-tree-filter-input" type="text" placeholder="Filter files..." oninput="filterFileTreeInput(this.value)"
+                  class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-lg pl-7 pr-2 py-1 text-[11px] font-mono text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none focus:border-gold">
+              </div>
+            </div>
+
+            <!-- Workspace Code Search Box (Collapsible) -->
+            <div id="ide-workspace-search-box" class="hidden p-2 border-b border-[var(--border-app)] space-y-1.5 bg-[var(--bg-input)]">
+              <div class="flex items-center justify-between text-[10px] font-mono text-[var(--text-dim)]">
+                <span>SEARCH IN WORKSPACE</span>
+                <button onclick="toggleWorkspaceSearchDrawer(false)" class="hover:text-white"><i data-lucide="x" class="w-3 h-3"></i></button>
+              </div>
+              <div class="flex items-center gap-1">
+                <input id="ide-code-search-input" type="text" placeholder="Search text..." onkeydown="handleCodeSearchKey(event)"
+                  class="flex-1 bg-[var(--bg-surface)] border border-[var(--border-app)] rounded px-2 py-1 text-[11px] font-mono text-white focus:outline-none focus:border-gold">
+                <button onclick="executeCodeSearch()" class="px-2 py-1 rounded bg-gold-gradient text-slate-950 font-bold text-[10px]">
+                  Find
+                </button>
+              </div>
+              <div id="ide-search-results-list" class="max-h-36 overflow-y-auto space-y-1 text-[10px] font-mono pr-1"></div>
+            </div>
+
+            <!-- The File Tree Structure -->
+            <div id="ide-file-tree" class="flex-1 overflow-y-auto p-1 font-mono text-xs space-y-0.5">
+              <div class="p-3 text-center text-[var(--text-dim)] text-[11px]">Loading workspace...</div>
+            </div>
+          </div>
+
+          <!-- Resizer: File Tree Sidebar Drag Handle -->
+          <div id="ide-sidebar-resizer" class="w-1.5 hover:w-2 bg-transparent hover:bg-gold-500/50 active:bg-gold-500 cursor-col-resize transition-all shrink-0 z-20 select-none flex items-center justify-center group" title="Drag to resize file tree (Double-click to reset)">
+            <div class="w-0.5 h-6 rounded-full bg-[var(--border-app)] group-hover:bg-gold-400 transition-colors"></div>
+          </div>
+
+          <!-- IDE Main Editor Column -->
+          <div class="flex-1 flex flex-col h-full overflow-hidden bg-[var(--editor-bg)]">
+
+            <!-- Tab Bar (Horizontal Tabs) -->
+            <div class="h-9 border-b border-[var(--border-app)] bg-[var(--bg-surface)] flex items-center justify-between px-2 overflow-x-auto select-none shrink-0">
+              <div id="ide-tab-bar" class="flex items-center gap-1 h-full overflow-x-auto pr-2">
+                <!-- Populated dynamically by JS -->
+              </div>
+              <div class="flex items-center gap-1 shrink-0 pl-1 border-l border-[var(--border-app)]">
+                <button onclick="createNewBufferTab()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="New Scratch Buffer">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                </button>
+                <button onclick="toggleFileTreeSidebar()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Toggle File Tree">
+                  <i data-lucide="sidebar" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Editor Action Bar / Toolbar -->
+            <div class="h-9 px-3 border-b border-[var(--border-app)] bg-[var(--bg-surface-elevated)] flex items-center justify-between text-xs shrink-0 select-none">
+              <!-- Left: Breadcrumb Path -->
+              <div class="flex items-center gap-2 font-mono text-[11px] text-[var(--text-dim)] truncate">
+                <span id="ide-file-breadcrumb" class="truncate text-white font-medium">scratchpad.py</span>
+                <span id="ide-dirty-badge" class="hidden w-2 h-2 rounded-full bg-gold-400" title="Unsaved changes"></span>
+              </div>
+
+              <!-- Center & Right: AI Tools & Action Buttons -->
+              <div class="flex items-center gap-1.5 font-mono text-[11px]">
+                <!-- Language Selector -->
+                <select id="editor-language-select" onchange="changeEditorLanguage(this.value)"
+                  class="bg-[var(--bg-input)] border border-[var(--border-app)] rounded-md px-2 py-0.5 text-[10px] text-white focus:outline-none focus:border-gold">
+                  <option value="python">Python</option>
+                  <option value="javascript">JavaScript</option>
+                  <option value="typescript">TypeScript</option>
+                  <option value="html">HTML</option>
+                  <option value="css">CSS</option>
+                  <option value="json">JSON</option>
+                  <option value="markdown">Markdown</option>
+                  <option value="rust">Rust</option>
+                  <option value="go">Go</option>
+                  <option value="cpp">C++</option>
+                  <option value="bash">Shell / Bash</option>
+                  <option value="sql">SQL</option>
+                  <option value="yaml">YAML</option>
+                </select>
+
+                <!-- AI Quick Tools -->
+                <div class="hidden sm:flex items-center gap-1 pl-1 border-l border-[var(--border-app)]">
+                  <button onclick="sendEditorCodeToAI('explain')" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:border-gold hover:text-gold-400 text-[var(--text-muted)] text-[10px] transition flex items-center gap-1" title="Explain Selected/Active Code">
+                    <i data-lucide="help-circle" class="w-2.5 h-2.5"></i>
+                    <span>Explain</span>
+                  </button>
+                  <button onclick="sendEditorCodeToAI('refactor')" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:border-gold hover:text-gold-400 text-[var(--text-muted)] text-[10px] transition flex items-center gap-1" title="Refactor for Clean Architecture">
+                    <i data-lucide="wand-2" class="w-2.5 h-2.5"></i>
+                    <span>Refactor</span>
+                  </button>
+                  <button onclick="sendEditorCodeToAI('bugs')" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:border-gold hover:text-gold-400 text-[var(--text-muted)] text-[10px] transition flex items-center gap-1" title="Audit Code & Find Bugs">
+                    <i data-lucide="bug" class="w-2.5 h-2.5"></i>
+                    <span>Bugs</span>
+                  </button>
+                  <button onclick="sendEditorCodeToAI('tests')" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:border-gold hover:text-gold-400 text-[var(--text-muted)] text-[10px] transition flex items-center gap-1" title="Generate Unit Tests">
+                    <i data-lucide="test-tube-2" class="w-2.5 h-2.5"></i>
+                    <span>Tests</span>
+                  </button>
+                </div>
+
+                <!-- Primary Action Buttons -->
+                <div class="flex items-center gap-1 pl-1 border-l border-[var(--border-app)]">
+                  <button onclick="toggleFindReplace()" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition" title="Find & Replace (Ctrl+F)">
+                    <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                  </button>
+                  <button onclick="saveActiveFile()" class="px-2.5 py-0.5 rounded-md bg-gold-gradient text-slate-950 font-bold text-[10px] hover:brightness-110 shadow-sm transition flex items-center gap-1" title="Save to Disk (Ctrl+S)">
+                    <i data-lucide="save" class="w-3 h-3 stroke-[2.5]"></i>
+                    <span class="hidden sm:inline">Save</span>
+                  </button>
+                  <button onclick="runActiveFile()" class="px-2.5 py-0.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-[10px] transition flex items-center gap-1" title="Run in Terminal (F5)">
+                    <i data-lucide="play" class="w-3 h-3 fill-current"></i>
+                    <span>Run</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Find & Replace Overlay Bar (Floating) -->
+            <div id="ide-find-replace-bar" class="hidden px-3 py-1.5 border-b border-[var(--border-app)] bg-[var(--bg-surface-elevated)] flex flex-wrap items-center gap-2 text-xs font-mono select-none animate-fade-in">
+              <div class="flex items-center gap-1.5 flex-1 min-w-[180px]">
+                <span class="text-[10px] text-[var(--text-dim)]">Find:</span>
+                <input id="ide-find-input" type="text" placeholder="Search in editor..." onkeydown="handleFindInputKey(event)"
+                  class="flex-1 bg-[var(--bg-input)] border border-[var(--border-app)] rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-gold">
+              </div>
+              <div class="flex items-center gap-1.5 flex-1 min-w-[180px]">
+                <span class="text-[10px] text-[var(--text-dim)]">Replace:</span>
+                <input id="ide-replace-input" type="text" placeholder="Replace with..."
+                  class="flex-1 bg-[var(--bg-input)] border border-[var(--border-app)] rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-gold">
+              </div>
+              <div class="flex items-center gap-1 text-[10px]">
+                <button onclick="findNextOccurrence(false)" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-main)]">Prev</button>
+                <button onclick="findNextOccurrence(true)" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-main)]">Next</button>
+                <button onclick="replaceCurrentOccurrence()" class="px-2 py-0.5 rounded border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-main)]">Replace</button>
+                <button onclick="replaceAllOccurrences()" class="px-2 py-0.5 rounded bg-gold-gradient text-slate-950 font-bold">All</button>
+                <button onclick="toggleFindReplace(false)" class="p-1 hover:text-white text-[var(--text-dim)]"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+              </div>
+            </div>
+
+            <!-- Editor Canvas with Synchronized Line Numbers Gutter -->
+            <div class="flex-1 flex flex-row overflow-hidden relative font-mono text-xs">
+              <div id="editor-gutter" class="editor-gutter select-none">1</div>
+              <textarea id="ide-code-textarea" spellcheck="false"
+                class="ide-editor-textarea"
+                oninput="handleEditorInput()"
+                onkeydown="handleEditorKeydown(event)"
+                onscroll="syncEditorGutterScroll()"
+                onclick="updateCursorPositionStats()"
+                onkeyup="updateCursorPositionStats()"></textarea>
+            </div>
+
+            <!-- Resizer: Terminal Drawer Drag Handle -->
+            <div id="ide-terminal-resizer" class="h-1.5 hover:h-2 bg-transparent hover:bg-gold-500/50 active:bg-gold-500 cursor-row-resize transition-all shrink-0 z-20 select-none flex items-center justify-center group" title="Drag to resize terminal (Double-click to reset)">
+              <div class="h-0.5 w-8 rounded-full bg-[var(--border-app)] group-hover:bg-gold-400 transition-colors"></div>
+            </div>
+
+            <!-- Collapsible Integrated Terminal Drawer -->
+            <div id="ide-terminal-drawer" class="h-44 border-t border-[var(--border-app)] bg-[var(--bg-surface)] flex flex-col select-none shrink-0 transition-all duration-200">
+              <!-- Terminal Header -->
+              <div class="h-7 px-3 border-b border-[var(--border-app)] bg-[var(--bg-surface-elevated)] flex items-center justify-between text-[11px] font-mono">
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-white flex items-center gap-1">
+                    <i data-lucide="terminal" class="w-3 h-3 text-gold-500"></i>
+                    <span>Terminal</span>
+                  </span>
+                  <span id="terminal-cwd-label" class="text-[10px] text-[var(--text-dim)] truncate max-w-[200px]">~/workspace</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <button onclick="runActiveFile()" class="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[10px] flex items-center gap-1" title="Execute Active File">
+                    <i data-lucide="play" class="w-2.5 h-2.5 fill-current"></i> Run
+                  </button>
+                  <button onclick="runCommandShortcut('git status -s')" class="px-2 py-0.5 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white text-[10px]" title="Check Git Status">
+                    git status
+                  </button>
+                  <button onclick="clearTerminalOutput()" class="p-1 hover:text-white text-[var(--text-dim)]" title="Clear Terminal">
+                    <i data-lucide="trash" class="w-3 h-3"></i>
+                  </button>
+                  <button onclick="toggleTerminalPanel()" class="p-1 hover:text-white text-[var(--text-dim)]" title="Minimize Terminal">
+                    <i id="terminal-toggle-icon" data-lucide="chevron-down" class="w-3 h-3"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Terminal Output Log -->
+              <div id="terminal-output-log" class="flex-1 p-2 overflow-y-auto font-mono text-[11px] text-[var(--text-secondary)] space-y-1 select-text">
+                <div class="text-[var(--text-dim)] italic text-[10px]">Courtesy Terminal ready. Type a command below or click Run.</div>
+              </div>
+
+              <!-- Terminal Command Input Bar -->
+              <div class="p-1.5 border-t border-[var(--border-app)] bg-[var(--bg-input)] flex items-center gap-2">
+                <span class="text-gold-500 font-mono font-bold text-xs pl-1.5">$</span>
+                <input id="terminal-command-input" type="text" placeholder="Enter shell command (e.g. python main.py, git status, pytest)..."
+                  onkeydown="handleTerminalInputKey(event)"
+                  class="flex-1 bg-transparent text-xs font-mono text-white placeholder-[var(--text-dim)] focus:outline-none">
+                <button onclick="submitTerminalCommand()" class="px-2.5 py-0.5 rounded bg-gold-gradient text-slate-950 font-bold text-[10px]">
+                  Send
+                </button>
+              </div>
+            </div>
+
+            <!-- IDE Status Bar -->
+            <div id="ide-status-bar" class="h-6 px-3 border-t border-[var(--border-app)] bg-[var(--bg-surface)] flex items-center justify-between text-[10px] font-mono text-[var(--text-dim)] shrink-0 select-none">
+              <!-- Left Stats -->
+              <div class="flex items-center gap-3">
+                <span id="ide-stat-cursor" class="hover:text-white cursor-pointer transition-colors" onclick="focusEditor()" title="Cursor position (Click to focus)">Ln 1, Col 1</span>
+                <span>•</span>
+                <span id="ide-stat-lines" class="hover:text-white cursor-pointer transition-colors" onclick="promptGoToLine()" title="Total lines (Click to Jump to Line)">0 lines</span>
+                <span>•</span>
+                <span id="ide-stat-size" class="hover:text-white cursor-pointer transition-colors" title="Buffer Size">0 KB</span>
+              </div>
+
+              <!-- Right Info -->
+              <div class="flex items-center gap-3">
+                <span id="ide-stat-git" class="flex items-center gap-1 hover:text-white cursor-pointer transition-colors" onclick="runCommandShortcut('git status -s')" title="Click to check git status">
+                  <i data-lucide="git-branch" class="w-2.5 h-2.5 text-gold-500"></i>
+                  <span id="ide-git-branch-label">main</span>
+                </span>
+                <span>•</span>
+                <span id="ide-stat-spaces" class="hover:text-white cursor-pointer transition-colors" onclick="toggleIndentSpaces()" title="Click to toggle indentation spaces">Spaces: 2</span>
+                <span>•</span>
+                <span id="ide-stat-encoding" class="hover:text-white cursor-pointer transition-colors" onclick="showEncodingInfo()" title="File Encoding">UTF-8</span>
+                <span>•</span>
+                <span id="ide-stat-lang" class="text-gold-400 font-bold uppercase hover:underline cursor-pointer transition-colors" onclick="focusLanguageSelect()" title="Language Mode (Click to change)">PYTHON</span>
+                <span>•</span>
+                <button onclick="toggleTerminalPanel()" class="hover:text-white flex items-center gap-1 transition-colors" title="Toggle Terminal Drawer (Ctrl+`)">
+                  <i data-lucide="terminal" class="w-2.5 h-2.5"></i>
+                  <span>Terminal</span>
+                </button>
+              </div>
             </div>
 
           </div>
 
         </div>
 
-        <!-- Sticky Floating Input for Ongoing Conversations -->
-        <div id="sticky-chat-input-bar" class="hidden pt-2 sticky bottom-0 z-10 w-full bg-[var(--bg-app)]">
-          <div class="antigravity-input-pill p-3 text-left space-y-2 hover-float">
-            <textarea id="sticky-prompt-input" rows="2" placeholder="Ask Courtesy, or instruct code changes"
-              class="w-full bg-transparent text-xs text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none resize-none font-sans leading-relaxed"
-              onkeydown="handleStickyInputKey(event)"></textarea>
+        <!-- Resizer: Split Mode (IDE / Chat Copilot) Drag Handle -->
+        <div id="ide-chat-resizer" class="hidden w-1.5 hover:w-2 bg-transparent hover:bg-gold-500/50 active:bg-gold-500 cursor-col-resize transition-all shrink-0 z-30 select-none flex items-center justify-center group" title="Drag to resize split panes (Double-click for 50/50)">
+          <div class="w-0.5 h-10 rounded-full bg-[var(--border-app)] group-hover:bg-gold-400 transition-colors"></div>
+        </div>
 
-            <div class="flex items-center justify-between pt-1 border-t border-[var(--border-app-subtle)]">
-              <div class="flex items-center gap-1.5">
+        <!-- ================= COURTESY CHAT / DEX PANEL ================= -->
+        <div id="courtesy-chat-panel" class="flex-1 flex flex-col h-full overflow-hidden relative">
+
+          <!-- Dex Main Scrollable Body -->
+          <div class="flex-1 overflow-y-auto flex flex-col justify-between p-4 md:p-6 max-w-3xl w-full mx-auto space-y-6">
+
+            <!-- Conversation Feed -->
+            <div id="chat-messages" class="space-y-5 text-xs flex-1">
+
+              <!-- Empty State: Antigravity Center Welcome Card -->
+              <div id="empty-chat-placeholder"
+                class="min-h-[50vh] flex flex-col items-center justify-center text-center space-y-6 animate-fade-in pt-8">
+
+                <!-- Floating Workspace Folder Selector -->
                 <button onclick="pickWorkspaceFolder()"
-                  class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
-                  title="Choose Workspace Folder">
-                  <i data-lucide="folder-plus" class="w-4 h-4"></i>
+                  class="px-4 py-1.5 rounded-full border border-[var(--border-app)] bg-[var(--bg-surface-elevated)] hover:border-gold text-[var(--text-main)] font-mono text-xs flex items-center gap-2 hover-float transition shadow-sm"
+                  title="Click to open Windows File Explorer">
+                  <i data-lucide="folder" class="w-3.5 h-3.5 text-gold-500"></i>
+                  <span id="center-folder-label">courtesy</span>
+                  <i data-lucide="chevron-down" class="w-3 h-3 text-[var(--text-dim)]"></i>
                 </button>
-                <button onclick="insertPromptPrefix('/plan ')"
-                  class="px-2 py-0.5 rounded-full border border-gold/30 bg-[var(--gold-subtle)] text-gold-400 font-mono text-[10px] hover:border-gold transition flex items-center gap-1"
-                  title="Generate Antigravity Implementation Plan">
-                  <i data-lucide="clipboard-list" class="w-3 h-3"></i>
-                  <span>/plan</span>
-                </button>
-                <button onclick="openProjectSettingsModal()"
-                  class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-gold-400 transition"
-                  title="Project Settings & Rules">
-                  <i data-lucide="settings" class="w-3.5 h-3.5"></i>
-                </button>
-                <span class="text-[10px] font-mono text-gold-500 hidden sm:inline" id="sticky-model-display">🧠 Qwen 2.5 Coder 14B</span>
+
+                <!-- Antigravity Center Input Pill -->
+                <div class="w-full antigravity-input-pill p-3.5 text-left space-y-3 relative hover-float">
+
+                  <!-- Textarea Prompt Input -->
+                  <textarea id="prompt-input" rows="3" placeholder="Ask Courtesy, or instruct code changes"
+                    class="w-full bg-transparent text-xs text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none resize-none font-sans leading-relaxed"
+                    onkeydown="handleInputKey(event)"></textarea>
+
+                  <!-- Inside Toolbar Controls -->
+                  <div class="flex items-center justify-between pt-1 border-t border-[var(--border-app-subtle)]">
+
+                    <!-- Left: Attachments, Plan Mode & Settings -->
+                    <div class="flex items-center gap-1.5">
+                      <button onclick="pickWorkspaceFolder()"
+                        class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
+                        title="Attach folder context / File Explorer">
+                        <i data-lucide="folder-plus" class="w-4 h-4"></i>
+                      </button>
+
+                      <button onclick="insertPromptPrefix('/plan ')"
+                        class="px-2 py-0.5 rounded-full border border-gold/30 bg-[var(--gold-subtle)] text-gold-400 font-mono text-[10px] hover:border-gold transition flex items-center gap-1"
+                        title="Generate Antigravity Implementation Plan">
+                        <i data-lucide="clipboard-list" class="w-3 h-3"></i>
+                        <span>/plan</span>
+                      </button>
+
+                      <button onclick="openProjectSettingsModal()"
+                        class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-gold-400 transition"
+                        title="Project Settings & Rules">
+                        <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+                      </button>
+
+                      <div
+                        class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--bg-muted)] border border-[var(--border-app)] text-[10px] font-mono text-gold-400">
+                        <span id="active-model-display">🧠 Qwen 2.5 Coder 14B</span>
+                      </div>
+                    </div>
+
+                    <!-- Right: Voice Mic & Send Button -->
+                    <div class="flex items-center gap-2">
+                      <button onclick="startVoiceInput('prompt-input')"
+                        class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
+                        title="Voice Input (Speech to Text)">
+                        <i data-lucide="mic" class="w-3.5 h-3.5"></i>
+                      </button>
+
+                      <button id="stop-stream-btn" onclick="stopGenerating()"
+                        class="hidden px-2.5 py-1 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 text-[10px] font-bold border border-rose-800 transition flex items-center gap-1">
+                        <i data-lucide="square" class="w-2.5 h-2.5 fill-current"></i>
+                        <span>Stop</span>
+                      </button>
+
+                      <button id="send-prompt-btn" onclick="sendPrompt()"
+                        class="w-7 h-7 rounded-full bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 flex items-center justify-center font-bold transition shadow-sm shadow-gold-glow hover:scale-105"
+                        title="Send (Enter)">
+                        <i data-lucide="arrow-right" class="w-3.5 h-3.5 stroke-[2.5]"></i>
+                      </button>
+                    </div>
+
+                  </div>
+
+                </div>
+
+                <!-- Sub-pill: Local / Cluster Target -->
+                <div class="flex items-center gap-2 text-[10px] font-mono text-[var(--text-dim)]">
+                  <span
+                    class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--bg-surface)] border border-[var(--border-app)]">
+                    <i data-lucide="hard-drive" class="w-3 h-3 text-gold-500"></i>
+                    <span>Local Workspace</span>
+                  </span>
+                  <span>•</span>
+                  <span
+                    class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--bg-surface)] border border-[var(--border-app)]">
+                    <i data-lucide="cpu" class="w-3 h-3 text-emerald-400"></i>
+                    <span>6x Quadro P2000 Cluster (cst)</span>
+                  </span>
+                </div>
+
               </div>
 
-              <div class="flex items-center gap-2">
-                <button id="sticky-stop-btn" onclick="stopGenerating()"
-                  class="hidden px-2.5 py-1 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 text-[10px] font-bold border border-rose-800 transition flex items-center gap-1">
-                  <i data-lucide="square" class="w-2.5 h-2.5 fill-current"></i> Stop
-                </button>
-                <button id="sticky-send-btn" onclick="sendStickyPrompt()"
-                  class="w-7 h-7 rounded-full bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 flex items-center justify-center font-bold transition shadow-sm hover:scale-105">
-                  <i data-lucide="arrow-right" class="w-3.5 h-3.5 stroke-[2.5]"></i>
-                </button>
+            </div>
+
+            <!-- Sticky Floating Input for Ongoing Conversations -->
+            <div id="sticky-chat-input-bar" class="hidden pt-2 sticky bottom-0 z-10 w-full bg-[var(--bg-app)]">
+              <div class="antigravity-input-pill p-3 text-left space-y-2 hover-float">
+                <textarea id="sticky-prompt-input" rows="2" placeholder="Ask Courtesy, or instruct code changes"
+                  class="w-full bg-transparent text-xs text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none resize-none font-sans leading-relaxed"
+                  onkeydown="handleStickyInputKey(event)"></textarea>
+
+                <div class="flex items-center justify-between pt-1 border-t border-[var(--border-app-subtle)]">
+                  <div class="flex items-center gap-1.5">
+                    <button onclick="pickWorkspaceFolder()"
+                      class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
+                      title="Choose Workspace Folder">
+                      <i data-lucide="folder-plus" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="insertPromptPrefix('/plan ')"
+                      class="px-2 py-0.5 rounded-full border border-gold/30 bg-[var(--gold-subtle)] text-gold-400 font-mono text-[10px] hover:border-gold transition flex items-center gap-1"
+                      title="Generate Antigravity Implementation Plan">
+                      <i data-lucide="clipboard-list" class="w-3 h-3"></i>
+                      <span>/plan</span>
+                    </button>
+                    <button onclick="openProjectSettingsModal()"
+                      class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-gold-400 transition"
+                      title="Project Settings & Rules">
+                      <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <span class="text-[10px] font-mono text-gold-500 hidden sm:inline" id="sticky-model-display">🧠 Qwen 2.5 Coder 14B</span>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <button onclick="startVoiceInput('sticky-prompt-input')"
+                      class="p-1.5 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition"
+                      title="Voice Input (Speech to Text)">
+                      <i data-lucide="mic" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button id="sticky-stop-btn" onclick="stopGenerating()"
+                      class="hidden px-2.5 py-1 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 text-[10px] font-bold border border-rose-800 transition flex items-center gap-1">
+                      <i data-lucide="square" class="w-2.5 h-2.5 fill-current"></i> Stop
+                    </button>
+                    <button id="sticky-send-btn" onclick="sendStickyPrompt()"
+                      class="w-7 h-7 rounded-full bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 flex items-center justify-center font-bold transition shadow-sm hover:scale-105"
+                      title="Send (Enter)">
+                      <i data-lucide="arrow-right" class="w-3.5 h-3.5 stroke-[2.5]"></i>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
+
           </div>
+
         </div>
 
       </div>
@@ -768,6 +1070,96 @@
                 <path id="mining-chart-cpu-line" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="2,2" d="M0,100 L600,100" />
               </svg>
             </div>
+          <!-- Live Pool Payouts & Cashout Telemetry -->
+          <div class="pt-3 border-t border-[var(--border-app)] space-y-3">
+            <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-white flex items-center gap-1.5">
+                  <i data-lucide="wallet-cards" class="w-3.5 h-3.5 text-gold-500"></i>
+                  <span>2Miners Pool Cashout & Payout Telemetry</span>
+                </span>
+                <span id="cashout-status-badge" class="px-2.5 py-0.5 rounded-full text-[9px] font-mono border border-cyan-500/30 bg-cyan-950/30 text-cyan-400">
+                  Waiting for Threshold (0.1 ETC)
+                </span>
+              </div>
+              <a id="pool-explorer-link" href="https://etc.2miners.com/account/0xcC324D93f2F4d61c59a33A11C24eD2F6DF223439" target="_blank" rel="noopener noreferrer"
+                 class="text-[10px] font-mono text-gold-400 hover:text-gold-300 flex items-center gap-1 transition">
+                <span>View 2Miners Account</span>
+                <i data-lucide="external-link" class="w-3 h-3"></i>
+              </a>
+            </div>
+
+            <!-- Cashout Progress to 0.1 ETC Threshold -->
+            <div class="p-4 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-3">
+              <div class="flex items-center justify-between text-[11px] font-mono">
+                <div class="text-[var(--text-dim)]">
+                  Accumulated Towards Cashout: <span id="cashout-balance-val" class="text-white font-bold">0.00000 ETC</span> / <span id="cashout-threshold-val" class="text-gold-400">0.10000 ETC</span>
+                  (<span id="cashout-percent-val" class="text-gold-400 font-bold">0.0%</span>)
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[var(--text-dim)]">Est. Time to Cashout:</span>
+                  <span id="cashout-time-val" class="text-gold-400 font-bold">Calculating...</span>
+                </div>
+              </div>
+              <div class="w-full bg-[var(--bg-muted)] h-2.5 rounded-full overflow-hidden">
+                <div id="cashout-progress-bar" class="gold-progress-bar h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+              </div>
+
+              <!-- 4-Box Telemetry Cards: Waiting vs Successful Cashouts -->
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 pt-1 text-xs font-mono">
+                <!-- Box 1: Waiting in Bot Cashouts -->
+                <div class="p-2.5 rounded-lg bg-[var(--bg-card)] border border-cyan-500/20 space-y-1">
+                  <div class="flex items-center justify-between text-[10px] text-[var(--text-dim)]">
+                    <span>Waiting in Bot</span>
+                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                  </div>
+                  <div id="cashout-unpaid-total" class="font-bold text-cyan-300 text-xs">0.00000 ETC</div>
+                  <div class="text-[9px] text-[var(--text-dim)] leading-tight">
+                    <span id="cashout-confirmed-val" class="text-white">0.00000</span> Confirmed<br>
+                    <span id="cashout-immature-val" class="text-cyan-400">0.00000</span> Immature
+                  </div>
+                </div>
+
+                <!-- Box 2: Time to Next Cashout -->
+                <div class="p-2.5 rounded-lg bg-[var(--bg-card)] border border-gold/20 space-y-1">
+                  <div class="flex items-center justify-between text-[10px] text-[var(--text-dim)]">
+                    <span>Time to Next Cashout</span>
+                    <i data-lucide="clock" class="w-3 h-3 text-gold-500"></i>
+                  </div>
+                  <div id="cashout-time-card-val" class="font-bold text-gold-400 text-xs">Calculating...</div>
+                  <div class="text-[9px] text-[var(--text-dim)] leading-tight">
+                    Rate: <span id="cashout-daily-rate-val" class="text-white">~0.045 ETC/d</span><br>
+                    Threshold: <span class="text-gold-400">0.1000 ETC</span>
+                  </div>
+                </div>
+
+                <!-- Box 3: Successful Cashouts -->
+                <div class="p-2.5 rounded-lg bg-[var(--bg-card)] border border-emerald-500/20 space-y-1">
+                  <div class="flex items-center justify-between text-[10px] text-[var(--text-dim)]">
+                    <span>Successful Cashouts</span>
+                    <i data-lucide="check-circle-2" class="w-3 h-3 text-emerald-400"></i>
+                  </div>
+                  <div id="cashout-total-count" class="font-bold text-emerald-400 text-xs">0 Completed</div>
+                  <div class="text-[9px] text-[var(--text-dim)] leading-tight">
+                    Paid: <span id="cashout-paid-val" class="text-white font-bold">0.00000 ETC</span><br>
+                    Cycle: <span class="text-emerald-300">Every 2h on pool</span>
+                  </div>
+                </div>
+
+                <!-- Box 4: Pool Share Validation -->
+                <div class="p-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-app)] space-y-1">
+                  <div class="flex items-center justify-between text-[10px] text-[var(--text-dim)]">
+                    <span>Pool Validation</span>
+                    <i data-lucide="shield-check" class="w-3 h-3 text-emerald-400"></i>
+                  </div>
+                  <div id="cashout-shares-val" class="font-bold text-emerald-400 text-xs">0 Valid</div>
+                  <div class="text-[9px] text-[var(--text-dim)] leading-tight">
+                    Stale: <span id="cashout-rejected-val" class="text-rose-400">0</span> shares<br>
+                    Workers: <span id="cashout-workers-val" class="text-white">0 / 3 Rigs</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Settings -->
@@ -782,11 +1174,9 @@
             <div class="flex items-center gap-2">
               <select id="mining-coin-select"
                 class="bg-[var(--bg-input)] border border-[var(--border-app)] rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
-                <option value="ETC_XMR" selected>Dual Mining: ETCHash + RandomX (Nano Pool)</option>
-                <option value="ETC">ETC Only (Ethereum Classic - 2Miners)</option>
-                <option value="ERG">Ergo Only (ERG - HeroMiners)</option>
-                <option value="UNMINEABLE_BTC">Unmineable (Payout BTC)</option>
-                <option value="UNMINEABLE_USDT">Unmineable (Payout USDT)</option>
+                <option value="ETC" selected>Ethereum Classic (ETC • 2Miners)</option>
+                <option value="ERG">Ergo (ERG • HeroMiners)</option>
+                <option value="RVN">Ravencoin (RVN • 2Miners)</option>
               </select>
               <button onclick="saveMiningSettings()"
                 class="px-3 py-1.5 rounded-lg bg-gold-gradient text-slate-950 font-bold text-xs shadow-sm hover:brightness-110 transition">

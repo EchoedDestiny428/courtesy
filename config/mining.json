@@ -7,9 +7,10 @@
   "power_limit_watts": 60,
   "idle_threshold_seconds": 120,
   "temp_limit_celsius": 68,
-  "cpu_mining_enabled": true,
+  "cpu_mining_enabled": false,
   "cpu_coin": "XMR",
+  "cpu_wallet": "",
   "cpu_pool": "xmr.2miners.com:2222",
-  "nano_payout": true,
+  "nano_payout": false,
   "nodes": ["kraken", "cst6", "cst7"]
 }

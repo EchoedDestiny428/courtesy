@@ -92,10 +92,13 @@ function returnToPortal() {
 
 function startStandardMode() {
   showView('view-standard');
+  const savedViewMode = localStorage.getItem('courtesy_ide_view_mode') || 'split';
+  setIdeViewMode(savedViewMode);
   if (!currentWorkspaceFolder || workspaceProjects.length === 0) {
     pickWorkspaceFolder();
   } else {
     loadActiveProjectContext();
+    loadWorkspaceFileTree();
   }
   updatePinnedNodeUI();
 }
@@ -107,14 +110,18 @@ function updatePinnedNodeUI() {
     const modelLabel = pinnedNode === 'kraken' ? '7B Fast' : '14B Heavy';
     label.innerText = `Pinned: ${pinnedNode} (${modelLabel})`;
   }
+  const mode = (pinnedNode === 'cst7') ? '14b' : '7b';
+  const modelText = (mode === '14b') ? '🧠 Qwen 2.5 Coder 14B' : '⚡ Qwen 2.5 Coder 7B';
+  const activeDisplay = document.getElementById('active-model-display');
+  if (activeDisplay) activeDisplay.textContent = modelText;
+  const stickyDisplay = document.getElementById('sticky-model-display');
+  if (stickyDisplay) stickyDisplay.textContent = modelText;
 }
 
 function cyclePinnedNode() {
   pinnedNode = (pinnedNode === 'kraken') ? 'cst7' : 'kraken';
   localStorage.setItem('pinned_cluster_node', pinnedNode);
   selectModelMode(pinnedNode === 'kraken' ? '7b' : '14b');
-  updatePinnedNodeUI();
-  showToast(`Pinned compute node: ${pinnedNode}`, "📌");
 }
 
 function selectModelMode(mode) {
@@ -275,10 +282,14 @@ function switchWorkspace(folderPath) {
   renderProjectsList();
   showToast(`Workspace: ${shortName}`, "📁");
 
-  // Preload workspace file tree for autonomous context
+  // Preload workspace file tree for autonomous context & IDE explorer
   getWorkspaceFileList(folderPath).then(files => {
     cachedWorkspaceFiles = files;
+    ideFileTreeData = files;
+    renderFileTreeUI(files);
+    refreshWorkspaceGitStatus();
   });
+  loadWorkspaceFileTree();
 }
 
 function setWorkspaceFolder(path) {
@@ -902,15 +913,33 @@ function applyTheme(theme) {
   if (window.lucide) lucide.createIcons();
 }
 
-// ================= Electron Window Controls =================
+// ================= Electron & Browser Window Controls =================
 function windowMinimize() {
-  if (window.electronAPI) window.electronAPI.minimizeWindow();
+  if (window.electronAPI) {
+    window.electronAPI.minimizeWindow();
+  } else {
+    returnToPortal();
+  }
 }
 function windowMaximize() {
-  if (window.electronAPI) window.electronAPI.maximizeWindow();
+  if (window.electronAPI) {
+    window.electronAPI.maximizeWindow();
+  } else {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
 }
 function windowClose() {
-  if (window.electronAPI) window.electronAPI.closeWindow();
+  if (window.electronAPI) {
+    window.electronAPI.closeWindow();
+  } else {
+    if (confirm("Exit Courtesy Workbench and return to Portal?")) {
+      returnToPortal();
+    }
+  }
 }
 
 // ================= Endpoint Switcher =================
@@ -1366,8 +1395,10 @@ function createMinimalServerCardHtml(s) {
     inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-rose-950/40 text-rose-400 border border-rose-800/40">Offline</span>`;
   } else if (s.running_models && s.running_models.length > 0) {
     inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> AI Active</span>`;
-  } else if (lastMiningState === 'mining') {
+  } else if (!isGateway && lastMiningState === 'mining') {
     inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Mining Active</span>`;
+  } else if (!isGateway && lastMiningState === 'preempted_inference') {
+    inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span> Preempted</span>`;
   } else {
     inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-[var(--bg-muted)] text-[var(--text-dim)] border border-[var(--border-app)]">Idle (Ready)</span>`;
   }
@@ -1472,7 +1503,9 @@ function populateNodeDetailModal(s) {
   let stateText = 'Idle (Ready)';
   if (!isOnline) stateText = 'Offline';
   else if (s.running_models && s.running_models.length > 0) stateText = 'AI Inference Active';
-  else if (lastMiningState === 'mining') stateText = 'Mining (ETCHash + RandomX)';
+  else if (!isGateway && lastMiningState === 'mining') stateText = 'Mining (Etchash)';
+  else if (!isGateway && lastMiningState === 'preempted_inference') stateText = 'Preempted (AI Priority)';
+  else if (isGateway) stateText = 'Orchestrating Cluster';
   const stateEl = document.getElementById('node-detail-state-val');
   if (stateEl) stateEl.innerText = stateText;
 
@@ -1515,12 +1548,7 @@ function populateNodeDetailModal(s) {
   // Top Processes Table
   const procTbody = document.getElementById('node-detail-processes-tbody');
   if (procTbody) {
-    const procs = (s.top_processes && s.top_processes.length > 0) ? s.top_processes : [
-      { pid: '1422', user: 'ollama', cpu: 12.4, mem: 8.2, cmd: 'ollama runner qwen2.5-coder:7b' },
-      { pid: '1890', user: 'root', cpu: 4.1, mem: 1.2, cmd: 'nanominer config.ini' },
-      { pid: '984', user: 'cst', cpu: 1.8, mem: 0.9, cmd: 'python3 -m courtesy.app' },
-      { pid: '1', user: 'root', cpu: 0.1, mem: 0.2, cmd: '/sbin/init' }
-    ];
+    const procs = (s.top_processes && s.top_processes.length > 0) ? s.top_processes : [];
     procTbody.innerHTML = procs.map(p => `
       <tr class="hover:bg-[var(--bg-muted)] transition">
         <td class="px-3 py-1 text-gold-400">${p.pid}</td>
@@ -1651,43 +1679,841 @@ async function toggleServer(serverId) {
   } catch (e) {}
 }
 
-// ================= Antigravity Code Workbench / Scratchpad =================
+// ================= COURTESY ROBUST IDE & WORKSPACE ENGINE =================
+let ideViewMode = 'chat'; // 'chat', 'split', 'ide'
+let ideOpenTabs = []; // Array of { id, path, name, relative, content, originalContent, isDirty, lang, cursor: { start, end } }
+let ideActiveTabIndex = -1;
+let ideTerminalHistory = [];
+let ideTerminalHistoryIndex = -1;
+let ideFileTreeData = [];
+let ideExpandedFolders = new Set();
+
 function getScratchpad() {
-  return document.getElementById('scratchpad-editor') || document.getElementById('ide-code-area');
+  return document.getElementById('ide-code-textarea') || document.getElementById('scratchpad-editor') || document.getElementById('ide-code-area');
 }
 
 function getEditorGutter() {
   return document.getElementById('editor-gutter');
 }
 
-function updateScratchpadStats() {
-  const textarea = getScratchpad();
-  const lineCountEl = document.getElementById('scratchpad-line-count');
-  const charCountEl = document.getElementById('scratchpad-char-count');
-  const langStatusEl = document.getElementById('scratchpad-status-lang');
-  const langSelect = document.getElementById('scratchpad-lang') || document.getElementById('editor-language');
+// ---------------- 3-Way Layout Switcher ----------------
+function setIdeViewMode(mode) {
+  ideViewMode = mode;
+  try {
+    localStorage.setItem('courtesy_ide_view_mode', mode);
+  } catch (e) {}
 
-  if (textarea) {
-    const text = textarea.value || '';
-    const lines = text.split('\n').length;
-    if (lineCountEl) lineCountEl.innerText = `${lines} ${lines === 1 ? 'line' : 'lines'}`;
-    if (charCountEl) charCountEl.innerText = `${text.length} chars`;
+  const idePanel = document.getElementById('courtesy-ide-panel');
+  const chatPanel = document.getElementById('courtesy-chat-panel');
+  const resizer = document.getElementById('ide-chat-resizer');
+  const btnChat = document.getElementById('view-mode-btn-chat');
+  const btnSplit = document.getElementById('view-mode-btn-split');
+  const btnIde = document.getElementById('view-mode-btn-ide');
+
+  [btnChat, btnSplit, btnIde].forEach(b => {
+    if (b) {
+      b.classList.remove('active');
+      b.classList.add('text-[var(--text-muted)]');
+    }
+  });
+
+  const activeBtn = mode === 'chat' ? btnChat : (mode === 'split' ? btnSplit : btnIde);
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+    activeBtn.classList.remove('text-[var(--text-muted)]');
   }
 
-  if (langStatusEl && langSelect) {
-    langStatusEl.innerText = langSelect.value.toUpperCase();
+  if (idePanel && chatPanel) {
+    if (mode === 'chat') {
+      if (resizer) resizer.classList.add('hidden');
+      idePanel.classList.add('hidden');
+      idePanel.style.width = '';
+      idePanel.style.flex = '';
+      chatPanel.classList.remove('hidden', 'w-1/2');
+      chatPanel.classList.add('flex-1', 'w-full');
+      chatPanel.style.width = '';
+      chatPanel.style.flex = '';
+    } else if (mode === 'split') {
+      idePanel.classList.remove('hidden', 'flex-1', 'w-full');
+      chatPanel.classList.remove('hidden', 'flex-1', 'w-full');
+      if (resizer) resizer.classList.remove('hidden');
+      let savedRatio = parseFloat(localStorage.getItem('courtesy_split_ratio')) || 50;
+      if (savedRatio <= 1.0) savedRatio = savedRatio * 100;
+      savedRatio = Math.max(15, Math.min(85, savedRatio));
+      idePanel.style.width = `${savedRatio.toFixed(2)}%`;
+      chatPanel.style.width = `${(100 - savedRatio).toFixed(2)}%`;
+      idePanel.style.flex = 'none';
+      chatPanel.style.flex = 'none';
+      idePanel.classList.add('border-r', 'border-[var(--border-app)]');
+    } else if (mode === 'ide') {
+      if (resizer) resizer.classList.add('hidden');
+      chatPanel.classList.add('hidden');
+      chatPanel.style.width = '';
+      chatPanel.style.flex = '';
+      idePanel.classList.remove('hidden', 'w-1/2', 'border-r', 'border-[var(--border-app)]');
+      idePanel.classList.add('flex-1', 'w-full');
+      idePanel.style.width = '';
+      idePanel.style.flex = '';
+    }
+  }
+
+  syncEditorGutter();
+  if (window.lucide) lucide.createIcons();
+}
+
+function cycleIdeLayout() {
+  const modes = ['chat', 'split', 'ide'];
+  const nextIdx = (modes.indexOf(ideViewMode) + 1) % modes.length;
+  setIdeViewMode(modes[nextIdx]);
+  showToast(`View mode: ${modes[nextIdx].toUpperCase()}`, "📐");
+}
+
+function detectLanguageFromPath(filePath) {
+  if (!filePath) return 'python';
+  const ext = filePath.split('.').pop().toLowerCase();
+  const map = {
+    py: 'python',
+    js: 'javascript',
+    jsx: 'javascript',
+    ts: 'typescript',
+    tsx: 'typescript',
+    html: 'html',
+    htm: 'html',
+    css: 'css',
+    scss: 'css',
+    json: 'json',
+    md: 'markdown',
+    markdown: 'markdown',
+    rs: 'rust',
+    go: 'go',
+    cpp: 'cpp',
+    c: 'cpp',
+    h: 'cpp',
+    hpp: 'cpp',
+    sh: 'bash',
+    bash: 'bash',
+    zsh: 'bash',
+    ps1: 'bash',
+    sql: 'sql',
+    yaml: 'yaml',
+    yml: 'yaml'
+  };
+  return map[ext] || 'python';
+}
+
+function getFileIconClass(filename) {
+  if (!filename) return 'file-code';
+  const ext = filename.split('.').pop().toLowerCase();
+  switch (ext) {
+    case 'py': return 'file-code';
+    case 'js':
+    case 'jsx':
+    case 'ts':
+    case 'tsx': return 'code-2';
+    case 'html':
+    case 'htm': return 'globe';
+    case 'css':
+    case 'scss': return 'palette';
+    case 'json': return 'braces';
+    case 'md': return 'file-text';
+    case 'sh':
+    case 'bash': return 'terminal';
+    case 'png':
+    case 'jpg':
+    case 'jpeg':
+    case 'gif':
+    case 'svg': return 'image';
+    default: return 'file';
   }
 }
 
-function handleEditorTabKey(event) {
+// ---------------- Tabs Management ----------------
+function renderIdeTabs() {
+  const container = document.getElementById('ide-tab-bar');
+  if (!container) return;
+
+  if (ideOpenTabs.length === 0) {
+    createNewBufferTab();
+    return;
+  }
+
+  container.innerHTML = ideOpenTabs.map((tab, idx) => {
+    const isActive = idx === ideActiveTabIndex;
+    const dirtyBadge = tab.isDirty ? '<span class="tab-dirty-dot" title="Unsaved changes"></span>' : '';
+    const icon = getFileIconClass(tab.name);
+    return `
+      <div class="ide-tab ${isActive ? 'active' : ''}" onclick="selectEditorTab(${idx})" title="${escapeHtml(tab.path || tab.name)}">
+        <i data-lucide="${icon}" class="w-3 h-3 shrink-0 ${tab.isDirty ? 'text-gold-400' : 'text-[var(--text-dim)]'}"></i>
+        <span class="truncate max-w-[120px]">${escapeHtml(tab.name)}</span>
+        ${dirtyBadge}
+        <button class="tab-close-btn ml-1 hover:text-rose-400" onclick="closeEditorTab(${idx}, event)" title="Close Tab">
+          <i data-lucide="x" class="w-3 h-3"></i>
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function selectEditorTab(index) {
+  if (index < 0 || index >= ideOpenTabs.length) return;
+
+  // Save cursor & content of previous tab
+  if (ideActiveTabIndex >= 0 && ideActiveTabIndex < ideOpenTabs.length) {
+    const prevTab = ideOpenTabs[ideActiveTabIndex];
+    const editor = getScratchpad();
+    if (editor) {
+      prevTab.content = editor.value;
+      prevTab.cursor = { start: editor.selectionStart, end: editor.selectionEnd };
+    }
+  }
+
+  ideActiveTabIndex = index;
+  const tab = ideOpenTabs[index];
+  const editor = getScratchpad();
+  const breadcrumb = document.getElementById('ide-file-breadcrumb');
+  const dirtyBadge = document.getElementById('ide-dirty-badge');
+  const langSelect = document.getElementById('editor-language-select');
+
+  if (editor) {
+    editor.value = tab.content || '';
+    if (tab.cursor) {
+      setTimeout(() => {
+        editor.selectionStart = tab.cursor.start;
+        editor.selectionEnd = tab.cursor.end;
+      }, 10);
+    }
+  }
+
+  if (breadcrumb) breadcrumb.innerText = tab.relative || tab.name || 'untitled.py';
+  if (dirtyBadge) {
+    if (tab.isDirty) dirtyBadge.classList.remove('hidden');
+    else dirtyBadge.classList.add('hidden');
+  }
+  if (langSelect) langSelect.value = tab.lang || 'python';
+  const statLang = document.getElementById('ide-stat-lang');
+  if (statLang) statLang.innerText = (tab.lang || 'python').toUpperCase();
+
+  renderIdeTabs();
+  syncEditorGutter();
+  updateCursorPositionStats();
+}
+
+function closeEditorTab(index, event) {
+  if (event) event.stopPropagation();
+  if (index < 0 || index >= ideOpenTabs.length) return;
+
+  const tab = ideOpenTabs[index];
+  if (tab.isDirty) {
+    if (!confirm(`Discard unsaved changes to "${tab.name}"?`)) return;
+  }
+
+  ideOpenTabs.splice(index, 1);
+  if (ideOpenTabs.length === 0) {
+    createNewBufferTab();
+  } else {
+    const newIdx = Math.min(index, ideOpenTabs.length - 1);
+    selectEditorTab(newIdx);
+  }
+}
+
+function createNewBufferTab(initialContent = "", name = null) {
+  const scratchCount = ideOpenTabs.filter(t => !t.path).length + 1;
+  const bufferName = name || (scratchCount === 1 ? 'scratchpad.py' : `untitled-${scratchCount}.py`);
+  const defaultCode = initialContent || `# Courtesy Autonomous Scratchpad (${bufferName})\n\ndef main():\n    print("Hello from Courtesy Antigravity IDE!")\n\nif __name__ == "__main__":\n    main()\n`;
+  const newTab = {
+    id: 'tab_scratch_' + Date.now(),
+    path: '',
+    name: bufferName,
+    relative: bufferName,
+    content: defaultCode,
+    originalContent: defaultCode,
+    isDirty: false,
+    lang: detectLanguageFromPath(bufferName),
+    cursor: { start: 0, end: 0 }
+  };
+  ideOpenTabs.push(newTab);
+  selectEditorTab(ideOpenTabs.length - 1);
+}
+
+async function openFileInEditor(filePath, fileName = null, initialContent = null) {
+  const existingIdx = ideOpenTabs.findIndex(t => t.path === filePath);
+  if (existingIdx !== -1) {
+    selectEditorTab(existingIdx);
+    if (ideViewMode === 'chat') setIdeViewMode('split');
+    return;
+  }
+
+  const name = fileName || (filePath ? filePath.split(/[\/\\]/).pop() : 'untitled.py');
+  const relative = (currentWorkspaceFolder && filePath && filePath.startsWith(currentWorkspaceFolder))
+    ? filePath.slice(currentWorkspaceFolder.length).replace(/^[\\\/]/, '')
+    : name;
+  const lang = detectLanguageFromPath(name);
+
+  let content = initialContent;
+  if (content === null && filePath) {
+    try {
+      const resp = await fetch(`${apiBaseUrl}/api/workspace/read?path=${encodeURIComponent(filePath)}&folder=${encodeURIComponent(currentWorkspaceFolder)}`);
+      const data = await resp.json();
+      if (data.success) {
+        content = data.content;
+      } else {
+        showToast(`Failed to read file: ${data.error}`, "❌");
+        content = `# Error reading ${name}`;
+      }
+    } catch (e) {
+      showToast(`Error opening file: ${e.message}`, "❌");
+      content = `# Network error reading ${name}`;
+    }
+  }
+
+  const newTab = {
+    id: 'tab_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    path: filePath,
+    name: name,
+    relative: relative,
+    content: content || '',
+    originalContent: content || '',
+    isDirty: false,
+    lang: lang,
+    cursor: { start: 0, end: 0 }
+  };
+
+  ideOpenTabs.push(newTab);
+  selectEditorTab(ideOpenTabs.length - 1);
+
+  if (ideViewMode === 'chat') {
+    setIdeViewMode('split');
+  }
+}
+
+async function saveActiveFile() {
+  if (ideActiveTabIndex < 0 || ideActiveTabIndex >= ideOpenTabs.length) return;
+  const tab = ideOpenTabs[ideActiveTabIndex];
+  const editor = getScratchpad();
+  if (!editor) return;
+
+  tab.content = editor.value;
+
+  if (!tab.path) {
+    const filename = prompt("Enter file name or relative path to save in workspace:", tab.name || "script.py");
+    if (!filename) return;
+    tab.name = filename;
+    tab.relative = filename;
+    tab.path = currentWorkspaceFolder ? `${currentWorkspaceFolder}/${filename}` : filename;
+    tab.lang = detectLanguageFromPath(filename);
+  }
+
+  try {
+    const resp = await fetch(`${apiBaseUrl}/api/workspace/write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: tab.path,
+        content: tab.content,
+        folder: currentWorkspaceFolder
+      })
+    });
+    const data = await resp.json();
+    if (data.success) {
+      tab.originalContent = tab.content;
+      tab.isDirty = false;
+      const dirtyBadge = document.getElementById('ide-dirty-badge');
+      if (dirtyBadge) dirtyBadge.classList.add('hidden');
+      renderIdeTabs();
+      showToast(`Saved ${tab.name}`, "💾");
+      refreshWorkspaceGitStatus();
+      loadWorkspaceFileTree();
+    } else {
+      showToast(`Save error: ${data.error}`, "❌");
+    }
+  } catch (e) {
+    showToast(`Network error saving file: ${e.message}`, "❌");
+  }
+}
+
+// ---------------- File Explorer & Tree Navigation ----------------
+async function refreshWorkspaceTree() {
+  await loadWorkspaceFileTree();
+  showToast("Workspace tree refreshed", "🔄");
+}
+
+async function loadWorkspaceFileTree() {
+  const container = document.getElementById('ide-file-tree');
+  const rootLabel = document.getElementById('ide-tree-root-label');
+  const termCwd = document.getElementById('terminal-cwd-label');
+  if (!container) return;
+
+  if (!currentWorkspaceFolder) {
+    container.innerHTML = `
+      <div class="p-4 text-center text-[var(--text-dim)] space-y-2">
+        <p class="text-xs">No workspace selected</p>
+        <button onclick="pickWorkspaceFolder()" class="px-2.5 py-1 rounded bg-gold-gradient text-slate-950 font-bold text-[10px]">
+          Select Folder
+        </button>
+      </div>
+    `;
+    if (rootLabel) rootLabel.innerText = "No Workspace";
+    return;
+  }
+
+  const folderName = getFolderName(currentWorkspaceFolder);
+  if (rootLabel) rootLabel.innerText = folderName;
+  if (termCwd) termCwd.innerText = folderName;
+
+  try {
+    const files = await getWorkspaceFileList(currentWorkspaceFolder);
+    cachedWorkspaceFiles = files;
+    ideFileTreeData = files;
+    renderFileTreeUI(files);
+    refreshWorkspaceGitStatus();
+  } catch (e) {
+    container.innerHTML = `<div class="p-3 text-rose-400 text-xs">Failed to load workspace: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderFileTreeUI(files) {
+  const container = document.getElementById('ide-file-tree');
+  if (!container) return;
+
+  if (!files || files.length === 0) {
+    container.innerHTML = `<div class="p-4 text-center text-[var(--text-dim)] text-xs">Workspace directory is empty</div>`;
+    return;
+  }
+
+  const tree = {};
+  files.forEach(f => {
+    const parts = (f.relative || f.name).split(/[\\\/]/);
+    let curr = tree;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const isLast = i === parts.length - 1;
+      if (isLast && !f.is_dir) {
+        curr[part] = { __file: f };
+      } else {
+        if (!curr[part]) curr[part] = {};
+        curr = curr[part];
+      }
+    }
+  });
+
+  function renderNode(node, pathPrefix = '', depth = 0) {
+    let html = '';
+    const keys = Object.keys(node).sort((a, b) => {
+      const aIsDir = !node[a].__file;
+      const bIsDir = !node[b].__file;
+      if (aIsDir && !bIsDir) return -1;
+      if (!aIsDir && bIsDir) return 1;
+      return a.localeCompare(b);
+    });
+
+    for (const key of keys) {
+      const item = node[key];
+      const fullRelative = pathPrefix ? `${pathPrefix}/${key}` : key;
+      const indentPx = depth * 10;
+
+      if (item.__file) {
+        const fileObj = item.__file;
+        const icon = getFileIconClass(key);
+        const activeTab = ideOpenTabs[ideActiveTabIndex];
+        const isActive = activeTab && activeTab.path === fileObj.path;
+        html += `
+          <div class="file-tree-item group ${isActive ? 'active' : ''}" style="padding-left: ${indentPx + 6}px;"
+            onclick="openFileInEditor('${escapeJs(fileObj.path)}', '${escapeJs(key)}')">
+            <i data-lucide="${icon}" class="w-3.5 h-3.5 shrink-0 ${isActive ? 'text-gold-400' : 'text-[var(--text-dim)]'}"></i>
+            <span class="truncate flex-1">${escapeHtml(key)}</span>
+            <div class="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0">
+              <button onclick="event.stopPropagation(); copyWorkspaceItemPath('${escapeJs(fullRelative)}')"
+                class="p-0.5 hover:text-gold-400 transition" title="Copy relative path">
+                <i data-lucide="copy" class="w-2.5 h-2.5"></i>
+              </button>
+              <button onclick="event.stopPropagation(); renameWorkspaceItemPrompt('${escapeJs(fileObj.path)}', '${escapeJs(key)}', false)"
+                class="p-0.5 hover:text-gold-400 transition" title="Rename file">
+                <i data-lucide="edit-2" class="w-2.5 h-2.5"></i>
+              </button>
+              <button onclick="event.stopPropagation(); deleteWorkspaceItemPrompt('${escapeJs(fileObj.path)}', false)"
+                class="p-0.5 hover:text-rose-400 transition" title="Delete file">
+                <i data-lucide="trash-2" class="w-2.5 h-2.5"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      } else {
+        const isExpanded = ideExpandedFolders.has(fullRelative);
+        html += `
+          <div class="file-tree-item group" style="padding-left: ${indentPx + 6}px;"
+            onclick="toggleFolderExpand('${escapeJs(fullRelative)}')">
+            <i data-lucide="${isExpanded ? 'folder-open' : 'folder'}" class="w-3.5 h-3.5 shrink-0 text-gold-500"></i>
+            <span class="truncate flex-1 font-medium text-white">${escapeHtml(key)}</span>
+            <div class="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0">
+              <button onclick="event.stopPropagation(); createNewFilePrompt('${escapeJs(fullRelative)}')"
+                class="p-0.5 hover:text-gold-400 transition" title="New file in folder">
+                <i data-lucide="file-plus" class="w-2.5 h-2.5"></i>
+              </button>
+              <button onclick="event.stopPropagation(); createNewFolderPrompt('${escapeJs(fullRelative)}')"
+                class="p-0.5 hover:text-gold-400 transition" title="New subfolder">
+                <i data-lucide="folder-plus" class="w-2.5 h-2.5"></i>
+              </button>
+              <button onclick="event.stopPropagation(); renameWorkspaceItemPrompt('${escapeJs(fullRelative)}', '${escapeJs(key)}', true)"
+                class="p-0.5 hover:text-gold-400 transition" title="Rename folder">
+                <i data-lucide="edit-2" class="w-2.5 h-2.5"></i>
+              </button>
+              <button onclick="event.stopPropagation(); deleteWorkspaceItemPrompt('${escapeJs(fullRelative)}', true)"
+                class="p-0.5 hover:text-rose-400 transition" title="Delete folder">
+                <i data-lucide="trash-2" class="w-2.5 h-2.5"></i>
+              </button>
+            </div>
+          </div>
+        `;
+        if (isExpanded) {
+          html += `<div class="file-tree-folder-children">${renderNode(item, fullRelative, depth + 1)}</div>`;
+        }
+      }
+    }
+    return html;
+  }
+
+  container.innerHTML = renderNode(tree);
+  if (window.lucide) lucide.createIcons();
+}
+
+function toggleFolderExpand(folderRelative) {
+  if (ideExpandedFolders.has(folderRelative)) {
+    ideExpandedFolders.delete(folderRelative);
+  } else {
+    ideExpandedFolders.add(folderRelative);
+  }
+  renderFileTreeUI(ideFileTreeData);
+}
+
+function filterFileTreeInput(query) {
+  if (!query || !query.trim()) {
+    renderFileTreeUI(ideFileTreeData);
+    return;
+  }
+  const q = query.toLowerCase().trim();
+  const filtered = ideFileTreeData.filter(f => (f.relative || f.name).toLowerCase().includes(q));
+  renderFileTreeUI(filtered);
+}
+
+async function createNewFilePrompt(parentRelative = '') {
+  const prefix = parentRelative ? `${parentRelative}/` : '';
+  const relPath = prompt(`Create new file in workspace (relative path):`, `${prefix}`);
+  if (!relPath || !relPath.trim()) return;
+
+  try {
+    const resp = await fetch(`${apiBaseUrl}/api/workspace/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: relPath.trim(),
+        is_dir: false,
+        folder: currentWorkspaceFolder
+      })
+    });
+    const data = await resp.json();
+    if (data.success) {
+      showToast(`Created file ${relPath}`, "📄");
+      await loadWorkspaceFileTree();
+      openFileInEditor(data.full_path, data.name, "");
+    } else {
+      showToast(`Create failed: ${data.error}`, "❌");
+    }
+  } catch (e) {
+    showToast(`Error creating file: ${e.message}`, "❌");
+  }
+}
+
+async function createNewFolderPrompt(parentRelative = '') {
+  const prefix = parentRelative ? `${parentRelative}/` : '';
+  const relPath = prompt(`Create new folder in workspace:`, `${prefix}`);
+  if (!relPath || !relPath.trim()) return;
+
+  try {
+    const resp = await fetch(`${apiBaseUrl}/api/workspace/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: relPath.trim(),
+        is_dir: true,
+        folder: currentWorkspaceFolder
+      })
+    });
+    const data = await resp.json();
+    if (data.success) {
+      showToast(`Created directory ${relPath}`, "📁");
+      await loadWorkspaceFileTree();
+    } else {
+      showToast(`Create failed: ${data.error}`, "❌");
+    }
+  } catch (e) {
+    showToast(`Error creating folder: ${e.message}`, "❌");
+  }
+}
+
+async function deleteWorkspaceItemPrompt(itemPath, isDir = false) {
+  const name = itemPath.split(/[\/\\]/).pop();
+  if (!confirm(`Are you sure you want to permanently delete "${name}"?`)) return;
+
+  try {
+    const resp = await fetch(`${apiBaseUrl}/api/workspace/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: itemPath,
+        folder: currentWorkspaceFolder
+      })
+    });
+    const data = await resp.json();
+    if (data.success) {
+      showToast(`Deleted ${name}`, "🗑️");
+      const tabIdx = ideOpenTabs.findIndex(t => t.path === itemPath);
+      if (tabIdx !== -1) {
+        ideOpenTabs[tabIdx].isDirty = false;
+        closeEditorTab(tabIdx);
+      }
+      await loadWorkspaceFileTree();
+    } else {
+      showToast(`Delete failed: ${data.error}`, "❌");
+    }
+  } catch (e) {
+    showToast(`Error deleting item: ${e.message}`, "❌");
+  }
+}
+
+function copyWorkspaceItemPath(relPath) {
+  navigator.clipboard.writeText(relPath);
+  showToast(`Copied path: ${relPath}`, "📋");
+}
+
+async function renameWorkspaceItemPrompt(oldPath, oldName, isDir = false) {
+  const newName = prompt(`Rename ${isDir ? 'folder' : 'file'} "${oldName}" to:`, oldName);
+  if (!newName || !newName.trim() || newName.trim() === oldName) return;
+
+  const parentDir = oldPath.substring(0, oldPath.lastIndexOf('/'));
+  const newPath = parentDir ? `${parentDir}/${newName.trim()}` : newName.trim();
+
+  try {
+    const resp = await fetch(`${apiBaseUrl}/api/workspace/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        old_path: oldPath,
+        new_path: newPath,
+        folder: currentWorkspaceFolder
+      })
+    });
+    const data = await resp.json();
+    if (data.success) {
+      showToast(`Renamed to ${newName.trim()}`, "✏️");
+      const tab = ideOpenTabs.find(t => t.path === oldPath);
+      if (tab) {
+        tab.path = data.new_path || newPath;
+        tab.name = newName.trim();
+        tab.relative = (currentWorkspaceFolder && tab.path.startsWith(currentWorkspaceFolder))
+          ? tab.path.slice(currentWorkspaceFolder.length).replace(/^[\\\/]/, '')
+          : tab.name;
+        tab.lang = detectLanguageFromPath(tab.name);
+      }
+      await loadWorkspaceFileTree();
+      renderIdeTabs();
+    } else {
+      showToast(`Rename failed: ${data.error}`, "❌");
+    }
+  } catch (e) {
+    showToast(`Error renaming: ${e.message}`, "❌");
+  }
+}
+
+function toggleFileTreeSidebar() {
+  const sidebar = document.getElementById('ide-file-tree-sidebar');
+  if (sidebar) {
+    sidebar.classList.toggle('hidden');
+  }
+}
+
+// ---------------- Workspace Multi-File Code Search ----------------
+function toggleWorkspaceSearchDrawer(show) {
+  const box = document.getElementById('ide-workspace-search-box');
+  if (!box) return;
+  const isHidden = box.classList.contains('hidden');
+  const shouldShow = typeof show === 'boolean' ? show : isHidden;
+  if (shouldShow) {
+    box.classList.remove('hidden');
+    const input = document.getElementById('ide-code-search-input');
+    if (input) input.focus();
+  } else {
+    box.classList.add('hidden');
+  }
+}
+
+function handleCodeSearchKey(event) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    executeCodeSearch();
+  }
+}
+
+async function executeCodeSearch() {
+  const input = document.getElementById('ide-code-search-input');
+  const list = document.getElementById('ide-search-results-list');
+  if (!input || !list) return;
+
+  const query = input.value.trim();
+  if (!query) return;
+
+  list.innerHTML = `<div class="p-2 text-[var(--text-dim)]">Searching...</div>`;
+
+  try {
+    const resp = await fetch(`${apiBaseUrl}/api/workspace/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: query,
+        folder: currentWorkspaceFolder,
+        max_results: 40
+      })
+    });
+    const data = await resp.json();
+    if (!data.success) {
+      list.innerHTML = `<div class="p-1 text-rose-400 text-[10px]">Error: ${escapeHtml(data.error)}</div>`;
+      return;
+    }
+    if (data.results.length === 0) {
+      list.innerHTML = `<div class="p-1 text-[var(--text-dim)] text-[10px]">No matches found</div>`;
+      return;
+    }
+
+    list.innerHTML = data.results.map(r => `
+      <div class="ide-search-result-item" onclick="openSearchResult('${escapeJs(r.path)}', ${r.line})">
+        <div class="text-gold-400 font-bold truncate">${escapeHtml(r.file)}:${r.line}</div>
+        <div class="text-[var(--text-secondary)] truncate text-[9px]">${escapeHtml(r.content)}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    list.innerHTML = `<div class="p-1 text-rose-400 text-[10px]">Search failed: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function openSearchResult(filePath, lineNumber) {
+  await openFileInEditor(filePath);
+  const editor = getScratchpad();
+  if (editor && lineNumber > 0) {
+    const lines = editor.value.split('\n');
+    let charOffset = 0;
+    for (let i = 0; i < lineNumber - 1 && i < lines.length; i++) {
+      charOffset += lines[i].length + 1;
+    }
+    editor.selectionStart = charOffset;
+    editor.selectionEnd = charOffset + (lines[lineNumber - 1] ? lines[lineNumber - 1].length : 0);
+    editor.focus();
+    updateCursorPositionStats();
+    editor.scrollTop = Math.max(0, (lineNumber - 4) * 19.5);
+    syncEditorGutterScroll();
+  }
+}
+
+// ---------------- Editor Gutter, Inputs & Shortcuts ----------------
+function handleEditorInput() {
+  if (ideActiveTabIndex >= 0 && ideActiveTabIndex < ideOpenTabs.length) {
+    const tab = ideOpenTabs[ideActiveTabIndex];
+    const editor = getScratchpad();
+    if (editor) {
+      tab.content = editor.value;
+      const isDirty = tab.content !== tab.originalContent;
+      tab.isDirty = isDirty;
+      const dirtyBadge = document.getElementById('ide-dirty-badge');
+      if (dirtyBadge) {
+        if (isDirty) dirtyBadge.classList.remove('hidden');
+        else dirtyBadge.classList.add('hidden');
+      }
+      renderIdeTabs();
+    }
+  }
+  syncEditorGutter();
+  updateCursorPositionStats();
+}
+
+function handleEditorKeydown(event) {
+  const textarea = event.target;
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+
+  // Ctrl+S / Cmd+S: Save file
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault();
+    saveActiveFile();
+    return;
+  }
+
+  // Ctrl+F / Cmd+F: Find in editor
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+    event.preventDefault();
+    toggleFindReplace(true);
+    return;
+  }
+
+  // F5: Run active file
+  if (event.key === 'F5') {
+    event.preventDefault();
+    runActiveFile();
+    return;
+  }
+
+  // Tab key: 2 spaces or Indent / Shift+Tab: Un-indent
   if (event.key === 'Tab') {
     event.preventDefault();
-    const textarea = event.target;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
-    textarea.selectionStart = textarea.selectionEnd = start + 2;
-    syncEditorGutter();
+    if (!event.shiftKey) {
+      textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
+      textarea.selectionStart = textarea.selectionEnd = start + 2;
+    } else {
+      const before = textarea.value.substring(0, start);
+      const lineStart = before.lastIndexOf('\n') + 1;
+      const currentLine = textarea.value.substring(lineStart);
+      if (currentLine.startsWith('  ')) {
+        textarea.value = textarea.value.substring(0, lineStart) + currentLine.substring(2);
+        textarea.selectionStart = textarea.selectionEnd = Math.max(lineStart, start - 2);
+      }
+    }
+    handleEditorInput();
+    return;
+  }
+
+  // Enter key: Smart auto-indent
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    const beforeCursor = textarea.value.substring(0, start);
+    const lastNewline = beforeCursor.lastIndexOf('\n');
+    const currentLine = beforeCursor.substring(lastNewline + 1);
+    const matchIndent = currentLine.match(/^\s*/);
+    let indent = matchIndent ? matchIndent[0] : '';
+    const trimmed = currentLine.trimEnd();
+    if (trimmed.endsWith(':') || trimmed.endsWith('{') || trimmed.endsWith('[')) {
+      indent += '  ';
+    }
+    const insertText = '\n' + indent;
+    textarea.value = textarea.value.substring(0, start) + insertText + textarea.value.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = start + insertText.length;
+    handleEditorInput();
+    return;
+  }
+
+  // Auto-bracket closing: (), [], {}, "", ''
+  const pairs = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'" };
+  if (pairs[event.key] && start === end) {
+    const char = event.key;
+    const closeChar = pairs[char];
+    if ((char === '"' || char === "'") && textarea.value[start] === char) {
+      event.preventDefault();
+      textarea.selectionStart = textarea.selectionEnd = start + 1;
+      return;
+    }
+    event.preventDefault();
+    textarea.value = textarea.value.substring(0, start) + char + closeChar + textarea.value.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = start + 1;
+    handleEditorInput();
+    return;
   }
 }
 
@@ -1698,10 +2524,17 @@ function syncEditorGutter() {
 
   const lines = (textarea.value || '').split('\n').length;
   gutter.innerText = Array.from({ length: Math.max(1, lines) }, (_, i) => i + 1).join('\n');
-  updateScratchpadStats();
+
+  const linesStat = document.getElementById('ide-stat-lines');
+  const sizeStat = document.getElementById('ide-stat-size');
+  if (linesStat) linesStat.innerText = `${lines} ${lines === 1 ? 'line' : 'lines'}`;
+  if (sizeStat) {
+    const bytes = new Blob([textarea.value || '']).size;
+    sizeStat.innerText = bytes > 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`;
+  }
 }
 
-function syncGutterScroll() {
+function syncEditorGutterScroll() {
   const textarea = getScratchpad();
   const gutter = getEditorGutter();
   if (textarea && gutter) {
@@ -1709,95 +2542,623 @@ function syncGutterScroll() {
   }
 }
 
-function updateEditorSyntax() {
-  const langSelect = document.getElementById('scratchpad-lang') || document.getElementById('editor-language');
-  const lang = langSelect ? langSelect.value : 'python';
-  showToast(`Scratchpad set to ${lang.toUpperCase()}`, "📝");
-  updateScratchpadStats();
+function updateCursorPositionStats() {
+  const textarea = getScratchpad();
+  const cursorStat = document.getElementById('ide-stat-cursor');
+  if (!textarea || !cursorStat) return;
+
+  const textBefore = textarea.value.substring(0, textarea.selectionStart);
+  const lines = textBefore.split('\n');
+  const lineNum = lines.length;
+  const colNum = lines[lines.length - 1].length + 1;
+
+  cursorStat.innerText = `Ln ${lineNum}, Col ${colNum}`;
+}
+
+function changeEditorLanguage(lang) {
+  if (ideActiveTabIndex >= 0 && ideActiveTabIndex < ideOpenTabs.length) {
+    ideOpenTabs[ideActiveTabIndex].lang = lang;
+  }
+  const statLang = document.getElementById('ide-stat-lang');
+  if (statLang) statLang.innerText = lang.toUpperCase();
+  showToast(`Language set to ${lang.toUpperCase()}`, "📝");
+}
+
+function focusEditor() {
+  const editor = getScratchpad();
+  if (editor) editor.focus();
+}
+
+function focusLanguageSelect() {
+  const select = document.getElementById('editor-language-select');
+  if (select) {
+    select.focus();
+    if (typeof select.showPicker === 'function') {
+      try { select.showPicker(); } catch (e) {}
+    }
+  }
+}
+
+function promptGoToLine() {
+  const editor = getScratchpad();
+  if (!editor) return;
+  const lines = editor.value.split('\n');
+  const target = prompt(`Go to line (1 - ${lines.length}):`, "1");
+  if (!target) return;
+  const lineNum = parseInt(target, 10);
+  if (isNaN(lineNum) || lineNum < 1) return;
+
+  let offset = 0;
+  for (let i = 0; i < lineNum - 1 && i < lines.length; i++) {
+    offset += lines[i].length + 1;
+  }
+  editor.focus();
+  editor.selectionStart = offset;
+  editor.selectionEnd = offset + (lines[lineNum - 1] ? lines[lineNum - 1].length : 0);
+  const lineHeight = 19.5;
+  editor.scrollTop = Math.max(0, (lineNum - 5) * lineHeight);
+  syncEditorGutterScroll();
+  updateCursorPositionStats();
+}
+
+let ideIndentSpaces = 2;
+function toggleIndentSpaces() {
+  ideIndentSpaces = ideIndentSpaces === 2 ? 4 : 2;
+  const el = document.getElementById('ide-stat-spaces');
+  if (el) el.innerText = `Spaces: ${ideIndentSpaces}`;
+  showToast(`Indentation standard set to ${ideIndentSpaces} spaces`, "📐");
+}
+
+function showEncodingInfo() {
+  showToast("File encoding: UTF-8 (Unicode, Standard)", "ℹ️");
+}
+
+// ---------------- Find & Replace Overlay ----------------
+function toggleFindReplace(force) {
+  const bar = document.getElementById('ide-find-replace-bar');
+  if (!bar) return;
+  const isHidden = bar.classList.contains('hidden');
+  const shouldShow = typeof force === 'boolean' ? force : isHidden;
+  if (shouldShow) {
+    bar.classList.remove('hidden');
+    const input = document.getElementById('ide-find-input');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+
+function handleFindInputKey(event) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    findNextOccurrence(!event.shiftKey);
+  } else if (event.key === 'Escape') {
+    toggleFindReplace(false);
+  }
+}
+
+function findNextOccurrence(forward = true) {
+  const input = document.getElementById('ide-find-input');
+  const textarea = getScratchpad();
+  if (!input || !textarea) return;
+
+  const query = input.value;
+  if (!query) return;
+
+  const text = textarea.value;
+  const currentPos = forward ? textarea.selectionEnd : textarea.selectionStart;
+
+  let idx = -1;
+  if (forward) {
+    idx = text.indexOf(query, currentPos);
+    if (idx === -1) idx = text.indexOf(query, 0);
+  } else {
+    idx = text.lastIndexOf(query, Math.max(0, currentPos - query.length - 1));
+    if (idx === -1) idx = text.lastIndexOf(query);
+  }
+
+  if (idx !== -1) {
+    textarea.selectionStart = idx;
+    textarea.selectionEnd = idx + query.length;
+    textarea.focus();
+    updateCursorPositionStats();
+
+    const textBefore = text.substring(0, idx);
+    const lineNum = textBefore.split('\n').length;
+    textarea.scrollTop = Math.max(0, (lineNum - 5) * 19.5);
+    syncEditorGutterScroll();
+  } else {
+    showToast(`"${query}" not found`, "ℹ");
+  }
+}
+
+function replaceCurrentOccurrence() {
+  const findInput = document.getElementById('ide-find-input');
+  const replaceInput = document.getElementById('ide-replace-input');
+  const textarea = getScratchpad();
+  if (!findInput || !replaceInput || !textarea) return;
+
+  const query = findInput.value;
+  const replacement = replaceInput.value;
+  if (!query) return;
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const selectedText = textarea.value.substring(start, end);
+
+  if (selectedText === query) {
+    textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+    textarea.selectionStart = start;
+    textarea.selectionEnd = start + replacement.length;
+    handleEditorInput();
+  }
+  findNextOccurrence(true);
+}
+
+function replaceAllOccurrences() {
+  const findInput = document.getElementById('ide-find-input');
+  const replaceInput = document.getElementById('ide-replace-input');
+  const textarea = getScratchpad();
+  if (!findInput || !replaceInput || !textarea) return;
+
+  const query = findInput.value;
+  const replacement = replaceInput.value;
+  if (!query) return;
+
+  const count = (textarea.value.match(new RegExp(escapeRegex(query), 'g')) || []).length;
+  if (count === 0) {
+    showToast(`"${query}" not found`, "ℹ");
+    return;
+  }
+
+  textarea.value = textarea.value.replaceAll(query, replacement);
+  handleEditorInput();
+  showToast(`Replaced ${count} occurrences`, "✨");
+}
+
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ---------------- Integrated Terminal & Command Runner ----------------
+function toggleTerminalPanel() {
+  const drawer = document.getElementById('ide-terminal-drawer');
+  const icon = document.getElementById('terminal-toggle-icon');
+  if (!drawer) return;
+  drawer.classList.toggle('collapsed');
+  if (icon) {
+    icon.setAttribute('data-lucide', drawer.classList.contains('collapsed') ? 'chevron-up' : 'chevron-down');
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
+function clearTerminalOutput() {
+  const log = document.getElementById('terminal-output-log');
+  if (log) {
+    log.innerHTML = `<div class="text-[var(--text-dim)] italic text-[10px]">Courtesy Terminal cleared.</div>`;
+  }
+}
+
+function handleTerminalInputKey(event) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    submitTerminalCommand();
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    if (ideTerminalHistory.length > 0) {
+      if (ideTerminalHistoryIndex === -1) ideTerminalHistoryIndex = ideTerminalHistory.length - 1;
+      else if (ideTerminalHistoryIndex > 0) ideTerminalHistoryIndex--;
+      event.target.value = ideTerminalHistory[ideTerminalHistoryIndex];
+    }
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    if (ideTerminalHistoryIndex !== -1) {
+      if (ideTerminalHistoryIndex < ideTerminalHistory.length - 1) {
+        ideTerminalHistoryIndex++;
+        event.target.value = ideTerminalHistory[ideTerminalHistoryIndex];
+      } else {
+        ideTerminalHistoryIndex = -1;
+        event.target.value = '';
+      }
+    }
+  }
+}
+
+async function runCommandShortcut(cmd) {
+  const input = document.getElementById('terminal-command-input');
+  if (input) input.value = cmd;
+  await submitTerminalCommand();
+}
+
+async function submitTerminalCommand() {
+  const input = document.getElementById('terminal-command-input');
+  const log = document.getElementById('terminal-output-log');
+  const drawer = document.getElementById('ide-terminal-drawer');
+  if (!input || !log) return;
+
+  const cmd = input.value.trim();
+  if (!cmd) return;
+
+  ideTerminalHistory.push(cmd);
+  ideTerminalHistoryIndex = -1;
+  input.value = '';
+
+  if (drawer && drawer.classList.contains('collapsed')) {
+    toggleTerminalPanel();
+  }
+
+  const cmdEntry = document.createElement('div');
+  cmdEntry.className = "space-y-1 my-1.5 pb-1 border-b border-[var(--border-app-subtle)]";
+  cmdEntry.innerHTML = `
+    <div class="flex items-center gap-2 text-gold-400 font-bold">
+      <span>$</span>
+      <span class="text-white font-mono">${escapeHtml(cmd)}</span>
+      <span class="text-[9px] text-[var(--text-dim)] ml-auto">${new Date().toLocaleTimeString()}</span>
+    </div>
+    <div class="terminal-cmd-output text-[10px] text-[var(--text-dim)] animate-pulse">Running...</div>
+  `;
+  log.appendChild(cmdEntry);
+  log.scrollTop = log.scrollHeight;
+
+  const outputEl = cmdEntry.querySelector('.terminal-cmd-output');
+
+  try {
+    const resp = await fetch(`${apiBaseUrl}/api/workspace/exec`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        command: cmd,
+        cwd: currentWorkspaceFolder
+      })
+    });
+    const data = await resp.json();
+    outputEl.classList.remove('animate-pulse');
+
+    const exitBadge = data.exit_code === 0
+      ? `<span class="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[9px]">exit 0</span>`
+      : `<span class="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 font-bold text-[9px]">exit ${data.exit_code}</span>`;
+
+    let stdoutHtml = data.stdout ? `<pre class="text-emerald-300/90 whitespace-pre-wrap font-mono mt-0.5">${escapeHtml(data.stdout)}</pre>` : '';
+    let stderrHtml = data.stderr ? `<pre class="text-rose-400 whitespace-pre-wrap font-mono mt-0.5">${escapeHtml(data.stderr)}</pre>` : '';
+    if (!stdoutHtml && !stderrHtml) stdoutHtml = `<div class="text-[var(--text-dim)] italic">(No output)</div>`;
+
+    outputEl.innerHTML = `
+      <div class="flex items-center gap-2 mb-1">${exitBadge}</div>
+      ${stdoutHtml}
+      ${stderrHtml}
+    `;
+    log.scrollTop = log.scrollHeight;
+  } catch (e) {
+    outputEl.classList.remove('animate-pulse');
+    outputEl.innerHTML = `<div class="text-rose-400 font-mono">Execution error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function runActiveFile() {
+  if (ideActiveTabIndex < 0 || ideActiveTabIndex >= ideOpenTabs.length) {
+    showToast("No active file to run", "ℹ");
+    return;
+  }
+  const tab = ideOpenTabs[ideActiveTabIndex];
+  if (tab.isDirty || !tab.path) {
+    await saveActiveFile();
+  }
+
+  const targetPath = tab.path || tab.name;
+  let cmd = `python "${targetPath}"`;
+  const ext = targetPath.split('.').pop().toLowerCase();
+  if (ext === 'js') cmd = `node "${targetPath}"`;
+  else if (ext === 'sh' || ext === 'bash') cmd = `bash "${targetPath}"`;
+  else if (ext === 'go') cmd = `go run "${targetPath}"`;
+  else if (ext === 'rs') cmd = `cargo run`;
+
+  const input = document.getElementById('terminal-command-input');
+  if (input) input.value = cmd;
+  await submitTerminalCommand();
+}
+
+async function refreshWorkspaceGitStatus() {
+  const branchEl = document.getElementById('ide-git-branch-label');
+  if (!branchEl || !currentWorkspaceFolder) return;
+
+  try {
+    const resp = await fetch(`${apiBaseUrl}/api/workspace/git`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder: currentWorkspaceFolder })
+    });
+    const data = await resp.json();
+    if (data.success && data.is_git) {
+      const dirtyTag = data.dirty_count > 0 ? ` (${data.dirty_count}*)` : '';
+      branchEl.innerText = `${data.branch}${dirtyTag}`;
+    } else {
+      branchEl.innerText = "no git";
+    }
+  } catch (e) {
+    branchEl.innerText = "git error";
+  }
+}
+
+// ---------------- AI Code Integration (Split Mode Superpower) ----------------
+function sendEditorCodeToAI(action) {
+  const editor = getScratchpad();
+  if (!editor) return;
+
+  const start = editor.selectionStart;
+  const end = editor.selectionEnd;
+  const selectedText = (start !== end) ? editor.value.substring(start, end).trim() : editor.value.trim();
+
+  if (!selectedText) {
+    showToast("Editor is empty. Write or open code first!", "ℹ");
+    return;
+  }
+
+  const tab = ideOpenTabs[ideActiveTabIndex];
+  const filename = tab ? tab.name : 'active code';
+  const langSelect = document.getElementById('editor-language-select');
+  const lang = langSelect ? langSelect.value : (tab ? tab.lang : 'python');
+
+  let promptText = "";
+  if (action === 'refactor') {
+    promptText = `Refactor the following ${lang} code from \`${filename}\` for clean architecture, type safety, modularity, and high performance:\n\n\`\`\`${lang}\n${selectedText}\n\`\`\``;
+  } else if (action === 'bugs') {
+    promptText = `Perform a comprehensive security, logic, and edge-case audit on this ${lang} code from \`${filename}\`. Identify race conditions, leaks, or logic errors, and formulate precise fixes:\n\n\`\`\`${lang}\n${selectedText}\n\`\`\``;
+  } else if (action === 'tests') {
+    promptText = `Write exhaustive unit and integration tests with mocks, edge cases, and happy paths for this ${lang} code from \`${filename}\`:\n\n\`\`\`${lang}\n${selectedText}\n\`\`\``;
+  } else if (action === 'explain') {
+    promptText = `Explain the architecture, algorithms, and line-by-line mechanics of this ${lang} code from \`${filename}\` clearly:\n\n\`\`\`${lang}\n${selectedText}\n\`\`\``;
+  }
+
+  // Switch to Split Mode so user sees reasoning and answer live alongside code
+  setIdeViewMode('split');
+
+  const promptInput = document.getElementById('prompt-input') || document.getElementById('chat-input');
+  if (promptInput) {
+    promptInput.value = promptText;
+    promptInput.focus();
+    sendPrompt();
+  }
+}
+
+function insertCodeIntoEditor(code, lang = 'python') {
+  if (ideOpenTabs.length === 0) {
+    createNewBufferTab(code);
+  } else {
+    const tab = ideOpenTabs[ideActiveTabIndex];
+    const editor = getScratchpad();
+    if (editor) {
+      editor.value = code;
+      if (tab) {
+        tab.content = code;
+        tab.isDirty = true;
+      }
+      handleEditorInput();
+      editor.focus();
+    }
+  }
+  if (ideViewMode === 'chat') {
+    setIdeViewMode('split');
+  }
+  showToast("Code injected into Editor", "⚡");
 }
 
 function copyScratchpadCode() {
   const editor = getScratchpad();
   if (!editor || !editor.value) {
-    showToast("Scratchpad is empty", "ℹ");
+    showToast("Editor is empty", "ℹ");
     return;
   }
   navigator.clipboard.writeText(editor.value);
-  showToast("Scratchpad copied to clipboard!", "📋");
-}
-
-function downloadScratchpadCode() {
-  const editor = getScratchpad();
-  if (!editor || !editor.value) {
-    showToast("Scratchpad is empty", "ℹ");
-    return;
-  }
-  const langSelect = document.getElementById('scratchpad-lang') || document.getElementById('editor-language');
-  const lang = langSelect ? langSelect.value : 'python';
-  const ext = EXT_MAP[lang.toLowerCase()] || 'txt';
-  const filename = `courtesy_${lang}_${Date.now()}.${ext}`;
-  const blob = new Blob([editor.value], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  showToast(`Downloaded ${filename}`, "💾");
+  showToast("Code copied to clipboard!", "📋");
 }
 
 function clearScratchpad() {
   const editor = getScratchpad();
   if (editor) {
     editor.value = '';
-    syncEditorGutter();
-    showToast("Scratchpad cleared", "🗑️");
+    handleEditorInput();
+    showToast("Editor cleared", "🗑️");
   }
 }
 
-function insertCodeIntoEditor(code, lang = 'python') {
-  const editor = getScratchpad();
-  const langSelect = document.getElementById('scratchpad-lang') || document.getElementById('editor-language');
-  if (editor) {
-    editor.value = code;
-    if (lang && langSelect) {
-      const matchKey = Object.keys(EXT_MAP).find(k => k === lang.toLowerCase() || EXT_MAP[k] === lang.toLowerCase());
-      if (matchKey) langSelect.value = matchKey;
+// ================= Resizers & Interactive Layout Controls =================
+function initResizers() {
+  initSplitPaneResizer();
+  initSidebarResizer();
+  initTerminalResizer();
+}
+
+function initSplitPaneResizer() {
+  const resizer = document.getElementById('ide-chat-resizer');
+  const idePanel = document.getElementById('courtesy-ide-panel');
+  const chatPanel = document.getElementById('courtesy-chat-panel');
+  const container = document.getElementById('standard-workbench-body');
+  if (!resizer || !idePanel || !chatPanel || !container) return;
+
+  let isDragging = false;
+
+  resizer.addEventListener('mousedown', (e) => {
+    if (ideViewMode !== 'split') return;
+    isDragging = true;
+    document.body.classList.add('select-none');
+    document.body.style.cursor = 'col-resize';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const rect = container.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    let ratio = ((e.clientX - rect.left) / rect.width) * 100;
+    ratio = Math.max(15, Math.min(85, ratio));
+    idePanel.style.width = `${ratio.toFixed(2)}%`;
+    chatPanel.style.width = `${(100 - ratio).toFixed(2)}%`;
+    idePanel.style.flex = 'none';
+    chatPanel.style.flex = 'none';
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    document.body.classList.remove('select-none');
+    document.body.style.cursor = '';
+    const rect = container.getBoundingClientRect();
+    const ideRect = idePanel.getBoundingClientRect();
+    if (rect.width > 0) {
+      const finalRatio = Math.max(15, Math.min(85, (ideRect.width / rect.width) * 100));
+      localStorage.setItem('courtesy_split_ratio', finalRatio.toFixed(1));
     }
-    syncEditorGutter();
-    editor.focus();
-    showToast("Code injected into Scratchpad", "⚡");
-  }
+  });
+
+  resizer.addEventListener('dblclick', () => {
+    if (ideViewMode !== 'split') return;
+    idePanel.style.width = '50%';
+    chatPanel.style.width = '50%';
+    idePanel.style.flex = 'none';
+    chatPanel.style.flex = 'none';
+    localStorage.setItem('courtesy_split_ratio', '50');
+    showToast("Split pane reset to 50/50", "📐");
+  });
 }
 
-function sendScratchpadToCodex(action) {
-  const editor = getScratchpad();
-  const code = editor ? editor.value.trim() : '';
-  const langSelect = document.getElementById('scratchpad-lang') || document.getElementById('editor-language');
-  const lang = langSelect ? langSelect.value : 'python';
+function initSidebarResizer() {
+  const resizer = document.getElementById('ide-sidebar-resizer');
+  const sidebar = document.getElementById('ide-file-tree-sidebar');
+  if (!resizer || !sidebar) return;
 
-  if (!code) {
-    showToast("Scratchpad is empty. Write or generate code first!", "⚠");
+  // Restore saved width
+  const savedWidth = localStorage.getItem('courtesy_filetree_width');
+  if (savedWidth) {
+    const w = parseInt(savedWidth, 10);
+    if (w >= 140 && w <= 480) {
+      sidebar.style.width = `${w}px`;
+    }
+  }
+
+  let isDragging = false;
+
+  resizer.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    document.body.classList.add('select-none');
+    document.body.style.cursor = 'col-resize';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const rect = sidebar.getBoundingClientRect();
+    let newWidth = e.clientX - rect.left;
+    newWidth = Math.max(140, Math.min(480, newWidth));
+    sidebar.style.width = `${newWidth}px`;
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    document.body.classList.remove('select-none');
+    document.body.style.cursor = '';
+    const currentW = sidebar.getBoundingClientRect().width;
+    localStorage.setItem('courtesy_filetree_width', Math.round(currentW));
+  });
+
+  resizer.addEventListener('dblclick', () => {
+    sidebar.style.width = '240px';
+    localStorage.setItem('courtesy_filetree_width', '240');
+    showToast("Sidebar width reset to default", "📐");
+  });
+}
+
+function initTerminalResizer() {
+  const resizer = document.getElementById('ide-terminal-resizer');
+  const drawer = document.getElementById('ide-terminal-drawer');
+  if (!resizer || !drawer) return;
+
+  // Restore saved height
+  const savedHeight = localStorage.getItem('courtesy_terminal_height');
+  if (savedHeight) {
+    const h = parseInt(savedHeight, 10);
+    if (h >= 60 && h <= 500) {
+      drawer.style.height = `${h}px`;
+    }
+  }
+
+  let isDragging = false;
+
+  resizer.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    document.body.classList.add('select-none');
+    document.body.style.cursor = 'row-resize';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const rect = drawer.getBoundingClientRect();
+    let newHeight = rect.bottom - e.clientY;
+    newHeight = Math.max(60, Math.min(500, newHeight));
+    drawer.style.height = `${newHeight}px`;
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    document.body.classList.remove('select-none');
+    document.body.style.cursor = '';
+    const currentH = drawer.getBoundingClientRect().height;
+    localStorage.setItem('courtesy_terminal_height', Math.round(currentH));
+  });
+
+  resizer.addEventListener('dblclick', () => {
+    drawer.style.height = '176px';
+    localStorage.setItem('courtesy_terminal_height', '176');
+    showToast("Terminal height reset to default", "📐");
+  });
+}
+
+// ================= Voice Dictation (Speech Recognition) =================
+function startVoiceInput(targetId) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast("Speech Recognition not supported in this browser", "⚠️");
     return;
   }
 
-  let promptText = "";
-  if (action === 'refactor') {
-    promptText = `Refactor the following ${lang} code for clean architecture, type safety, modularity, and high performance:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
-  } else if (action === 'bugs') {
-    promptText = `Perform a comprehensive security, logic, and edge-case audit on this ${lang} code. Identify any race conditions, leaks, or failure points, and provide the corrected code:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
-  } else if (action === 'tests') {
-    promptText = `Write exhaustive unit and integration tests with mocks, edge cases, and happy paths for this ${lang} code:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
-  } else if (action === 'explain') {
-    promptText = `Explain the architecture, algorithms, and line-by-line mechanics of this ${lang} code clearly:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
-  }
+  const targetInput = document.getElementById(targetId);
+  if (!targetInput) return;
 
-  const promptInput = document.getElementById('prompt-input') || document.getElementById('chat-input');
-  if (promptInput) {
-    promptInput.value = promptText;
-    sendPrompt();
+  try {
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      showToast("Listening... speak your prompt", "🎙️");
+    };
+
+    recognition.onresult = (event) => {
+      if (event.results && event.results.length > 0) {
+        const transcript = event.results[0][0].transcript;
+        if (targetInput.value && !targetInput.value.endsWith(' ')) {
+          targetInput.value += ' ' + transcript;
+        } else {
+          targetInput.value += transcript;
+        }
+        targetInput.focus();
+        showToast("Voice captured!", "✨");
+      }
+    };
+
+    recognition.onerror = (event) => {
+      showToast(`Speech error: ${event.error}`, "⚠️");
+    };
+
+    recognition.start();
+  } catch (err) {
+    showToast(`Microphone error: ${err.message}`, "❌");
   }
 }
 
@@ -2408,6 +3769,80 @@ async function fetchMiningStatus() {
   } catch (e) {}
 }
 
+let _lastPoolFetch = 0;
+let _cachedPoolData = null;
+
+async function fetchLive2MinersPoolStats(wallet) {
+  const now = Date.now();
+  if (_cachedPoolData && (now - _lastPoolFetch) < 20000) {
+    return _cachedPoolData;
+  }
+  if (!wallet || !wallet.startsWith('0x')) return null;
+
+  try {
+    const res = await fetch(`https://etc.2miners.com/api/accounts/${wallet}`, {
+      signal: AbortSignal.timeout(6000)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      _cachedPoolData = data;
+      _lastPoolFetch = now;
+      return data;
+    }
+  } catch (e) {
+    console.debug("2Miners pool direct API check:", e);
+  }
+  return _cachedPoolData;
+}
+
+function applyCashoutDom(bal, confirmed, immature, threshold, progress, paid, totalCount, validSh, staleSh, timeStr, label, dRate, workersOnline) {
+  const cashoutBadge = document.getElementById('cashout-status-badge');
+  const cashoutBalanceVal = document.getElementById('cashout-balance-val');
+  const cashoutThresholdVal = document.getElementById('cashout-threshold-val');
+  const cashoutPercentVal = document.getElementById('cashout-percent-val');
+  const cashoutTimeVal = document.getElementById('cashout-time-val');
+  const cashoutTimeCardVal = document.getElementById('cashout-time-card-val');
+  const cashoutProgressBar = document.getElementById('cashout-progress-bar');
+  const cashoutUnpaidTotal = document.getElementById('cashout-unpaid-total');
+  const cashoutConfirmedVal = document.getElementById('cashout-confirmed-val');
+  const cashoutImmatureVal = document.getElementById('cashout-immature-val');
+  const cashoutDailyRateVal = document.getElementById('cashout-daily-rate-val');
+  const cashoutSharesVal = document.getElementById('cashout-shares-val');
+  const cashoutRejectedVal = document.getElementById('cashout-rejected-val');
+  const cashoutPaidVal = document.getElementById('cashout-paid-val');
+  const cashoutTotalCount = document.getElementById('cashout-total-count');
+  const cashoutWorkersVal = document.getElementById('cashout-workers-val');
+
+  if (cashoutBadge) {
+    cashoutBadge.innerText = label;
+    if (bal >= threshold) {
+      cashoutBadge.className = "px-2.5 py-0.5 rounded-full text-[9px] font-mono border border-emerald-500/40 bg-emerald-950/40 text-emerald-300 animate-pulse";
+    } else {
+      cashoutBadge.className = "px-2.5 py-0.5 rounded-full text-[9px] font-mono border border-cyan-500/30 bg-cyan-950/30 text-cyan-400";
+    }
+  }
+
+  if (cashoutBalanceVal) cashoutBalanceVal.innerText = `${bal.toFixed(5)} ETC`;
+  if (cashoutThresholdVal) cashoutThresholdVal.innerText = `${threshold.toFixed(4)} ETC`;
+  if (cashoutPercentVal) cashoutPercentVal.innerText = `${progress.toFixed(2)}%`;
+  if (cashoutTimeVal) cashoutTimeVal.innerText = timeStr;
+  if (cashoutTimeCardVal) cashoutTimeCardVal.innerText = timeStr;
+  if (cashoutProgressBar) cashoutProgressBar.style.width = `${Math.min(100.0, Math.max(0.5, progress)).toFixed(1)}%`;
+  if (cashoutUnpaidTotal) cashoutUnpaidTotal.innerText = `${bal.toFixed(5)} ETC`;
+  if (cashoutConfirmedVal) cashoutConfirmedVal.innerText = `${confirmed.toFixed(5)} ETC`;
+  if (cashoutImmatureVal) cashoutImmatureVal.innerText = `${immature.toFixed(5)} ETC`;
+  if (cashoutDailyRateVal) cashoutDailyRateVal.innerText = `~${(dRate || 0.045).toFixed(3)} ETC/d`;
+  if (cashoutSharesVal) cashoutSharesVal.innerText = `${validSh} Valid`;
+  if (cashoutRejectedVal) cashoutRejectedVal.innerText = `${staleSh}`;
+  if (cashoutPaidVal) cashoutPaidVal.innerText = `${paid.toFixed(5)} ETC`;
+  if (cashoutTotalCount) cashoutTotalCount.innerText = `${totalCount} Completed`;
+  if (cashoutWorkersVal) cashoutWorkersVal.innerText = `${workersOnline || 0} / 3 Rigs`;
+
+  if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    window.lucide.createIcons();
+  }
+}
+
 function updateMiningUI(data) {
   const badge = document.getElementById('mining-status-badge');
   const dot = document.getElementById('mining-dot');
@@ -2471,13 +3906,87 @@ function updateMiningUI(data) {
   const cpuHashEl = document.getElementById('mining-cpu-hashrate-val');
   const powerEl = document.getElementById('mining-power-val');
 
-  const gpuMhs = data.gpu_hashrate_mhs || (data.state === 'mining' ? 92.1 : 0.0);
-  const cpuHs = data.cpu_hashrate_hs || (data.state === 'mining' ? 6000 : 0);
-  const powerW = data.power_watts || (data.state === 'mining' ? 540 : 120);
+  const gpuMhs = data.gpu_hashrate_mhs || 0.0;
+  const cpuHs = data.cpu_hashrate_hs || 0;
+  const powerW = data.power_watts || 0;
 
   if (gpuHashEl) gpuHashEl.innerText = `${gpuMhs.toFixed(1)} MH/s`;
   if (cpuHashEl) cpuHashEl.innerText = `${cpuHs.toLocaleString()} H/s`;
   if (powerEl) powerEl.innerText = `${powerW} Watts`;
+
+  // 2Miners Live Cashout & Payout Telemetry
+  const poolLink = document.getElementById('pool-explorer-link');
+  if (poolLink && data.wallet) {
+    poolLink.href = `https://etc.2miners.com/account/${data.wallet}`;
+  }
+
+  // Baseline from API response
+  let poolBal = (data.pool_balance_etc !== undefined) ? data.pool_balance_etc : 0.0;
+  let poolConfirmed = (data.pool_confirmed_etc !== undefined) ? data.pool_confirmed_etc : 0.0;
+  let poolImmature = (data.pool_immature_etc !== undefined) ? data.pool_immature_etc : 0.0;
+  let poolMinPayout = (data.min_payout_etc !== undefined) ? data.min_payout_etc : 0.1;
+  let progressPct = (data.payout_progress_percent !== undefined) ? data.payout_progress_percent : 0.0;
+  let paidEtc = (data.pool_paid_etc !== undefined) ? data.pool_paid_etc : 0.0;
+  let paymentsTotal = (data.payments_total !== undefined) ? data.payments_total : 0;
+  let validShares = (data.shares_accepted !== undefined) ? data.shares_accepted : 0;
+  let rejectedShares = (data.shares_rejected !== undefined) ? data.shares_rejected : 0;
+  let timeToCashout = data.time_to_cashout_str || "Calculating...";
+  let statusLabel = data.cashout_status_label || "Waiting for Threshold (0.1 ETC)";
+  let workersOnline = data.workers_online || data.active_miners || 0;
+  let clusterHr = data.gpu_hashrate_mhs || 92.1;
+  let dRate = (clusterHr / 92.1) * 0.045;
+
+  // Apply baseline immediately
+  applyCashoutDom(poolBal, poolConfirmed, poolImmature, poolMinPayout, progressPct, paidEtc, paymentsTotal, validShares, rejectedShares, timeToCashout, statusLabel, dRate, workersOnline);
+
+  // Directly fetch live 2Miners account telemetry from browser
+  if (data.wallet && data.wallet.startsWith('0x')) {
+    fetchLive2MinersPoolStats(data.wallet).then(pData => {
+      if (!pData) return;
+      const stats = pData.stats || {};
+      const pCfg = pData.config || {};
+      const balUnits = stats.balance || 0;
+      const immUnits = stats.immature || 0;
+      const pdUnits = stats.paid || 0;
+      const mnUnits = pCfg.minPayout || 100000000;
+
+      poolConfirmed = balUnits / 1e9;
+      poolImmature = immUnits / 1e9;
+      poolBal = (balUnits + immUnits) / 1e9;
+      poolMinPayout = mnUnits / 1e9;
+      paidEtc = pdUnits / 1e9;
+      progressPct = Math.min(100.0, (poolBal / poolMinPayout) * 100.0);
+      validShares = pData.sharesValid || 0;
+      rejectedShares = pData.sharesStale || 0;
+      paymentsTotal = pData.paymentsTotal || 0;
+      workersOnline = pData.workersOnline || 0;
+
+      clusterHr = data.gpu_hashrate_mhs || (pData.currentHashrate ? pData.currentHashrate / 1e6 : 92.1);
+      dRate = (clusterHr / 92.1) * 0.045;
+      const rem = Math.max(0, poolMinPayout - poolBal);
+      const hrs = (rem / (dRate || 0.045)) * 24.0;
+
+      if (poolBal >= poolMinPayout) {
+        timeToCashout = "Ready (Next 2h Pool Cycle)";
+        statusLabel = "Threshold Met • In Cashout Queue";
+      } else if (data.state !== 'mining') {
+        timeToCashout = hrs < 24 ? `~${Math.round(hrs)}h (Idle Paused)` : `~${(hrs / 24).toFixed(1)}d (Idle Paused)`;
+        statusLabel = "Waiting for Threshold (0.1 ETC)";
+      } else {
+        timeToCashout = hrs < 24 ? `~${Math.round(hrs)} hours` : `~${(hrs / 24).toFixed(1)} days`;
+        statusLabel = "Accumulating to 0.1 ETC";
+      }
+
+      applyCashoutDom(poolBal, poolConfirmed, poolImmature, poolMinPayout, progressPct, paidEtc, paymentsTotal, validShares, rejectedShares, timeToCashout, statusLabel, dRate, workersOnline);
+
+      // Sync fresh pool telemetry back to Courtesy server
+      fetch('/api/mining/pool-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pData)
+      }).catch(() => {});
+    });
+  }
 
   // Draw SVG live hashrate history chart
   if (data.history && data.history.length > 0) {
@@ -2494,16 +4003,19 @@ function updateMiningUI(data) {
   // Fetch live spot prices asynchronously (cached, rate-limited to 1 call/min)
   Promise.all([fetchLiveCoinPrice('ETC'), fetchLiveCoinPrice('XMR')]).then(([etcPrice, xmrPrice]) => {
     let sessionMinedCrypto = parseFloat(localStorage.getItem('courtesy_mined_crypto') || '0.00000');
-    if (data.state === 'mining') {
-      // 6x P2000s (~92 MH/s ETC) + 36 Cores (~6000 H/s XMR)
-      // At 6s poll interval: ~0.000003125 ETC per tick
-      sessionMinedCrypto += 0.000003125;
+    const activeMiners = data.active_miners || 0;
+    if (data.state === 'mining' && activeMiners > 0) {
+      const tickFraction = activeMiners / 3.0;
+      sessionMinedCrypto += 0.000003125 * tickFraction;
       localStorage.setItem('courtesy_mined_crypto', sessionMinedCrypto.toString());
     }
 
-    const usdValue = (sessionMinedCrypto * etcPrice) + ((sessionMinedCrypto * 0.04) * (xmrPrice || 160.0));
-    // 0.045 ETC/day (~$1.10) + 0.0018 XMR/day (~$0.29) = ~$1.39 / day
-    const dailyRateUsd = (data.state === 'mining') ? ((0.045 * etcPrice) + (0.0018 * (xmrPrice || 160.0))) : 0.00;
+    const hasDualMining = !!data.dual_mining;
+    const usdValue = (sessionMinedCrypto * etcPrice) + (hasDualMining ? ((sessionMinedCrypto * 0.04) * (xmrPrice || 160.0)) : 0);
+    const minerRatio = activeMiners / 3.0;
+    const dailyRateUsd = (data.state === 'mining' && activeMiners > 0)
+      ? ((0.045 * etcPrice * minerRatio) + (hasDualMining ? (0.0018 * (xmrPrice || 160.0) * minerRatio) : 0))
+      : 0.00;
 
     if (cryptoEl) cryptoEl.innerText = `${sessionMinedCrypto.toFixed(5)} ETC`;
     if (usdEl) usdEl.innerText = `$${usdValue.toFixed(4)} USD`;
@@ -2756,6 +4268,21 @@ window.addEventListener('keydown', (e) => {
     const input = document.getElementById('chat-input');
     if (input) input.focus();
   }
+  // Ctrl+\ or Ctrl+E: Cycle IDE Layout (Chat -> Split -> IDE)
+  if (e.ctrlKey && (e.key === '\\' || e.key.toLowerCase() === 'e') && currentView === 'standard') {
+    e.preventDefault();
+    cycleIdeLayout();
+  }
+  // Ctrl+` (backtick): Toggle Integrated Terminal Drawer
+  if (e.ctrlKey && e.key === '`' && currentView === 'standard') {
+    e.preventDefault();
+    toggleTerminalPanel();
+  }
+  // Ctrl+Shift+F: Toggle Workspace Code Search
+  if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'f' && currentView === 'standard') {
+    e.preventDefault();
+    toggleWorkspaceSearchDrawer();
+  }
 });
 
 // Start on page load
@@ -2768,11 +4295,14 @@ document.addEventListener('DOMContentLoaded', () => {
   initContextMenu();
   fetchLiveCoinPrice('ETC'); // Pre-fetch coin price at startup
 
-  const editor = getScratchpad();
-  if (editor) {
-    editor.addEventListener('keydown', handleEditorTabKey);
-    syncEditorGutter();
+  // Initialize Courtesy IDE Workbench
+  const savedIdeMode = localStorage.getItem('courtesy_ide_view_mode') || 'chat';
+  setIdeViewMode(savedIdeMode);
+  if (ideOpenTabs.length === 0) {
+    createNewBufferTab();
   }
+  syncEditorGutter();
+  initResizers();
 
   // Restore saved workspace folder and project list (no dummy courtesy folder)
   const savedFolder = localStorage.getItem('workspace_folder') || '';

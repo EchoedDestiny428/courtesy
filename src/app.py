@@ -4,7 +4,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +20,10 @@ from src.openai_proxy import router as openai_router
 from src.router import offload_server_models
 from src.web_agent import search_web, fetch_webpage, generate_grounded_context
 from src.swarm import start_swarm_task, stop_swarm_task, get_swarm_status, register_swarm_subscriber, unregister_swarm_subscriber
-from src.miner_manager import load_mining_config, save_mining_config, get_cluster_mining_status, start_mining_cluster, preempt_mining, idle_mining_watcher_loop
+from src.miner_manager import (
+    load_mining_config, save_mining_config, get_cluster_mining_status,
+    start_mining_cluster, preempt_mining, idle_mining_watcher_loop, update_pool_stats_from_client
+)
 from src.auth import verify_admin_credentials, create_admin_session, is_valid_admin_token, revoke_admin_session, require_admin_auth
 from src.router import _active_requests
 
@@ -274,47 +277,88 @@ async def api_web_ground(payload: Dict[str, Any]):
 
 # --- Local & Remote Workspace Filespace Endpoints ---
 
-@app.post("/api/workspace/files")
-async def api_workspace_files(payload: Dict[str, Any]):
+@app.api_route("/api/workspace/files", methods=["GET", "POST"])
+async def api_workspace_files(
+    payload: Optional[Dict[str, Any]] = Body(None),
+    path: Optional[str] = Query(None),
+    folder: Optional[str] = Query(None)
+):
     """Returns directory structure of a workspace folder."""
-    dir_path = payload.get("path", "")
-    if not dir_path or not os.path.isdir(dir_path):
+    dir_path = ""
+    if payload:
+        dir_path = payload.get("path") or payload.get("folder") or ""
+    if not dir_path:
+        dir_path = path or folder or ""
+    if not dir_path:
+        dir_path = os.getcwd()
+
+    if not os.path.isdir(dir_path):
         return {"files": []}
-    
+
     ignored = {'.git', 'node_modules', '__pycache__', '.venv', 'dist', 'build', '.vscode', '.idea'}
     file_list = []
-    
+
     for root, dirs, files in os.walk(dir_path):
         dirs[:] = [d for d in dirs if d not in ignored]
         depth = os.path.relpath(root, dir_path).count(os.sep)
-        if depth > 3:
+        if depth > 5:
             continue
+        
+        # Also add folder nodes
+        if root != dir_path:
+            rel_folder = os.path.relpath(root, dir_path).replace('\\', '/')
+            file_list.append({
+                "name": os.path.basename(root),
+                "path": root.replace('\\', '/'),
+                "relative": rel_folder,
+                "is_dir": True,
+                "size": 0
+            })
+
         for f in files:
             full = os.path.join(root, f)
-            rel = os.path.relpath(full, dir_path)
+            rel = os.path.relpath(full, dir_path).replace('\\', '/')
             file_list.append({
                 "name": f,
                 "path": full.replace('\\', '/'),
-                "relative": rel.replace('\\', '/'),
+                "relative": rel,
+                "is_dir": False,
                 "size": os.path.getsize(full) if os.path.exists(full) else 0
             })
-            if len(file_list) > 300:
+            if len(file_list) > 500:
                 break
-        if len(file_list) > 300:
+        if len(file_list) > 500:
             break
-            
+
     return {"files": file_list}
 
 
-@app.post("/api/workspace/read")
-async def api_workspace_read(payload: Dict[str, Any]):
+@app.api_route("/api/workspace/read", methods=["GET", "POST"])
+async def api_workspace_read(
+    payload: Optional[Dict[str, Any]] = Body(None),
+    path: Optional[str] = Query(None),
+    folder: Optional[str] = Query(None)
+):
     """Reads content of a workspace file."""
-    file_path = payload.get("path", "")
-    if not os.path.isfile(file_path):
+    file_path = ""
+    base_folder = ""
+    if payload:
+        file_path = payload.get("path", "")
+        base_folder = payload.get("folder", "")
+    if not file_path:
+        file_path = path or ""
+    if not base_folder:
+        base_folder = folder or ""
+
+    if not os.path.isabs(file_path) and base_folder:
+        file_path = os.path.join(base_folder, file_path)
+
+    if not file_path or not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     try:
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            return {"content": f.read()}
+            content = f.read()
+            return {"success": True, "content": content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -322,15 +366,20 @@ async def api_workspace_read(payload: Dict[str, Any]):
 @app.post("/api/workspace/write")
 async def api_workspace_write(payload: Dict[str, Any]):
     """Writes or overwrites content to a workspace file."""
-    file_path = payload.get("path", "")
+    file_path = payload.get("path", "").strip()
+    base_folder = payload.get("folder", "").strip()
     content = payload.get("content", "")
+
+    if not os.path.isabs(file_path) and base_folder:
+        file_path = os.path.join(base_folder, file_path)
+
     if not file_path:
         raise HTTPException(status_code=400, detail="Path is required")
     try:
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
-        return {"status": "success", "path": file_path}
+        return {"success": True, "status": "success", "path": file_path.replace('\\', '/')}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -382,6 +431,177 @@ async def api_workspace_exec(payload: Dict[str, Any]):
         return {"exit_code": -1, "stdout": "", "stderr": "Command timed out after 30s"}
     except Exception as e:
         return {"exit_code": -1, "stdout": "", "stderr": str(e)}
+
+
+@app.post("/api/workspace/create")
+async def api_workspace_create(payload: Dict[str, Any]):
+    """Creates a new file or directory within workspace."""
+    target_path = payload.get("path", "").strip()
+    base_folder = payload.get("folder", "").strip()
+    is_dir = payload.get("is_dir", False)
+    content = payload.get("content", "")
+
+    if not os.path.isabs(target_path) and base_folder:
+        target_path = os.path.join(base_folder, target_path)
+
+    if not target_path:
+        raise HTTPException(status_code=400, detail="Path is required")
+    try:
+        if is_dir:
+            os.makedirs(target_path, exist_ok=True)
+        else:
+            parent = os.path.dirname(target_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            with open(target_path, "w", encoding="utf-8") as f:
+                f.write(content)
+        name = os.path.basename(target_path)
+        return {"success": True, "status": "success", "full_path": target_path.replace('\\', '/'), "name": name}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/workspace/delete")
+async def api_workspace_delete(payload: Dict[str, Any]):
+    """Deletes a file or directory within workspace."""
+    target_path = payload.get("path", "").strip()
+    base_folder = payload.get("folder", "").strip()
+    if not os.path.isabs(target_path) and base_folder:
+        target_path = os.path.join(base_folder, target_path)
+
+    if not target_path or not os.path.exists(target_path):
+        raise HTTPException(status_code=404, detail="File or directory not found")
+    try:
+        import shutil
+        if os.path.isdir(target_path):
+            shutil.rmtree(target_path)
+        else:
+            os.remove(target_path)
+        return {"success": True, "status": "success", "path": target_path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/workspace/rename")
+async def api_workspace_rename(payload: Dict[str, Any]):
+    """Renames or moves a file or directory within workspace."""
+    old_path = payload.get("old_path", "").strip()
+    new_path = payload.get("new_path", "").strip()
+    base_folder = payload.get("folder", "").strip()
+
+    if not os.path.isabs(old_path) and base_folder:
+        old_path = os.path.join(base_folder, old_path)
+    if not os.path.isabs(new_path) and base_folder:
+        new_path = os.path.join(base_folder, new_path)
+
+    if not old_path or not os.path.exists(old_path):
+        raise HTTPException(status_code=404, detail="Source path not found")
+    if not new_path:
+        raise HTTPException(status_code=400, detail="New path is required")
+    try:
+        os.makedirs(os.path.dirname(new_path), exist_ok=True)
+        import shutil
+        shutil.move(old_path, new_path)
+        return {"success": True, "status": "success", "old_path": old_path, "new_path": new_path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/workspace/search")
+async def api_workspace_search(payload: Dict[str, Any]):
+    """Searches across files in workspace for a specific text pattern."""
+    dir_path = payload.get("path") or payload.get("folder") or ""
+    query = payload.get("query", "").strip()
+    case_sensitive = payload.get("case_sensitive", False)
+    max_results = int(payload.get("max_results", 50))
+
+    if not dir_path or not os.path.isdir(dir_path) or not query:
+        return {"success": True, "results": [], "matches": []}
+
+    ignored = {'.git', 'node_modules', '__pycache__', '.venv', 'dist', 'build', '.vscode', '.idea'}
+    matches = []
+    q = query if case_sensitive else query.lower()
+
+    for root, dirs, files in os.walk(dir_path):
+        dirs[:] = [d for d in dirs if d not in ignored]
+        for f in files:
+            ext = os.path.splitext(f)[1].lower()
+            if ext in ('.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.zip', '.tar', '.gz', '.bin', '.exe', '.pyc', '.wasm'):
+                continue
+
+            full_path = os.path.join(root, f)
+            rel_path = os.path.relpath(full_path, dir_path).replace('\\', '/')
+            try:
+                with open(full_path, 'r', encoding='utf-8', errors='ignore') as fp:
+                    for line_num, line in enumerate(fp, 1):
+                        test_line = line if case_sensitive else line.lower()
+                        if q in test_line:
+                            match_obj = {
+                                "file": f,
+                                "path": full_path.replace('\\', '/'),
+                                "relative": rel_path,
+                                "line": line_num,
+                                "content": line.strip()[:180],
+                                "text": line.strip()[:180]
+                            }
+                            matches.append(match_obj)
+                            if len(matches) >= max_results:
+                                return {"success": True, "results": matches, "matches": matches}
+            except Exception:
+                continue
+
+    return {"success": True, "results": matches, "matches": matches}
+
+
+@app.post("/api/workspace/git")
+async def api_workspace_git(payload: Dict[str, Any]):
+    """Checks git status of workspace directory."""
+    dir_path = payload.get("path") or payload.get("folder") or ""
+    if not dir_path or not os.path.isdir(dir_path):
+        return {"success": False, "is_git": False, "branch": "", "status": "", "dirty_count": 0}
+
+    try:
+        proc_branch = await asyncio.create_subprocess_shell(
+            "git branch --show-current 2>/dev/null || git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD",
+            cwd=dir_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+        out_branch, _ = await asyncio.wait_for(proc_branch.communicate(), timeout=3.0)
+        branch = out_branch.decode().strip()
+        if branch == "HEAD" or not branch:
+            proc_sym = await asyncio.create_subprocess_shell(
+                "git symbolic-ref --short HEAD 2>/dev/null",
+                cwd=dir_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL
+            )
+            out_sym, _ = await asyncio.wait_for(proc_sym.communicate(), timeout=2.0)
+            sym = out_sym.decode().strip()
+            branch = sym if sym else ("main" if branch == "HEAD" else "")
+
+        if not branch:
+            return {"success": True, "is_git": False, "branch": "", "status": "", "dirty_count": 0}
+
+        proc_status = await asyncio.create_subprocess_shell(
+            "git status -s",
+            cwd=dir_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+        out_status, _ = await asyncio.wait_for(proc_status.communicate(), timeout=3.0)
+        status_lines = [l for l in out_status.decode().splitlines() if l.strip()]
+
+        return {
+            "success": True,
+            "is_git": True,
+            "branch": branch,
+            "dirty_count": len(status_lines),
+            "status": "\n".join(status_lines)
+        }
+    except Exception:
+        return {"success": False, "is_git": False, "branch": "", "status": "", "dirty_count": 0}
+
 
 
 # --- Autonomous Multi-Agent Swarm Endpoints ---
@@ -465,6 +685,14 @@ async def api_mining_stop():
     save_mining_config(cfg)
     await preempt_mining()
     return {"status": "stopped"}
+
+
+@app.post("/api/mining/pool-sync")
+async def api_mining_pool_sync(payload: Dict[str, Any] = Body(...)):
+    """Receives live pool telemetry from frontend browser and syncs it with Courtesy."""
+    stats = update_pool_stats_from_client(payload)
+    return {"status": "synced", "stats": stats}
+
 
 
 # --- Authentication & Administrative Control Endpoints ---
