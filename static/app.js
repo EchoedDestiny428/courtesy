@@ -310,6 +310,391 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ================= Model Selector State & Swapper (7B vs 14B) =================
+let ideSelectedModel = localStorage.getItem('courtesy_selected_model') || '14b';
+
+function setIdeModel(model) {
+  ideSelectedModel = (model === '7b') ? '7b' : '14b';
+  localStorage.setItem('courtesy_selected_model', ideSelectedModel);
+  updateIdeModelUI();
+
+  // If active chat exists, update its model attribute and save
+  const currentChat = getActiveChat();
+  if (currentChat) {
+    currentChat.model = ideSelectedModel;
+    saveWorkspaceChats();
+    renderChatsSidebar();
+  }
+}
+
+function toggleIdeModel() {
+  setIdeModel(ideSelectedModel === '14b' ? '7b' : '14b');
+}
+
+function updateIdeModelUI() {
+  const is14b = (ideSelectedModel === '14b');
+  
+  // 1. Update Topbar segmented buttons
+  const btn7b = document.getElementById('topbar-model-7b');
+  const btn14b = document.getElementById('topbar-model-14b');
+  if (btn7b && btn14b) {
+    if (is14b) {
+      btn14b.className = 'px-2 py-0.5 rounded-md font-medium transition bg-white dark:bg-neutral-800 text-black dark:text-white shadow-xs font-semibold';
+      btn7b.className = 'px-2 py-0.5 rounded-md font-medium transition text-neutral-500 dark:text-neutral-400 hover:text-black dark:hover:text-white';
+    } else {
+      btn7b.className = 'px-2 py-0.5 rounded-md font-medium transition bg-white dark:bg-neutral-800 text-black dark:text-white shadow-xs font-semibold';
+      btn14b.className = 'px-2 py-0.5 rounded-md font-medium transition text-neutral-500 dark:text-neutral-400 hover:text-black dark:hover:text-white';
+    }
+  }
+
+  // 2. Update Bottom Input Toolbar Badge
+  const inputModelText = document.getElementById('ide-input-model-name');
+  if (inputModelText) {
+    const srv = activeIdeServer?.id || 'cst7';
+    inputModelText.innerText = `${srv} • ${is14b ? '14B' : '7B'}`;
+  }
+}
+
+// ================= Left Sidebar & Workspaces / Persistent Chats Engine =================
+let isIdeSidebarOpen = localStorage.getItem('courtesy_sidebar_open') !== 'false';
+let workspaceChats = [];
+let activeChatId = null;
+
+function toggleIdeSidebar() {
+  isIdeSidebarOpen = !isIdeSidebarOpen;
+  localStorage.setItem('courtesy_sidebar_open', isIdeSidebarOpen.toString());
+  updateIdeSidebarUI();
+}
+
+function updateIdeSidebarUI() {
+  const sidebar = document.getElementById('ide-sidebar');
+  const toggleBtn = document.getElementById('btn-sidebar-toggle');
+  if (!sidebar) return;
+
+  if (isIdeSidebarOpen) {
+    sidebar.classList.remove('collapsed');
+    if (toggleBtn) {
+      toggleBtn.classList.remove('text-neutral-400');
+      toggleBtn.classList.add('text-black', 'dark:text-white');
+    }
+  } else {
+    sidebar.classList.add('collapsed');
+    if (toggleBtn) {
+      toggleBtn.classList.remove('text-black', 'dark:text-white');
+      toggleBtn.classList.add('text-neutral-400');
+    }
+  }
+}
+
+function getWorkspaceStorageKey() {
+  if (!currentWorkspaceFolder) return 'courtesy_chats___default__';
+  const cleanPath = currentWorkspaceFolder.replace(/[\\/]+$/, '').toLowerCase();
+  return `courtesy_chats_${encodeURIComponent(cleanPath)}`;
+}
+
+function createChatObject(title = 'New Conversation') {
+  return {
+    id: `chat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    title: title,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    model: ideSelectedModel || '14b',
+    messages: []
+  };
+}
+
+function getActiveChat() {
+  return workspaceChats.find(c => c.id === activeChatId) || null;
+}
+
+function loadWorkspaceChats() {
+  const storageKey = getWorkspaceStorageKey();
+  let chats = [];
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (raw) chats = JSON.parse(raw);
+  } catch (e) {
+    console.error('Failed to parse chats from localStorage:', e);
+  }
+
+  if (!Array.isArray(chats) || chats.length === 0) {
+    const fresh = createChatObject('New Conversation');
+    chats = [fresh];
+    activeChatId = fresh.id;
+    workspaceChats = chats;
+    saveWorkspaceChats();
+  } else {
+    workspaceChats = chats;
+    const savedActiveId = localStorage.getItem(`courtesy_active_chat_${storageKey}`);
+    if (savedActiveId && workspaceChats.some(c => c.id === savedActiveId)) {
+      activeChatId = savedActiveId;
+    } else {
+      activeChatId = workspaceChats[0].id;
+    }
+  }
+
+  renderChatsSidebar();
+  loadActiveChatMessages();
+}
+
+function saveWorkspaceChats() {
+  const storageKey = getWorkspaceStorageKey();
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(workspaceChats));
+    if (activeChatId) {
+      localStorage.setItem(`courtesy_active_chat_${storageKey}`, activeChatId);
+    }
+  } catch (e) {
+    console.error('Failed to save chats to localStorage:', e);
+  }
+}
+
+function createNewChat() {
+  const active = getActiveChat();
+  if (active && (!active.messages || active.messages.length === 0) && active.title === 'New Conversation') {
+    loadActiveChatMessages();
+    const input = document.getElementById('ide-chat-input');
+    if (input) input.focus();
+    return;
+  }
+
+  const newChat = createChatObject('New Conversation');
+  workspaceChats.unshift(newChat);
+  activeChatId = newChat.id;
+  saveWorkspaceChats();
+  renderChatsSidebar();
+  loadActiveChatMessages();
+
+  const input = document.getElementById('ide-chat-input');
+  if (input) {
+    input.value = '';
+    input.focus();
+  }
+}
+
+function selectChat(chatId) {
+  if (activeChatId === chatId) return;
+  activeChatId = chatId;
+  saveWorkspaceChats();
+  renderChatsSidebar();
+  loadActiveChatMessages();
+
+  const input = document.getElementById('ide-chat-input');
+  if (input) input.focus();
+}
+
+function deleteChat(chatId, e) {
+  if (e) e.stopPropagation();
+  const idx = workspaceChats.findIndex(c => c.id === chatId);
+  if (idx < 0) return;
+
+  workspaceChats.splice(idx, 1);
+  if (workspaceChats.length === 0) {
+    const fresh = createChatObject('New Conversation');
+    workspaceChats = [fresh];
+    activeChatId = fresh.id;
+  } else if (activeChatId === chatId) {
+    activeChatId = workspaceChats[0].id;
+  }
+
+  saveWorkspaceChats();
+  renderChatsSidebar();
+  loadActiveChatMessages();
+  showToast('Chat deleted', '🗑️');
+}
+
+function formatChatTime(timestamp) {
+  if (!timestamp) return 'Just now';
+  const diff = Date.now() - timestamp;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+  return new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function renderChatsSidebar() {
+  const listEl = document.getElementById('ide-chats-list');
+  const countEl = document.getElementById('sidebar-chat-count');
+  if (countEl) countEl.innerText = workspaceChats.length.toString();
+  if (!listEl) return;
+
+  listEl.innerHTML = '';
+  workspaceChats.forEach(chat => {
+    const isActive = (chat.id === activeChatId);
+    const item = document.createElement('div');
+    item.className = `chat-item group relative flex items-center justify-between px-2.5 py-2 rounded-xl cursor-pointer text-xs transition select-none ${
+      isActive 
+        ? 'bg-neutral-200/90 dark:bg-neutral-800 text-black dark:text-white font-medium shadow-xs' 
+        : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800/50 hover:text-black dark:hover:text-white'
+    }`;
+    item.onclick = () => selectChat(chat.id);
+
+    const safeTitle = escapeHtml(chat.title || 'Conversation');
+    const timeStr = formatChatTime(chat.updatedAt || chat.createdAt);
+    const modelBadge = (chat.model || '14b').toUpperCase();
+
+    item.innerHTML = `
+      <div class="flex items-center gap-2 min-w-0 flex-1 pr-1">
+        <i data-lucide="message-square" class="w-3.5 h-3.5 flex-shrink-0 opacity-70"></i>
+        <div class="min-w-0 flex-1">
+          <div class="truncate text-xs leading-tight">${safeTitle}</div>
+          <div class="text-[10px] font-mono text-neutral-400 dark:text-neutral-500 leading-tight mt-0.5">
+            ${timeStr} • ${modelBadge}
+          </div>
+        </div>
+      </div>
+      <button onclick="deleteChat('${chat.id}', event)"
+        class="opacity-0 group-hover:opacity-100 p-1 hover:bg-neutral-300/80 dark:hover:bg-neutral-700 text-neutral-400 hover:text-rose-600 rounded transition flex-shrink-0"
+        title="Delete Conversation">
+        <i data-lucide="trash-2" class="w-3 h-3"></i>
+      </button>
+    `;
+    listEl.appendChild(item);
+  });
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function loadActiveChatMessages() {
+  const activeChat = getActiveChat();
+  const messagesList = document.getElementById('ide-messages-list');
+  const welcome = document.getElementById('ide-conversation-welcome');
+  const container = document.getElementById('ide-conversation-container');
+
+  if (!messagesList) return;
+  messagesList.innerHTML = '';
+
+  const messages = activeChat?.messages || [];
+  ideChatHistory = messages.map(m => ({ role: m.role, content: m.content }));
+
+  if (messages.length === 0) {
+    if (welcome) welcome.classList.remove('hidden');
+  } else {
+    if (welcome) welcome.classList.add('hidden');
+    messages.forEach((msg, idx) => {
+      renderIdeMessageItem(msg, `msg-${idx}`);
+    });
+    if (container) container.scrollTop = container.scrollHeight;
+  }
+}
+
+function renderIdeMessageItem(msg, id) {
+  const messagesList = document.getElementById('ide-messages-list');
+  if (!messagesList) return;
+
+  if (msg.role === 'user') {
+    const userMsg = document.createElement('div');
+    userMsg.className = 'flex flex-col items-end space-y-1 animate-seq-fade';
+    userMsg.innerHTML = `
+      <div class="px-4 py-2.5 rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-black dark:text-neutral-100 text-xs leading-relaxed max-w-[85%] select-text font-sans">
+        ${escapeHtml(msg.content)}
+      </div>
+    `;
+    messagesList.appendChild(userMsg);
+  } else if (msg.role === 'assistant') {
+    const assistantMsg = document.createElement('div');
+    assistantMsg.id = id;
+    assistantMsg.className = 'flex items-start gap-3 select-text animate-seq-fade';
+    const modelLabel = (msg.model || ideSelectedModel || '14b').toUpperCase();
+    const srvId = activeIdeServer?.id || 'cst7';
+
+    let formattedContent = '';
+    if (window.marked) {
+      try {
+        formattedContent = marked.parse(msg.content);
+      } catch(e) {
+        formattedContent = escapeHtml(msg.content);
+      }
+    } else {
+      formattedContent = escapeHtml(msg.content);
+    }
+
+    assistantMsg.innerHTML = `
+      <div class="w-6 h-6 rounded-full bg-black dark:bg-white flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+        <img src="courtesy-black.png" alt="" class="w-3.5 h-3.5 invert dark:invert-0">
+      </div>
+      <div class="flex-1 min-w-0 space-y-1.5">
+        <div class="text-[11px] font-mono text-neutral-400 dark:text-neutral-500 flex items-center gap-2">
+          <span class="font-semibold text-neutral-800 dark:text-neutral-200">Courtesy</span>
+          <span>•</span>
+          <span class="text-neutral-500 dark:text-neutral-400">${srvId} (${modelLabel})</span>
+        </div>
+        <div class="markdown-body text-xs text-neutral-900 dark:text-neutral-100 leading-relaxed min-h-[1.5rem]">
+          ${formattedContent}
+        </div>
+      </div>
+    `;
+    messagesList.appendChild(assistantMsg);
+
+    if (window.hljs) {
+      assistantMsg.querySelectorAll('pre code').forEach(block => {
+        if (!block.dataset.highlighted) {
+          hljs.highlightElement(block);
+          block.dataset.highlighted = 'true';
+        }
+      });
+    }
+  }
+}
+
+function recordRecentWorkspace(folderPath) {
+  if (!folderPath) return;
+  try {
+    let recents = JSON.parse(localStorage.getItem('courtesy_recent_workspaces') || '[]');
+    recents = recents.filter(p => p.toLowerCase() !== folderPath.toLowerCase());
+    recents.unshift(folderPath);
+    if (recents.length > 5) recents = recents.slice(0, 5);
+    localStorage.setItem('courtesy_recent_workspaces', JSON.stringify(recents));
+  } catch(e) {}
+  renderRecentWorkspaces();
+}
+
+function renderRecentWorkspaces() {
+  const container = document.getElementById('sidebar-recent-workspaces');
+  const listEl = document.getElementById('sidebar-recent-list');
+  if (!container || !listEl) return;
+
+  try {
+    const recents = JSON.parse(localStorage.getItem('courtesy_recent_workspaces') || '[]');
+    const otherRecents = recents.filter(p => p.toLowerCase() !== (currentWorkspaceFolder || '').toLowerCase());
+    if (otherRecents.length === 0) {
+      container.classList.add('hidden');
+      return;
+    }
+
+    container.classList.remove('hidden');
+    listEl.innerHTML = '';
+    otherRecents.slice(0, 4).forEach(folderPath => {
+      const folderName = getFolderName(folderPath);
+      const btn = document.createElement('button');
+      btn.className = 'w-full px-2 py-1 rounded-lg text-left text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/60 dark:hover:bg-neutral-800 transition flex items-center gap-1.5 truncate group';
+      btn.title = folderPath;
+      btn.onclick = () => switchWorkspaceFolder(folderPath);
+      btn.innerHTML = `
+        <i data-lucide="folder" class="w-3 h-3 flex-shrink-0 opacity-60 group-hover:opacity-100"></i>
+        <span class="truncate text-[11px]">${escapeHtml(folderName)}</span>
+      `;
+      listEl.appendChild(btn);
+    });
+
+    if (window.lucide) lucide.createIcons();
+  } catch(e) {}
+}
+
+function switchWorkspaceFolder(folderPath) {
+  currentWorkspaceFolder = folderPath;
+  localStorage.setItem('workspace_folder', folderPath);
+  recordRecentWorkspace(folderPath);
+  loadWorkspaceChats();
+  updateIdeWorkspaceUI();
+}
+
+// ================= Standard Mode Startup & Workspace UI =================
 function startStandardMode(activeServer) {
   showView('view-standard');
   if (activeServer) activeIdeServer = activeServer;
@@ -318,10 +703,9 @@ function startStandardMode(activeServer) {
   if (ideNodeBadge) {
     ideNodeBadge.innerText = `${srv.id} (${srv.ip}${srv.latency ? ' • ' + srv.latency : ''})`;
   }
-  const inputModelBadge = document.getElementById('ide-input-model-badge');
-  if (inputModelBadge) {
-    inputModelBadge.innerText = `${srv.id} • 14B`;
-  }
+  updateIdeModelUI();
+  updateIdeSidebarUI();
+  loadWorkspaceChats();
   updateIdeWorkspaceUI();
 }
 
@@ -330,6 +714,7 @@ function updateIdeWorkspaceUI() {
   const workspaceView = document.getElementById('ide-workspace-view');
   const topbarFolderBtn = document.getElementById('topbar-folder-name');
   const closeFolderBtn = document.getElementById('btn-topbar-close-folder');
+  const sidebarWorkspaceTitle = document.getElementById('sidebar-workspace-title');
 
   if (!currentWorkspaceFolder) {
     // 1. Default Screen: No folder chosen
@@ -337,6 +722,10 @@ function updateIdeWorkspaceUI() {
     if (workspaceView) workspaceView.classList.add('hidden');
     if (topbarFolderBtn) topbarFolderBtn.innerText = 'Open Folder';
     if (closeFolderBtn) closeFolderBtn.classList.add('hidden');
+    if (sidebarWorkspaceTitle) {
+      sidebarWorkspaceTitle.innerText = 'No folder open';
+      sidebarWorkspaceTitle.title = 'No workspace open';
+    }
   } else {
     // 2. Active Workspace: Show Antigravity conversation and bottom input bar
     if (emptyState) emptyState.classList.add('hidden');
@@ -347,12 +736,16 @@ function updateIdeWorkspaceUI() {
     const shortName = getFolderName(currentWorkspaceFolder);
     if (topbarFolderBtn) topbarFolderBtn.innerText = shortName;
     if (closeFolderBtn) closeFolderBtn.classList.remove('hidden');
+    if (sidebarWorkspaceTitle) {
+      sidebarWorkspaceTitle.innerText = shortName;
+      sidebarWorkspaceTitle.title = currentWorkspaceFolder;
+    }
 
     const folderNameBadge = document.getElementById('ide-active-folder-name');
     if (folderNameBadge) folderNameBadge.innerText = shortName;
 
     const welcomeTitle = document.getElementById('ide-welcome-folder-title');
-    if (welcomeTitle) welcomeTitle.innerHTML = `Workspace: <span class="font-mono text-black">${shortName}</span>`;
+    if (welcomeTitle) welcomeTitle.innerHTML = `Workspace: <span class="font-mono text-black dark:text-white">${shortName}</span>`;
 
     const fileCountEl = document.getElementById('ide-welcome-file-count');
     if (fileCountEl) fileCountEl.innerText = 'Scanning workspace files...';
@@ -367,23 +760,23 @@ function updateIdeWorkspaceUI() {
       if (fileCountEl) fileCountEl.innerText = 'Workspace active • Ready for queries';
     });
 
+    recordRecentWorkspace(currentWorkspaceFolder);
+
     setTimeout(() => {
       const input = document.getElementById('ide-chat-input');
       if (input) input.focus();
     }, 150);
   }
 
+  renderRecentWorkspaces();
+  updateIdeModelUI();
   if (window.lucide) lucide.createIcons();
 }
 
 function closeWorkspaceFolder() {
   currentWorkspaceFolder = '';
   localStorage.removeItem('workspace_folder');
-  ideChatHistory = [];
-  const msgList = document.getElementById('ide-messages-list');
-  if (msgList) msgList.innerHTML = '';
-  const welcome = document.getElementById('ide-conversation-welcome');
-  if (welcome) welcome.classList.remove('hidden');
+  loadWorkspaceChats();
   updateIdeWorkspaceUI();
 }
 
@@ -430,22 +823,55 @@ async function sendIdeChat() {
   input.value = '';
   input.style.height = 'auto';
 
+  // Ensure active chat exists
+  let activeChat = getActiveChat();
+  if (!activeChat) {
+    createNewChat();
+    activeChat = getActiveChat();
+  }
+
+  // Auto-generate title from first prompt if still default
+  if (activeChat && (!activeChat.title || activeChat.title === 'New Conversation')) {
+    let cleanTitle = text.replace(/^(\/plan|\/explain|\/refactor|\/audit|\/tests)\s*/i, '').trim();
+    cleanTitle = cleanTitle.split('\n')[0].trim();
+    if (cleanTitle.length > 32) cleanTitle = cleanTitle.substring(0, 32).trim() + '...';
+    activeChat.title = cleanTitle || 'Conversation';
+  }
+
   const welcome = document.getElementById('ide-conversation-welcome');
   if (welcome) welcome.classList.add('hidden');
 
   const messagesList = document.getElementById('ide-messages-list');
   const container = document.getElementById('ide-conversation-container');
 
-  // 1. Append User Message
+  // 1. Append User Message to UI and to Active Chat
   const userMsg = document.createElement('div');
   userMsg.className = 'flex flex-col items-end space-y-1 animate-seq-fade';
   userMsg.innerHTML = `
-    <div class="px-4 py-2.5 rounded-2xl bg-neutral-100 text-black text-xs leading-relaxed max-w-[85%] select-text font-sans">
+    <div class="px-4 py-2.5 rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-black dark:text-neutral-100 text-xs leading-relaxed max-w-[85%] select-text font-sans">
       ${escapeHtml(text)}
     </div>
   `;
   messagesList.appendChild(userMsg);
-  ideChatHistory.push({ role: 'user', content: text });
+
+  activeChat.messages.push({
+    role: 'user',
+    content: text,
+    timestamp: Date.now()
+  });
+  activeChat.updatedAt = Date.now();
+
+  // Move active chat to the top of the list
+  const chatIdx = workspaceChats.findIndex(c => c.id === activeChat.id);
+  if (chatIdx > 0) {
+    workspaceChats.splice(chatIdx, 1);
+    workspaceChats.unshift(activeChat);
+  }
+
+  saveWorkspaceChats();
+  renderChatsSidebar();
+
+  ideChatHistory = activeChat.messages.map(m => ({ role: m.role, content: m.content }));
 
   if (container) container.scrollTop = container.scrollHeight;
 
@@ -454,18 +880,20 @@ async function sendIdeChat() {
   const assistantMsg = document.createElement('div');
   assistantMsg.id = msgId;
   assistantMsg.className = 'flex items-start gap-3 select-text animate-seq-fade';
+  const modelLabel = (ideSelectedModel || '14b').toUpperCase();
+
   assistantMsg.innerHTML = `
-    <div class="w-6 h-6 rounded-full bg-black flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
-      <img src="courtesy-black.png" alt="" class="w-3.5 h-3.5 invert">
+    <div class="w-6 h-6 rounded-full bg-black dark:bg-white flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+      <img src="courtesy-black.png" alt="" class="w-3.5 h-3.5 invert dark:invert-0">
     </div>
     <div class="flex-1 min-w-0 space-y-1.5">
-      <div class="text-[11px] font-mono text-neutral-400 flex items-center gap-2">
-        <span class="font-semibold text-neutral-800">Courtesy</span>
+      <div class="text-[11px] font-mono text-neutral-400 dark:text-neutral-500 flex items-center gap-2">
+        <span class="font-semibold text-neutral-800 dark:text-neutral-200">Courtesy</span>
         <span>•</span>
-        <span class="text-neutral-500">${activeIdeServer.id} (14B)</span>
+        <span class="text-neutral-500 dark:text-neutral-400">${activeIdeServer.id} (${modelLabel})</span>
       </div>
-      <div id="${msgId}-content" class="markdown-body text-xs text-neutral-900 leading-relaxed min-h-[1.5rem]">
-        <span class="inline-block w-1.5 h-3.5 bg-black animate-pulse align-middle"></span>
+      <div id="${msgId}-content" class="markdown-body text-xs text-neutral-900 dark:text-neutral-100 leading-relaxed min-h-[1.5rem]">
+        <span class="inline-block w-1.5 h-3.5 bg-black dark:bg-white animate-pulse align-middle"></span>
       </div>
     </div>
   `;
@@ -488,7 +916,9 @@ async function sendIdeChat() {
     if (cachedWorkspaceFiles && cachedWorkspaceFiles.length > 0) {
       filesSnippet = cachedWorkspaceFiles.slice(0, 35).map(f => f.name || f.path.split(/[\\/]/).pop()).join(', ');
     }
-    const systemPrompt = `You are Courtesy, an elite autonomous Antigravity AI coding assistant and pair programmer.\nActive Workspace Folder: ${currentWorkspaceFolder}\nFiles in Workspace: ${filesSnippet || 'Standard project'}\nProvide clean, production-ready code blocks with filename headers and clear explanations.`;
+    const systemPrompt = `You are Courtesy, an elite autonomous Antigravity AI coding assistant and pair programmer.\nActive Workspace Folder: ${currentWorkspaceFolder || 'Workspace'}\nFiles in Workspace: ${filesSnippet || 'Standard project'}\nProvide clean, production-ready code blocks with filename headers and clear explanations.`;
+
+    const modelName = (ideSelectedModel === '7b') ? 'qwen2.5-coder:7b' : 'qwen2.5-coder:14b';
 
     const response = await fetch(`${apiBaseUrl}/v1/chat/completions`, {
       method: 'POST',
@@ -498,7 +928,7 @@ async function sendIdeChat() {
         'Authorization': 'Bearer courtesy-local'
       },
       body: JSON.stringify({
-        model: 'qwen2.5-coder:14b',
+        model: modelName,
         messages: [
           { role: 'system', content: systemPrompt },
           ...ideChatHistory
@@ -557,17 +987,27 @@ async function sendIdeChat() {
       }
     }
 
-    ideChatHistory.push({ role: 'assistant', content: fullText });
   } catch (err) {
     if (err.name === 'AbortError') {
       if (contentEl && !fullText) contentEl.innerHTML = '<span class="text-neutral-400 italic">Generation stopped.</span>';
     } else {
       console.error('IDE Chat error:', err);
       if (contentEl) {
-        contentEl.innerHTML = `<div class="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs"><b>Inference Notice:</b> ${err.message || 'Unable to connect to Ollama on server.'}</div>`;
+        contentEl.innerHTML = `<div class="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs"><b>Inference Notice:</b> ${err.message || 'Unable to connect to Ollama on server.'}</div>`;
       }
     }
   } finally {
+    if (fullText) {
+      activeChat.messages.push({
+        role: 'assistant',
+        content: fullText,
+        model: ideSelectedModel,
+        timestamp: Date.now()
+      });
+      activeChat.updatedAt = Date.now();
+      saveWorkspaceChats();
+      renderChatsSidebar();
+    }
     isIdeStreaming = false;
     ideAbortController = null;
     if (sendBtn) sendBtn.classList.remove('hidden');
@@ -1334,12 +1774,11 @@ function showToast(message, icon = "⚡") {
 
 // ================= Dark / Light Theme Toggle =================
 function initTheme() {
-  // Minimalist branch: default to pure white minimalist light theme
-  let saved = localStorage.getItem('courtesy_minimal_theme');
+  let saved = localStorage.getItem('courtesy_theme') || localStorage.getItem('courtesy_minimal_theme');
   if (!saved) {
     saved = 'light';
+    localStorage.setItem('courtesy_theme', 'light');
     localStorage.setItem('courtesy_minimal_theme', 'light');
-    localStorage.setItem('courtesy-theme', 'light');
   }
   applyTheme(saved);
 }
@@ -1351,28 +1790,37 @@ function toggleTheme() {
 
 function applyTheme(theme) {
   const html = document.documentElement;
-  const hljsTheme = document.getElementById('hljs-theme');
+  const isDark = (theme === 'dark');
 
-  if (theme === 'light') {
-    html.classList.remove('dark');
-    html.classList.add('light');
-    if (hljsTheme) hljsTheme.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css";
-  } else {
+  if (isDark) {
     html.classList.remove('light');
     html.classList.add('dark');
-    if (hljsTheme) hljsTheme.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css";
+  } else {
+    html.classList.remove('dark');
+    html.classList.add('light');
   }
 
-  const logoSrc = (theme === 'light') ? 'courtesy-black.png' : 'courtesy-gold.png';
-  const portalLogo = document.getElementById('portal-logo-img');
-  if (portalLogo) portalLogo.src = logoSrc;
-  const mainHeaderLogo = document.getElementById('main-header-logo');
-  if (mainHeaderLogo) mainHeaderLogo.src = logoSrc;
-  const sidebarBrandLogo = document.getElementById('sidebar-brand-logo');
-  if (sidebarBrandLogo) sidebarBrandLogo.src = logoSrc;
+  const metaColorScheme = document.querySelector('meta[name="color-scheme"]');
+  if (metaColorScheme) {
+    metaColorScheme.content = isDark ? 'dark' : 'light';
+  }
 
+  // Update theme toggle icons (sun when dark to switch to light, moon when light to switch to dark)
+  document.querySelectorAll('.theme-toggle-icon').forEach(iconEl => {
+    iconEl.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
+  });
+
+  const hljsTheme = document.getElementById('hljs-theme');
+  if (hljsTheme) {
+    hljsTheme.href = isDark 
+      ? "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+      : "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css";
+  }
+
+  localStorage.setItem('courtesy_theme', theme);
   localStorage.setItem('courtesy_minimal_theme', theme);
   localStorage.setItem('courtesy-theme', theme);
+
   if (window.lucide) lucide.createIcons();
 }
 
@@ -4717,50 +5165,46 @@ function closePayoutGuideModal() {
 window.addEventListener('keydown', (e) => {
   // Escape: stop streaming or close modals
   if (e.key === 'Escape') {
+    if (isIdeStreaming) stopIdeChat();
     if (isStreaming) stopGenerating();
     const ctxMenu = document.getElementById('context-menu');
     if (ctxMenu) ctxMenu.classList.add('hidden');
   }
-  // Ctrl+B: Toggle sidebar
-  if (e.ctrlKey && e.key === 'b' && currentView === 'standard') {
+  // Ctrl+B: Toggle Workspaces / Chats sidebar
+  if (e.ctrlKey && e.key.toLowerCase() === 'b' && currentView === 'standard') {
     e.preventDefault();
-    toggleSidebar();
+    toggleIdeSidebar();
   }
-  // Ctrl+N: New conversation
-  if (e.ctrlKey && e.key === 'n' && currentView === 'standard') {
+  // Ctrl+N: New Chat Conversation
+  if (e.ctrlKey && e.key.toLowerCase() === 'n' && currentView === 'standard') {
     e.preventDefault();
-    newConversation();
+    createNewChat();
+  }
+  // Ctrl+O: Open Folder in Workspace
+  if (e.ctrlKey && e.key.toLowerCase() === 'o' && currentView === 'standard') {
+    e.preventDefault();
+    pickWorkspaceFolder();
+  }
+  // Ctrl+M: Toggle Model (7B <-> 14B)
+  if (e.ctrlKey && e.key.toLowerCase() === 'm' && currentView === 'standard') {
+    e.preventDefault();
+    toggleIdeModel();
+  }
+  // Ctrl+Shift+T: Toggle Dark/Light Theme
+  if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 't') {
+    e.preventDefault();
+    toggleTheme();
   }
   // Ctrl+Shift+P: Return to portal
   if (e.ctrlKey && e.shiftKey && e.key === 'P') {
     e.preventDefault();
     returnToPortal();
   }
-  // Ctrl+L: Focus chat prompt input
-  if (e.ctrlKey && e.key === 'l' && currentView === 'standard') {
+  // Ctrl+L: Focus chat input
+  if (e.ctrlKey && e.key.toLowerCase() === 'l' && currentView === 'standard') {
     e.preventDefault();
-    const input = document.getElementById('prompt-input') || document.getElementById('sticky-prompt-input');
+    const input = document.getElementById('ide-chat-input') || document.getElementById('prompt-input');
     if (input) input.focus();
-  }
-  // Ctrl+\ or Ctrl+E: Cycle IDE Layout (Chat -> Split -> IDE)
-  if (e.ctrlKey && (e.key === '\\' || e.key.toLowerCase() === 'e') && currentView === 'standard') {
-    e.preventDefault();
-    cycleIdeLayout();
-  }
-  // Ctrl+` (backtick): Toggle Integrated Terminal Drawer
-  if (e.ctrlKey && e.key === '`' && currentView === 'standard') {
-    e.preventDefault();
-    toggleTerminalPanel();
-  }
-  // Ctrl+O: Open Folder in IDE
-  if (e.ctrlKey && e.key.toLowerCase() === 'o' && currentView === 'standard') {
-    e.preventDefault();
-    pickWorkspaceFolder();
-  }
-  // Ctrl+Shift+F: Toggle Workspace Code Search
-  if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'f' && currentView === 'standard') {
-    e.preventDefault();
-    toggleWorkspaceSearchDrawer();
   }
 });
 

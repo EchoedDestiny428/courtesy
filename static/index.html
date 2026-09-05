@@ -4,10 +4,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
   <title>Courtesy</title>
   <link rel="icon" href="courtesy-black.png">
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class'
+    };
+  </script>
   <!-- Google Fonts: Inter & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,20 +27,23 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 </head>
 
-<body class="bg-white text-black font-sans antialiased select-none overflow-hidden">
+<body class="bg-white dark:bg-[#09090b] text-black dark:text-neutral-100 font-sans antialiased select-none overflow-hidden transition-colors duration-200">
 
   <!-- ================================================================
        1. LOGIN / PORTAL SCREEN (ONLY LOGO & BUTTONS, NO OTHER WORDS)
        ================================================================ -->
-  <section id="view-portal" class="min-h-screen flex flex-col items-center justify-center p-6 relative z-10">
+  <section id="view-portal" class="min-h-screen flex flex-col items-center justify-center p-6 relative z-10 bg-white dark:bg-[#09090b] text-black dark:text-white transition-colors duration-200">
     
-    <!-- Titlebar Window Controls -->
+    <!-- Titlebar Window Controls + Theme Toggle -->
     <div class="fixed top-0 left-0 right-0 h-10 z-50 titlebar-drag-region flex items-center justify-end px-2">
       <div class="flex items-center gap-0.5 no-drag">
-        <button onclick="windowMinimize()" class="p-1.5 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition" title="Minimize">
+        <button onclick="toggleTheme()" class="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition mr-1" title="Toggle Light / Dark Mode">
+          <i data-lucide="moon" class="w-3.5 h-3.5 theme-toggle-icon"></i>
+        </button>
+        <button onclick="windowMinimize()" class="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition" title="Minimize">
           <i data-lucide="minus" class="w-3.5 h-3.5"></i>
         </button>
-        <button onclick="windowMaximize()" class="p-1.5 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition" title="Maximize">
+        <button onclick="windowMaximize()" class="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition" title="Maximize">
           <i data-lucide="square" class="w-3 h-3"></i>
         </button>
         <button onclick="windowClose()" class="p-1.5 hover:bg-rose-600 hover:text-white text-neutral-400 rounded transition" title="Close">
@@ -48,23 +57,23 @@
       
       <!-- Minimal Logo -->
       <div class="cursor-pointer transition hover:opacity-85" onclick="launchIdeSequence()">
-        <img id="portal-logo-img" src="courtesy-black.png" alt="Courtesy" class="w-28 h-28 object-contain">
+        <img id="portal-logo-img" src="courtesy-black.png" alt="Courtesy" class="w-28 h-28 object-contain theme-invert transition duration-300">
       </div>
 
       <!-- Minimal Buttons -->
       <div id="portal-actions" class="flex items-center gap-3 transition-opacity duration-200">
         <button id="btn-portal-ide" onclick="launchIdeSequence()"
-          class="px-6 py-2.5 rounded-xl bg-black text-white font-medium text-xs shadow-sm hover:bg-neutral-800 transition">
+          class="px-6 py-2.5 rounded-xl bg-black dark:bg-white text-white dark:text-black font-medium text-xs shadow-sm hover:bg-neutral-800 dark:hover:bg-neutral-200 transition">
           IDE
         </button>
         <button id="btn-portal-admin" onclick="showView('view-admin')"
-          class="px-6 py-2.5 rounded-xl border border-neutral-200 text-neutral-800 hover:border-black hover:text-black font-medium text-xs transition">
+          class="px-6 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 text-neutral-800 dark:text-neutral-200 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white font-medium text-xs transition">
           Admin
         </button>
       </div>
 
       <!-- Dynamic Server Sequence Display (Shown on IDE click) -->
-      <div id="portal-server-sequence" class="hidden flex flex-col font-mono text-xs w-[420px] px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl space-y-1.5 select-none transition-all duration-200">
+      <div id="portal-server-sequence" class="hidden flex flex-col font-mono text-xs w-[420px] px-4 py-3 bg-neutral-50 dark:bg-[#111116] border border-neutral-200 dark:border-neutral-800 rounded-xl space-y-1.5 select-none transition-all duration-200 text-neutral-700 dark:text-neutral-300">
       </div>
 
     </div>
@@ -73,53 +82,73 @@
 
 
   <!-- ================================================================
-       2. MINIMALIST IDE SCREEN (FROM SCRATCH CANVAS)
+       2. MINIMALIST IDE SCREEN WITH WORKSPACES & CONVERSATIONS
        ================================================================ -->
-  <main id="view-standard" class="h-screen flex flex-col overflow-hidden hidden bg-white text-black">
+  <main id="view-standard" class="h-screen flex flex-col overflow-hidden hidden bg-white dark:bg-[#09090b] text-black dark:text-neutral-100 transition-colors duration-200">
 
     <!-- Minimal Top Bar -->
-    <header class="h-11 px-4 flex items-center justify-between border-b border-neutral-200 bg-white z-30 text-xs titlebar-drag-region select-none">
+    <header class="h-11 px-4 flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#09090b] z-30 text-xs titlebar-drag-region select-none transition-colors duration-200">
       
-      <!-- Left: Return to Portal, Brand, and Workspace Folder Button -->
-      <div class="flex items-center gap-3 no-drag">
-        <button onclick="returnToPortal()" class="p-1 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition" title="Back to Portal">
+      <!-- Left: Sidebar Toggle, Return to Portal, Brand, and Workspace Folder Button -->
+      <div class="flex items-center gap-2.5 no-drag">
+        <button id="btn-sidebar-toggle" onclick="toggleIdeSidebar()" class="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition" title="Toggle Sidebar (Ctrl+B)">
+          <i data-lucide="panel-left" class="w-3.5 h-3.5"></i>
+        </button>
+        <button onclick="returnToPortal()" class="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition" title="Back to Portal">
           <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
         </button>
         <div class="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition mr-1" onclick="returnToPortal()">
-          <img src="courtesy-black.png" alt="Courtesy" class="w-4 h-4 object-contain">
-          <span class="font-semibold text-xs tracking-tight text-black">Courtesy</span>
+          <img src="courtesy-black.png" alt="Courtesy" class="w-4 h-4 object-contain theme-invert">
+          <span class="font-semibold text-xs tracking-tight text-black dark:text-white">Courtesy</span>
         </div>
         
         <!-- Folder Chooser Button -->
         <div class="flex items-center gap-1">
           <button id="btn-topbar-folder" onclick="pickWorkspaceFolder()"
-            class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neutral-200 hover:border-black text-neutral-600 hover:text-black transition text-xs font-mono"
+            class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-neutral-500 text-neutral-600 dark:text-neutral-300 hover:text-black dark:hover:text-white transition text-xs font-mono"
             title="Open or Switch Folder (Ctrl+O)">
             <i data-lucide="folder" class="w-3.5 h-3.5"></i>
             <span id="topbar-folder-name">Open Folder</span>
           </button>
           <button id="btn-topbar-close-folder" onclick="closeWorkspaceFolder()"
-            class="hidden p-1 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition"
+            class="hidden p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition"
             title="Close workspace folder">
             <i data-lucide="x" class="w-3.5 h-3.5"></i>
           </button>
         </div>
       </div>
 
-      <!-- Center: Connected Server Telemetry Badge -->
-      <div class="flex items-center gap-2 no-drag">
-        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neutral-50 border border-neutral-200 text-[11px] font-mono text-neutral-600">
+      <!-- Center: Connected Server Telemetry Badge & Model Switcher Pill -->
+      <div class="flex items-center gap-3 no-drag">
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-[11px] font-mono text-neutral-600 dark:text-neutral-300">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
           <span id="ide-connected-node">cst7 (10.11.2.12)</span>
         </div>
+
+        <!-- Model Switcher Pill (7B vs 14B) -->
+        <div class="flex items-center p-0.5 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-100/80 dark:bg-neutral-900/80 text-[11px] font-mono select-none">
+          <button id="topbar-model-7b" onclick="setIdeModel('7b')"
+            class="px-2 py-0.5 rounded-md font-medium transition text-neutral-500 dark:text-neutral-400 hover:text-black dark:hover:text-white"
+            title="Fast 7B Model (Qwen 2.5 Coder 7B)">
+            7B
+          </button>
+          <button id="topbar-model-14b" onclick="setIdeModel('14b')"
+            class="px-2 py-0.5 rounded-md font-medium transition bg-white dark:bg-neutral-800 text-black dark:text-white shadow-xs font-semibold"
+            title="Heavy 14B Model (Qwen 2.5 Coder 14B)">
+            14B
+          </button>
+        </div>
       </div>
 
-      <!-- Right: Window Controls -->
+      <!-- Right: Theme Toggle & Window Controls -->
       <div class="flex items-center gap-0.5 no-drag">
-        <button onclick="windowMinimize()" class="p-1 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition" title="Minimize">
+        <button id="btn-ide-theme-toggle" onclick="toggleTheme()" class="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition mr-1.5" title="Toggle Light / Dark Mode">
+          <i data-lucide="moon" class="w-3.5 h-3.5 theme-toggle-icon"></i>
+        </button>
+        <button onclick="windowMinimize()" class="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition" title="Minimize">
           <i data-lucide="minus" class="w-3.5 h-3.5"></i>
         </button>
-        <button onclick="windowMaximize()" class="p-1 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition" title="Maximize">
+        <button onclick="windowMaximize()" class="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition" title="Maximize">
           <i data-lucide="square" class="w-3 h-3"></i>
         </button>
         <button onclick="windowClose()" class="p-1 hover:bg-rose-600 hover:text-white text-neutral-400 rounded transition" title="Close">
@@ -129,109 +158,179 @@
 
     </header>
 
-    <!-- IDE Canvas (Empty State or Antigravity Conversation Workspace) -->
-    <div id="ide-canvas" class="flex-1 flex flex-col bg-white overflow-hidden relative">
+    <!-- Main Workspace Body: Left Sidebar + Canvas -->
+    <div class="flex-1 flex overflow-hidden relative">
       
-      <!-- 1. Default Screen: No Folder Chosen -->
-      <div id="ide-empty-state" class="flex-1 flex flex-col items-center justify-center relative select-none bg-white p-6">
-        <div class="relative flex flex-col items-center text-center max-w-sm w-full">
-          <img src="courtesy-black.png" alt="Courtesy" class="w-20 h-20 object-contain opacity-20 mb-6 select-none pointer-events-none transition duration-500">
-          <h1 class="text-base font-semibold tracking-tight text-black mb-1.5">Open a folder to start</h1>
-          <p class="text-xs text-neutral-400 font-mono mb-6">Select a project directory to explore code and converse with Courtesy</p>
-          <button onclick="pickWorkspaceFolder()"
-            class="px-5 py-2.5 rounded-xl bg-black hover:bg-neutral-800 text-white font-medium text-xs shadow-sm flex items-center gap-2 transition hover:scale-[1.02] active:scale-[0.98]">
-            <i data-lucide="folder-open" class="w-4 h-4"></i>
-            <span>Open Folder</span>
-            <span class="ml-1 text-[10px] text-neutral-400 font-mono bg-neutral-800 px-1.5 py-0.5 rounded">Ctrl+O</span>
+      <!-- Left Sidebar: Workspaces & Persistent Chats -->
+      <aside id="ide-sidebar" class="w-64 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/70 dark:bg-[#0c0c10] flex flex-col transition-all duration-200 select-none flex-shrink-0 z-20">
+        
+        <!-- Sidebar Workspace Header -->
+        <div class="p-3 border-b border-neutral-200/80 dark:border-neutral-800/80 flex items-center justify-between">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="w-7 h-7 rounded-lg bg-neutral-200/80 dark:bg-neutral-800 flex items-center justify-center flex-shrink-0 text-neutral-700 dark:text-neutral-300">
+              <i data-lucide="folder-git-2" class="w-4 h-4"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="text-[10px] uppercase font-mono tracking-wider text-neutral-400 dark:text-neutral-500 font-semibold">Workspace</div>
+              <div id="sidebar-workspace-title" class="text-xs font-semibold text-black dark:text-white truncate" title="Active Workspace">
+                No folder open
+              </div>
+            </div>
+          </div>
+          <button onclick="pickWorkspaceFolder()" class="p-1 hover:bg-neutral-200/80 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition" title="Open or Switch Workspace Folder">
+            <i data-lucide="folder-open" class="w-3.5 h-3.5"></i>
           </button>
         </div>
-      </div>
 
-      <!-- 2. Active Workspace State (Conversation Above, Antigravity Input Bar Below) -->
-      <div id="ide-workspace-view" class="flex-1 flex flex-col overflow-hidden relative bg-white hidden">
-        
-        <!-- Conversation Area Above Input -->
-        <div id="ide-conversation-container" class="flex-1 overflow-y-auto px-6 py-6 space-y-4">
-          
-          <!-- Welcome banner before messages -->
-          <div id="ide-conversation-welcome" class="max-w-2xl mx-auto flex flex-col items-center text-center py-6 select-none">
-            <img src="courtesy-black.png" alt="Courtesy" class="w-10 h-10 object-contain mb-3 opacity-80">
-            <div class="text-sm font-semibold text-black mb-1" id="ide-welcome-folder-title">Workspace: <span class="font-mono">folder</span></div>
-            <div class="text-xs text-neutral-400 font-mono mb-6" id="ide-welcome-file-count">Scanning files...</div>
-            
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full text-left">
-              <button onclick="sendQuickPrompt('Explain the project structure and architecture')"
-                class="p-3 rounded-xl border border-neutral-200 hover:border-black text-neutral-700 hover:text-black transition text-xs flex flex-col gap-0.5 group">
-                <span class="font-medium group-hover:text-black">Architecture Overview</span>
-                <span class="text-[11px] text-neutral-400">Explain the directory structure and core modules</span>
-              </button>
-              <button onclick="sendQuickPrompt('Analyze this repository for potential bugs and edge cases')"
-                class="p-3 rounded-xl border border-neutral-200 hover:border-black text-neutral-700 hover:text-black transition text-xs flex flex-col gap-0.5 group">
-                <span class="font-medium group-hover:text-black">Code Audit</span>
-                <span class="text-[11px] text-neutral-400">Identify bugs, race conditions, and bottlenecks</span>
-              </button>
-              <button onclick="sendQuickPrompt('/plan ')"
-                class="p-3 rounded-xl border border-neutral-200 hover:border-black text-neutral-700 hover:text-black transition text-xs flex flex-col gap-0.5 group">
-                <span class="font-medium group-hover:text-black">Implementation Plan</span>
-                <span class="text-[11px] text-neutral-400">Generate a step-by-step implementation blueprint</span>
-              </button>
-              <button onclick="sendQuickPrompt('List the main functions and dependencies')"
-                class="p-3 rounded-xl border border-neutral-200 hover:border-black text-neutral-700 hover:text-black transition text-xs flex flex-col gap-0.5 group">
-                <span class="font-medium group-hover:text-black">Functions & Imports</span>
-                <span class="text-[11px] text-neutral-400">Summarize APIs and external imports</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Messages List -->
-          <div id="ide-messages-list" class="space-y-4 max-w-2xl mx-auto w-full"></div>
-
+        <!-- + New Chat Button -->
+        <div class="p-2.5">
+          <button onclick="createNewChat()"
+            class="w-full py-2 px-3 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700/80 hover:border-black dark:hover:border-neutral-400 text-black dark:text-white font-medium text-xs flex items-center justify-between shadow-xs transition hover:scale-[1.01] active:scale-[0.99] group">
+            <span class="flex items-center gap-2">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>New Chat</span>
+            </span>
+            <kbd class="text-[10px] font-mono text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-200/60 dark:border-neutral-700/60 group-hover:text-neutral-700 dark:group-hover:text-neutral-300">Ctrl+N</kbd>
+          </button>
         </div>
 
-        <!-- Antigravity Input Bar at Bottom -->
-        <div id="ide-input-bar-wrapper" class="p-4 w-full max-w-2xl mx-auto select-none">
-          <div class="rounded-2xl border border-neutral-200 focus-within:border-neutral-900 focus-within:shadow-md transition-all duration-200 bg-white p-3 flex flex-col gap-2">
+        <!-- Chats Section Header -->
+        <div class="px-3 pt-2 pb-1.5 flex items-center justify-between text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider font-mono">
+          <span>Conversations</span>
+          <span id="sidebar-chat-count" class="px-1.5 py-0.5 rounded-full bg-neutral-200/60 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 text-[10px]">0</span>
+        </div>
+
+        <!-- Scrollable Chats List -->
+        <div id="ide-chats-list" class="flex-1 overflow-y-auto px-2 space-y-1">
+          <!-- Dynamically populated chat items -->
+        </div>
+
+        <!-- Bottom: Recent Workspaces & Folder Switcher -->
+        <div class="p-2.5 border-t border-neutral-200/80 dark:border-neutral-800/80 text-xs">
+          <div id="sidebar-recent-workspaces" class="space-y-1 mb-2 hidden">
+            <div class="text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider font-mono px-1">Recent Folders</div>
+            <div id="sidebar-recent-list" class="space-y-0.5"></div>
+          </div>
+          <button onclick="pickWorkspaceFolder()"
+            class="w-full py-1.5 px-2 rounded-lg text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/60 dark:hover:bg-neutral-800 text-xs flex items-center gap-2 transition">
+            <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
+            <span class="truncate">Open Folder...</span>
+            <span class="ml-auto text-[10px] font-mono text-neutral-400">Ctrl+O</span>
+          </button>
+        </div>
+
+      </aside>
+
+      <!-- Main Canvas (Empty State or Antigravity Conversation Workspace) -->
+      <div id="ide-canvas" class="flex-1 flex flex-col bg-white dark:bg-[#09090b] overflow-hidden relative transition-colors duration-200">
+        
+        <!-- 1. Default Screen: No Folder Chosen -->
+        <div id="ide-empty-state" class="flex-1 flex flex-col items-center justify-center relative select-none bg-white dark:bg-[#09090b] p-6 transition-colors duration-200">
+          <div class="relative flex flex-col items-center text-center max-w-sm w-full">
+            <img src="courtesy-black.png" alt="Courtesy" class="w-20 h-20 object-contain opacity-20 dark:opacity-25 theme-invert mb-6 select-none pointer-events-none transition duration-500">
+            <h1 class="text-base font-semibold tracking-tight text-black dark:text-white mb-1.5">Open a folder to start</h1>
+            <p class="text-xs text-neutral-400 dark:text-neutral-500 font-mono mb-6">Select a project directory to explore code and converse with Courtesy</p>
+            <button onclick="pickWorkspaceFolder()"
+              class="px-5 py-2.5 rounded-xl bg-black dark:bg-white hover:bg-neutral-800 dark:hover:bg-neutral-200 text-white dark:text-black font-medium text-xs shadow-sm flex items-center gap-2 transition hover:scale-[1.02] active:scale-[0.98]">
+              <i data-lucide="folder-open" class="w-4 h-4"></i>
+              <span>Open Folder</span>
+              <span class="ml-1 text-[10px] text-neutral-400 dark:text-neutral-600 font-mono bg-neutral-800 dark:bg-neutral-200 px-1.5 py-0.5 rounded">Ctrl+O</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Active Workspace State (Conversation Above, Antigravity Input Bar Below) -->
+        <div id="ide-workspace-view" class="flex-1 flex flex-col overflow-hidden relative bg-white dark:bg-[#09090b] hidden transition-colors duration-200">
+          
+          <!-- Conversation Area Above Input -->
+          <div id="ide-conversation-container" class="flex-1 overflow-y-auto px-6 py-6 space-y-4">
             
-            <!-- Textarea Input -->
-            <textarea id="ide-chat-input" rows="1"
-              placeholder="Ask Courtesy anything, explore code, or plan changes..."
-              class="w-full bg-transparent text-xs text-black placeholder-neutral-400 resize-none focus:outline-none leading-relaxed max-h-40 overflow-y-auto font-sans select-text"></textarea>
-
-            <!-- Bottom Toolbar Inside Card -->
-            <div class="flex items-center justify-between pt-1.5 border-t border-neutral-100 text-xs">
+            <!-- Welcome banner before messages -->
+            <div id="ide-conversation-welcome" class="max-w-2xl mx-auto flex flex-col items-center text-center py-6 select-none">
+              <img src="courtesy-black.png" alt="Courtesy" class="w-10 h-10 object-contain mb-3 opacity-80 theme-invert">
+              <div class="text-sm font-semibold text-black dark:text-white mb-1" id="ide-welcome-folder-title">Workspace: <span class="font-mono">folder</span></div>
+              <div class="text-xs text-neutral-400 dark:text-neutral-500 font-mono mb-6" id="ide-welcome-file-count">Scanning files...</div>
               
-              <!-- Left Badges -->
-              <div class="flex items-center gap-1.5 text-[11px] font-mono text-neutral-500">
-                <span id="ide-active-folder-badge" class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-neutral-100 text-neutral-700">
-                  <i data-lucide="folder" class="w-3 h-3"></i>
-                  <span id="ide-active-folder-name">folder</span>
-                </span>
-                <span class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-neutral-100 text-neutral-700">
-                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span id="ide-input-model-badge">cst7 • 14B</span>
-                </span>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full text-left">
+                <button onclick="sendQuickPrompt('Explain the project structure and architecture')"
+                  class="p-3 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-neutral-500 bg-white dark:bg-neutral-900/40 text-neutral-700 dark:text-neutral-300 hover:text-black dark:hover:text-white transition text-xs flex flex-col gap-0.5 group">
+                  <span class="font-medium group-hover:text-black dark:group-hover:text-white">Architecture Overview</span>
+                  <span class="text-[11px] text-neutral-400 dark:text-neutral-500">Explain the directory structure and core modules</span>
+                </button>
+                <button onclick="sendQuickPrompt('Analyze this repository for potential bugs and edge cases')"
+                  class="p-3 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-neutral-500 bg-white dark:bg-neutral-900/40 text-neutral-700 dark:text-neutral-300 hover:text-black dark:hover:text-white transition text-xs flex flex-col gap-0.5 group">
+                  <span class="font-medium group-hover:text-black dark:group-hover:text-white">Code Audit</span>
+                  <span class="text-[11px] text-neutral-400 dark:text-neutral-500">Identify bugs, race conditions, and bottlenecks</span>
+                </button>
+                <button onclick="sendQuickPrompt('/plan ')"
+                  class="p-3 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-neutral-500 bg-white dark:bg-neutral-900/40 text-neutral-700 dark:text-neutral-300 hover:text-black dark:hover:text-white transition text-xs flex flex-col gap-0.5 group">
+                  <span class="font-medium group-hover:text-black dark:group-hover:text-white">Implementation Plan</span>
+                  <span class="text-[11px] text-neutral-400 dark:text-neutral-500">Generate a step-by-step implementation blueprint</span>
+                </button>
+                <button onclick="sendQuickPrompt('List the main functions and dependencies')"
+                  class="p-3 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-neutral-500 bg-white dark:bg-neutral-900/40 text-neutral-700 dark:text-neutral-300 hover:text-black dark:hover:text-white transition text-xs flex flex-col gap-0.5 group">
+                  <span class="font-medium group-hover:text-black dark:group-hover:text-white">Functions & Imports</span>
+                  <span class="text-[11px] text-neutral-400 dark:text-neutral-500">Summarize APIs and external imports</span>
+                </button>
               </div>
+            </div>
 
-              <!-- Right Send/Stop Action -->
-              <div class="flex items-center gap-1.5">
-                <button id="ide-send-btn" onclick="sendIdeChat()"
-                  class="w-7 h-7 rounded-full bg-black text-white hover:bg-neutral-800 disabled:opacity-30 disabled:hover:bg-black flex items-center justify-center transition shadow-sm"
-                  title="Send prompt (Enter)">
-                  <i data-lucide="arrow-up" class="w-3.5 h-3.5"></i>
-                </button>
-                <button id="ide-stop-btn" onclick="stopIdeChat()"
-                  class="w-7 h-7 rounded-full bg-rose-600 text-white hover:bg-rose-700 hidden flex items-center justify-center transition shadow-sm"
-                  title="Stop generating (Esc)">
-                  <i data-lucide="square" class="w-3 h-3 fill-current"></i>
-                </button>
+            <!-- Messages List -->
+            <div id="ide-messages-list" class="space-y-4 max-w-2xl mx-auto w-full"></div>
+
+          </div>
+
+          <!-- Antigravity Input Bar at Bottom -->
+          <div id="ide-input-bar-wrapper" class="p-4 w-full max-w-2xl mx-auto select-none">
+            <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 focus-within:border-neutral-900 dark:focus-within:border-neutral-500 focus-within:shadow-md transition-all duration-200 bg-white dark:bg-[#111116] p-3 flex flex-col gap-2">
+              
+              <!-- Textarea Input -->
+              <textarea id="ide-chat-input" rows="1"
+                placeholder="Ask Courtesy anything, explore code, or plan changes..."
+                class="w-full bg-transparent text-xs text-black dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 resize-none focus:outline-none leading-relaxed max-h-40 overflow-y-auto font-sans select-text"></textarea>
+
+              <!-- Bottom Toolbar Inside Card -->
+              <div class="flex items-center justify-between pt-1.5 border-t border-neutral-100 dark:border-neutral-800/80 text-xs">
+                
+                <!-- Left Badges -->
+                <div class="flex items-center gap-1.5 text-[11px] font-mono text-neutral-500 dark:text-neutral-400">
+                  <span id="ide-active-folder-badge" class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800/80 text-neutral-700 dark:text-neutral-300">
+                    <i data-lucide="folder" class="w-3 h-3"></i>
+                    <span id="ide-active-folder-name">folder</span>
+                  </span>
+                  
+                  <!-- Clickable Model Badge in Input Card -->
+                  <button id="ide-input-model-badge" onclick="toggleIdeModel()"
+                    class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 transition cursor-pointer select-none"
+                    title="Click to toggle model (7B / 14B)">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span id="ide-input-model-name">cst7 • 14B</span>
+                    <i data-lucide="chevrons-up-down" class="w-2.5 h-2.5 opacity-60"></i>
+                  </button>
+                </div>
+
+                <!-- Right Send/Stop Action -->
+                <div class="flex items-center gap-1.5">
+                  <button id="ide-send-btn" onclick="sendIdeChat()"
+                    class="w-7 h-7 rounded-full bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 disabled:opacity-30 disabled:hover:bg-black flex items-center justify-center transition shadow-sm"
+                    title="Send prompt (Enter)">
+                    <i data-lucide="arrow-up" class="w-3.5 h-3.5"></i>
+                  </button>
+                  <button id="ide-stop-btn" onclick="stopIdeChat()"
+                    class="w-7 h-7 rounded-full bg-rose-600 text-white hover:bg-rose-700 hidden flex items-center justify-center transition shadow-sm"
+                    title="Stop generating (Esc)">
+                    <i data-lucide="square" class="w-3 h-3 fill-current"></i>
+                  </button>
+                </div>
+
               </div>
 
             </div>
+            <div class="text-center mt-2 text-[10px] font-mono text-neutral-400 dark:text-neutral-500">
+              Press <kbd class="px-1 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300">Enter</kbd> to send, <kbd class="px-1 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300">Shift+Enter</kbd> for newline
+            </div>
+          </div>
 
-          </div>
-          <div class="text-center mt-2 text-[10px] font-mono text-neutral-400">
-            Press <kbd class="px-1 py-0.5 rounded bg-neutral-100 border border-neutral-200 text-neutral-600">Enter</kbd> to send, <kbd class="px-1 py-0.5 rounded bg-neutral-100 border border-neutral-200 text-neutral-600">Shift+Enter</kbd> for newline
-          </div>
         </div>
 
       </div>
@@ -244,19 +343,22 @@
   <!-- ================================================================
        3. ADMIN SCREEN (CLEAN BLANK CANVAS)
        ================================================================ -->
-  <div id="view-admin" class="h-screen flex flex-col overflow-hidden hidden bg-white text-black">
+  <div id="view-admin" class="h-screen flex flex-col overflow-hidden hidden bg-white dark:bg-[#09090b] text-black dark:text-white transition-colors duration-200">
 
     <!-- Minimal Top Bar -->
-    <header class="h-11 px-4 flex items-center justify-between border-b border-neutral-200 bg-white z-30 text-xs titlebar-drag-region select-none">
+    <header class="h-11 px-4 flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#09090b] z-30 text-xs titlebar-drag-region select-none">
       <div class="flex items-center gap-2 no-drag cursor-pointer hover:opacity-75 transition" onclick="returnToPortal()" title="Back">
-        <img src="courtesy-black.png" alt="Courtesy" class="w-4 h-4 object-contain">
-        <i data-lucide="arrow-left" class="w-3.5 h-3.5 text-neutral-500"></i>
+        <img src="courtesy-black.png" alt="Courtesy" class="w-4 h-4 object-contain theme-invert">
+        <i data-lucide="arrow-left" class="w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400"></i>
       </div>
       <div class="flex items-center gap-0.5 no-drag">
-        <button onclick="windowMinimize()" class="p-1 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition">
+        <button onclick="toggleTheme()" class="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition mr-1" title="Toggle Light / Dark Mode">
+          <i data-lucide="moon" class="w-3.5 h-3.5 theme-toggle-icon"></i>
+        </button>
+        <button onclick="windowMinimize()" class="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition">
           <i data-lucide="minus" class="w-3.5 h-3.5"></i>
         </button>
-        <button onclick="windowMaximize()" class="p-1 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition">
+        <button onclick="windowMaximize()" class="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-black dark:hover:text-white rounded transition">
           <i data-lucide="square" class="w-3 h-3"></i>
         </button>
         <button onclick="windowClose()" class="p-1 hover:bg-rose-600 hover:text-white text-neutral-400 rounded transition">
@@ -265,7 +367,7 @@
       </div>
     </header>
 
-    <div class="flex-1 flex items-center justify-center bg-white text-neutral-400 font-mono text-xs">
+    <div class="flex-1 flex items-center justify-center bg-white dark:bg-[#09090b] text-neutral-400 font-mono text-xs">
       Admin screen ready from scratch
     </div>
 
