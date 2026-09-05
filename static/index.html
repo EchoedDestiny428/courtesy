@@ -4,1164 +4,141 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Courtesy • Autonomous Codex IDE & AI Cluster</title>
+  <title>Courtesy</title>
   <link rel="icon" href="courtesy-black.png">
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            gold: {
-              200: '#FEF3C7',
-              300: '#FDE68A',
-              400: '#F5D061',
-              500: '#D4AF37',
-              600: '#B89428',
-              700: '#8C6F18',
-              900: '#473708',
-              subtle: 'rgba(212, 175, 55, 0.1)',
-              glow: 'rgba(212, 175, 55, 0.25)',
-              border: 'rgba(212, 175, 55, 0.4)'
-            }
-          }
-        }
-      }
-    }
-  </script>
-  <!-- Google Fonts: Space Grotesk & JetBrains Mono -->
+  <!-- Google Fonts: Inter & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- Highlight.js for code blocks -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
-    id="hljs-theme">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <!-- Marked.js for markdown parsing -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
-<body
-  class="bg-[var(--bg-app)] text-[var(--text-main)] font-sans antialiased select-none overflow-hidden transition-colors duration-200">
+<body class="bg-white text-black font-sans antialiased select-none overflow-hidden">
 
   <!-- ================================================================
-       LANDING LAUNCH PORTAL (RESTORED CLEAN INITIAL SCREEN)
+       1. LOGIN / PORTAL SCREEN (ONLY LOGO & BUTTONS, NO OTHER WORDS)
        ================================================================ -->
-  <section id="view-portal"
-    class="min-h-screen flex flex-col items-center justify-center p-6 relative z-10 transition-opacity duration-300">
-    <!-- Portal Titlebar Drag Region + Window Controls -->
+  <section id="view-portal" class="min-h-screen flex flex-col items-center justify-center p-6 relative z-10">
+    
+    <!-- Titlebar Window Controls -->
     <div class="fixed top-0 left-0 right-0 h-10 z-50 titlebar-drag-region flex items-center justify-end px-2">
       <div class="flex items-center gap-0.5 no-drag">
-        <button onclick="windowMinimize()"
-          class="p-1.5 hover:bg-white/10 text-[var(--text-dim)] hover:text-[var(--text-main)] rounded transition"
-          title="Minimize">
+        <button onclick="windowMinimize()" class="p-1.5 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition" title="Minimize">
           <i data-lucide="minus" class="w-3.5 h-3.5"></i>
         </button>
-        <button onclick="windowMaximize()"
-          class="p-1.5 hover:bg-white/10 text-[var(--text-dim)] hover:text-[var(--text-main)] rounded transition"
-          title="Maximize">
+        <button onclick="windowMaximize()" class="p-1.5 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition" title="Maximize">
           <i data-lucide="square" class="w-3 h-3"></i>
         </button>
-        <button onclick="windowClose()"
-          class="p-1.5 hover:bg-rose-600/80 text-[var(--text-dim)] hover:text-white rounded transition" title="Close">
+        <button onclick="windowClose()" class="p-1.5 hover:bg-rose-600 hover:text-white text-neutral-400 rounded transition" title="Close">
           <i data-lucide="x" class="w-3.5 h-3.5"></i>
         </button>
       </div>
     </div>
 
-    <div class="portal-glow-bg"></div>
-
-    <div class="max-w-md w-full flex flex-col items-center text-center space-y-8 relative z-10">
-
-      <!-- Animated Sliding Logo (Transparent Gold PNG) - LARGER -->
-      <div class="relative group cursor-pointer logo-slide-up w-44 h-44 flex items-center justify-center"
-        onclick="startStandardMode()" title="Click to Launch Courtesy">
-        <div
-          class="absolute -inset-6 rounded-full bg-gold-500/15 blur-2xl group-hover:bg-gold-500/25 transition duration-700">
-        </div>
-        <img id="portal-logo-img" src="courtesy-black.png" alt="Courtesy"
-          class="w-40 h-40 relative z-10 object-contain drop-shadow-sm portal-logo-anim">
+    <!-- Centered Content: ONLY Logo and Buttons -->
+    <div class="flex flex-col items-center space-y-6">
+      
+      <!-- Minimal Logo -->
+      <div class="cursor-pointer transition hover:opacity-85" onclick="startStandardMode()">
+        <img id="portal-logo-img" src="courtesy-black.png" alt="Courtesy" class="w-28 h-28 object-contain">
       </div>
 
-      <!-- Minimal Title -->
-      <div class="space-y-1">
-        <h1 class="text-3xl font-extrabold tracking-tight text-[var(--text-main)]">Courtesy</h1>
-        <p class="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-widest">Autonomous Codex IDE</p>
-      </div>
-
-      <!-- Minimalist Action Buttons -->
-      <div class="flex items-center gap-3 pt-2">
+      <!-- Minimal Buttons -->
+      <div class="flex items-center gap-3">
         <button onclick="startStandardMode()"
-          class="px-5 py-2.5 rounded-xl bg-black text-white font-semibold text-xs shadow-sm hover:bg-neutral-800 flex items-center gap-2 transition"
-          title="Open Codex IDE">
-          <i data-lucide="code-2" class="w-4 h-4"></i>
-          <span>Open IDE</span>
-          <i data-lucide="arrow-right" class="w-3.5 h-3.5 stroke-[2.5]"></i>
+          class="px-6 py-2.5 rounded-xl bg-black text-white font-medium text-xs shadow-sm hover:bg-neutral-800 transition">
+          IDE
         </button>
-
-        <button onclick="openAdminLoginModal()"
-          class="px-4 py-2.5 rounded-xl bg-[var(--bg-surface)] hover:border-neutral-400 border border-[var(--border-app)] text-[var(--text-main)] font-medium text-xs flex items-center gap-2 transition"
-          title="Cluster Admin Console">
-          <i data-lucide="settings" class="w-4 h-4 text-[var(--text-muted)]"></i>
-          <span>Admin</span>
+        <button onclick="showView('view-admin')"
+          class="px-6 py-2.5 rounded-xl border border-neutral-200 text-neutral-800 hover:border-black hover:text-black font-medium text-xs transition">
+          Admin
         </button>
-
-        <button onclick="toggleTheme()"
-          class="p-2.5 rounded-2xl bg-[var(--bg-surface-elevated)] border border-[var(--border-app)] hover:border-gold text-gold-400 hover-float transition"
-          title="Toggle Light / Dark Mode">
-          <i data-lucide="sun-moon" class="w-4 h-4"></i>
-        </button>
-      </div>
-
-      <!-- Cluster Status -->
-      <div class="pt-4 flex items-center gap-2 text-[10px] font-mono text-[var(--text-dim)]">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-        <span id="portal-online-count">Cluster Ready (kraken • cst6 • cst7)</span>
       </div>
 
     </div>
+
   </section>
 
 
   <!-- ================================================================
-       MODAL: SECURE ADMIN LOGIN
+       2. MINIMALIST IDE SCREEN (FROM SCRATCH CANVAS)
        ================================================================ -->
-  <div id="modal-admin-login"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden animate-fade-in">
-    <div
-      class="max-w-sm w-full luxury-card p-6 rounded-2xl space-y-4 border border-gold modal-animate-in relative shadow-2xl shadow-gold-glow/20">
+  <main id="view-standard" class="h-screen flex flex-col overflow-hidden hidden bg-white text-black">
 
-      <!-- Close Button -->
-      <button onclick="closeAdminLoginModal()"
-        class="absolute top-4 right-4 text-[var(--text-dim)] hover:text-white transition">
-        <i data-lucide="x" class="w-4 h-4"></i>
-      </button>
-
-      <div class="flex items-center gap-3">
-        <div
-          class="w-9 h-9 rounded-xl bg-gold-gradient text-slate-950 flex items-center justify-center font-bold text-sm shadow-sm">
-          <i data-lucide="shield-check" class="w-5 h-5"></i>
-        </div>
-        <div>
-          <h2 class="text-xs font-bold text-white">Admin Authentication</h2>
-          <p class="text-[10px] text-[var(--text-dim)]">Restricted to cluster administrators</p>
-        </div>
-      </div>
-
-      <!-- Error Alert -->
-      <div id="admin-login-error"
-        class="hidden p-2 rounded-lg bg-rose-950/50 border border-rose-800/60 text-rose-300 text-[11px] font-mono flex items-center gap-2">
-        <i data-lucide="alert-triangle" class="w-3.5 h-3.5 flex-shrink-0 text-rose-400"></i>
-        <span id="admin-login-error-msg">Invalid credentials</span>
-      </div>
-
-      <!-- Form -->
-      <form onsubmit="handleAdminLogin(event)" class="space-y-3 text-xs">
-        <div class="space-y-1">
-          <label class="text-[10px] font-mono text-[var(--text-muted)] block">Username</label>
-          <input id="admin-username-input" type="text" value="admin" required
-            class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-gold font-mono transition text-xs">
-        </div>
-
-        <div class="space-y-1">
-          <label class="text-[10px] font-mono text-[var(--text-muted)] block">Password</label>
-          <input id="admin-password-input" type="password" placeholder="••••••••" required
-            class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-gold font-mono transition text-xs">
-        </div>
-
-        <div class="pt-2 flex items-center justify-between gap-2">
-          <button type="button" onclick="closeAdminLoginModal()"
-            class="px-3 py-1.5 rounded-xl border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-muted)] text-xs transition">
-            Cancel
-          </button>
-          <button id="admin-login-btn" type="submit"
-            class="px-4 py-1.5 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-xs shadow-sm shadow-gold-glow transition flex items-center gap-1.5">
-            <span>Authenticate</span>
-            <i data-lucide="arrow-right" class="w-3 h-3 stroke-[3]"></i>
-          </button>
-        </div>
-      </form>
-
-    </div>
-  </div>
-
-
-    <!-- ================================================================
-       MINIMALIST CODEX IDE (BUILT FROM SCRATCH)
-       ================================================================ -->
-  <main id="view-standard" class="h-screen flex flex-col overflow-hidden hidden bg-[#FFFFFF] text-[#09090B]">
-
-    <!-- Minimalist Top Bar (44px) -->
-    <header class="h-11 px-4 flex items-center justify-between border-b border-[#E4E4E7] bg-[#FFFFFF] z-30 text-xs titlebar-drag-region select-none">
+    <!-- Minimal Top Bar -->
+    <header class="h-11 px-4 flex items-center justify-between border-b border-neutral-200 bg-white z-30 text-xs titlebar-drag-region select-none">
       
-      <!-- Left: Home/Portal + Brand + Active File -->
-      <div class="flex items-center gap-3 no-drag">
-        <div class="flex items-center gap-2 cursor-pointer hover:opacity-75 transition" onclick="returnToPortal()" title="Return to Landing Portal">
-          <img src="courtesy-black.png" alt="Courtesy" class="w-4 h-4 object-contain">
-          <span class="font-bold text-sm tracking-tight text-black">Courtesy</span>
-        </div>
-        <span class="text-[#D4D4D8]">/</span>
-        <span id="current-file-title" class="font-mono text-xs text-[#27272A] font-medium">untitled.py</span>
+      <!-- Left: Return to Portal -->
+      <div class="flex items-center gap-2 no-drag cursor-pointer hover:opacity-75 transition" onclick="returnToPortal()" title="Back">
+        <img src="courtesy-black.png" alt="Courtesy" class="w-4 h-4 object-contain">
+        <i data-lucide="arrow-left" class="w-3.5 h-3.5 text-neutral-500"></i>
       </div>
 
-      <!-- Center: Minimal Workspace / File Actions -->
+      <!-- Center / Workspace action -->
       <div class="flex items-center gap-2 no-drag">
-        <button onclick="pickWorkspaceFolder()" class="px-3 py-1 rounded-lg border border-[#E4E4E7] hover:border-black text-xs font-mono flex items-center gap-1.5 transition text-[#27272A]" title="Open Workspace Folder">
-          <i data-lucide="folder" class="w-3.5 h-3.5 text-[#71717A]"></i>
-          <span id="current-folder-label" class="max-w-[160px] truncate">Open Folder</span>
+      </div>
+
+      <!-- Right: Window Controls -->
+      <div class="flex items-center gap-0.5 no-drag">
+        <button onclick="windowMinimize()" class="p-1 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition" title="Minimize">
+          <i data-lucide="minus" class="w-3.5 h-3.5"></i>
         </button>
-        <button onclick="saveActiveFile()" class="px-3 py-1 rounded-lg bg-black text-white hover:bg-neutral-800 text-xs font-medium flex items-center gap-1.5 shadow-sm transition" title="Save File (Ctrl+S)">
-          <i data-lucide="save" class="w-3.5 h-3.5"></i>
-          <span>Save</span>
+        <button onclick="windowMaximize()" class="p-1 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition" title="Maximize">
+          <i data-lucide="square" class="w-3 h-3"></i>
+        </button>
+        <button onclick="windowClose()" class="p-1 hover:bg-rose-600 hover:text-white text-neutral-400 rounded transition" title="Close">
+          <i data-lucide="x" class="w-3.5 h-3.5"></i>
         </button>
       </div>
 
-      <!-- Right: Admin Switcher, Theme & Window Controls -->
-      <div class="flex items-center gap-2 no-drag">
-        <button onclick="showView('view-admin')" class="px-2.5 py-1 rounded-lg border border-[#E4E4E7] hover:border-black text-xs font-medium text-[#27272A] flex items-center gap-1.5 transition" title="Open Cluster Admin Console">
-          <i data-lucide="settings" class="w-3.5 h-3.5 text-[#71717A]"></i>
-          <span>Admin</span>
-        </button>
-
-        <button onclick="toggleTheme()" class="p-1.5 rounded-lg hover:bg-neutral-100 text-[#71717A] hover:text-black transition" title="Toggle Light / Dark theme">
-          <i data-lucide="sun-moon" class="w-3.5 h-3.5"></i>
-        </button>
-
-        <!-- Window Controls -->
-        <div class="flex items-center gap-0.5 pl-2 ml-1 border-l border-[#E4E4E7]">
-          <button onclick="windowMinimize()" class="p-1 hover:bg-neutral-100 text-[#71717A] hover:text-black rounded transition" title="Minimize">
-            <i data-lucide="minus" class="w-3.5 h-3.5"></i>
-          </button>
-          <button onclick="windowMaximize()" class="p-1 hover:bg-neutral-100 text-[#71717A] hover:text-black rounded transition" title="Maximize">
-            <i data-lucide="square" class="w-3 h-3"></i>
-          </button>
-          <button onclick="windowClose()" class="p-1 hover:bg-rose-600 hover:text-white text-[#71717A] rounded transition" title="Close">
-            <i data-lucide="x" class="w-3.5 h-3.5"></i>
-          </button>
-        </div>
-      </div>
     </header>
 
-    <!-- Minimalist Editor Body (From Scratch) -->
-    <div class="flex-1 flex overflow-hidden relative bg-[#FFFFFF]">
-      
-      <!-- Minimal Line Number Gutter -->
-      <div id="editor-gutter"
-        class="w-12 py-3 px-2 text-right select-none font-mono text-xs text-[#A1A1AA] border-r border-[#F4F4F5] bg-[#FAFAFA] overflow-hidden shrink-0 leading-6 font-normal">
-        1
-      </div>
-
-      <!-- Minimal Code Editor Canvas -->
-      <div class="flex-1 flex flex-col h-full relative overflow-hidden bg-[#FFFFFF]">
-        <textarea id="editor-textarea" spellcheck="false"
-          placeholder="Start typing your code here..."
-          class="flex-1 w-full h-full p-3 font-mono text-xs leading-6 bg-transparent text-[#09090B] placeholder-[#A1A1AA] resize-none focus:outline-none border-none select-text whitespace-pre overflow-auto"
-          oninput="syncEditorGutter(); onEditorInput(this.value);"
-          onscroll="syncEditorGutterScroll()"
-          onclick="updateCursorPositionStats()"
-          onkeyup="updateCursorPositionStats()"></textarea>
-      </div>
-
-    </div>
-
-    <!-- Minimalist Status Bar (24px) -->
-    <div id="ide-status-bar" class="h-6 px-4 border-t border-[#E4E4E7] bg-[#FAFAFA] flex items-center justify-between text-[11px] font-mono text-[#71717A] shrink-0 select-none">
-      <div class="flex items-center gap-3">
-        <span id="ide-stat-cursor">Ln 1, Col 1</span>
-        <span>•</span>
-        <span id="ide-stat-lines">1 line</span>
-        <span>•</span>
-        <span id="ide-stat-size">0 B</span>
-      </div>
-      <div class="flex items-center gap-3">
-        <span id="ide-stat-spaces">Spaces: 2</span>
-        <span>•</span>
-        <span id="ide-stat-encoding">UTF-8</span>
-        <span>•</span>
-        <span id="ide-stat-lang" class="font-semibold text-black uppercase">PYTHON</span>
-      </div>
+    <!-- Clean Blank IDE Canvas Ready For You To Build From Scratch -->
+    <div id="ide-canvas" class="flex-1 flex flex-col bg-white overflow-hidden relative">
+      <textarea id="editor-textarea" spellcheck="false"
+        placeholder="Type here..."
+        class="flex-1 w-full h-full p-6 font-mono text-xs leading-6 bg-transparent text-black placeholder-neutral-300 resize-none focus:outline-none border-none select-text whitespace-pre overflow-auto"></textarea>
     </div>
 
   </main>
 
 
-<!-- ================================================================
-       VIEW 4: ADMIN CONSOLE (SUPERUSER CONTROL CENTER)
+  <!-- ================================================================
+       3. ADMIN SCREEN (CLEAN BLANK CANVAS)
        ================================================================ -->
-  <div id="view-admin" class="min-h-screen flex flex-col hidden animate-fade-in">
+  <div id="view-admin" class="h-screen flex flex-col overflow-hidden hidden bg-white text-black">
 
-    <!-- Admin Top Bar (48px) -->
-    <header
-      class="h-12 px-4 flex items-center justify-between border-b border-[var(--border-app)] bg-[var(--titlebar-bg)] backdrop-blur-md sticky top-0 z-30 text-xs titlebar-drag-region">
-
-      <!-- Left: Logo, Title & Superuser Badge -->
-      <div class="flex items-center gap-3 no-drag">
-        <div class="flex items-center gap-2 cursor-pointer" onclick="showView('view-standard')">
-          <img src="courtesy-gold.png" alt="Courtesy" class="w-4 h-4 object-contain">
-          <span class="font-extrabold tracking-wider text-xs text-[var(--text-main)]">COURTESY <span
-              class="text-gold-500 font-mono">ADMIN</span></span>
-        </div>
-        <span class="text-[9px] font-mono font-bold text-slate-950 bg-gold-gradient px-2 py-0.5 rounded-full shadow-sm">
-          👑 SUPERUSER
-        </span>
+    <!-- Minimal Top Bar -->
+    <header class="h-11 px-4 flex items-center justify-between border-b border-neutral-200 bg-white z-30 text-xs titlebar-drag-region select-none">
+      <div class="flex items-center gap-2 no-drag cursor-pointer hover:opacity-75 transition" onclick="returnToPortal()" title="Back">
+        <img src="courtesy-black.png" alt="Courtesy" class="w-4 h-4 object-contain">
+        <i data-lucide="arrow-left" class="w-3.5 h-3.5 text-neutral-500"></i>
       </div>
-
-      <!-- Center: Quick Telemetry Strip -->
-      <div class="hidden md:flex items-center gap-4 text-[11px] font-mono text-[var(--text-dim)] no-drag">
-        <div class="flex items-center gap-1.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-          <span>Cluster: 6x Quadro P2000 (<span id="titlebar-gpus">30GB</span>)</span>
-        </div>
-        <span>•</span>
-        <div class="flex items-center gap-1.5">
-          <span class="text-gold-500">Mining:</span>
-          <span id="admin-top-mining-status" class="text-white">Idle (Ready)</span>
-        </div>
-        <div id="gpu-activity-meters" class="flex items-center gap-1.5"></div>
+      <div class="flex items-center gap-0.5 no-drag">
+        <button onclick="windowMinimize()" class="p-1 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition">
+          <i data-lucide="minus" class="w-3.5 h-3.5"></i>
+        </button>
+        <button onclick="windowMaximize()" class="p-1 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition">
+          <i data-lucide="square" class="w-3 h-3"></i>
+        </button>
+        <button onclick="windowClose()" class="p-1 hover:bg-rose-600 hover:text-white text-neutral-400 rounded transition">
+          <i data-lucide="x" class="w-3.5 h-3.5"></i>
+        </button>
       </div>
-
-      <!-- Right: Admin Action Buttons, Logout & Window Controls -->
-      <div class="flex items-center gap-2 no-drag">
-        <button onclick="showView('view-standard')"
-          class="px-3 py-1 rounded-lg bg-black text-white font-semibold text-[11px] flex items-center gap-1.5 transition shadow-sm"
-          title="Return to Codex IDE">
-          <i data-lucide="code-2" class="w-3.5 h-3.5"></i>
-          <span>IDE</span>
-        </button>
-
-        <button onclick="terminateAllSessions()"
-          class="px-2.5 py-1 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 font-bold text-[11px] border border-rose-800/50 flex items-center gap-1 transition"
-          title="Flush all resident models from GPU VRAM">
-          <i data-lucide="trash-2" class="w-3 h-3"></i> Terminate Sessions
-        </button>
-
-        <button onclick="restartClusterService()"
-          class="px-2.5 py-1 rounded-xl bg-[var(--bg-muted)] hover:border-gold text-[var(--text-secondary)] text-[11px] border border-[var(--border-app)] flex items-center gap-1 transition"
-          title="Restart Courtesy Cluster Gateway">
-          <i data-lucide="rotate-cw" class="w-3 h-3"></i> Restart Gateway
-        </button>
-
-        <button onclick="logoutAdmin()"
-          class="px-2.5 py-1 rounded-xl hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white text-[11px] flex items-center gap-1 transition">
-          <i data-lucide="log-out" class="w-3 h-3"></i> Exit
-        </button>
-
-        <!-- Window Controls -->
-        <div class="flex items-center gap-0.5 pl-2 ml-1 border-l border-[var(--border-app)]">
-          <button onclick="windowMinimize()"
-            class="p-1 hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] rounded transition">
-            <i data-lucide="minus" class="w-3 h-3"></i>
-          </button>
-          <button onclick="windowMaximize()"
-            class="p-1 hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-[var(--text-main)] rounded transition">
-            <i data-lucide="square" class="w-2.5 h-2.5"></i>
-          </button>
-          <button onclick="windowClose()"
-            class="p-1 hover:bg-rose-900 text-[var(--text-dim)] hover:text-[var(--text-main)] rounded transition">
-            <i data-lucide="x" class="w-3 h-3"></i>
-          </button>
-        </div>
-      </div>
-
     </header>
 
-    <!-- Admin Body & Tabs -->
-    <div class="flex-1 p-4 space-y-4 max-w-7xl mx-auto w-full">
-
-      <!-- Admin Nav Sub-tabs -->
-      <div class="flex items-center justify-between border-b border-[var(--border-app)] pb-2 text-xs">
-        <div class="flex items-center gap-2">
-          <button onclick="switchAdminTab('fleet')" id="admin-tab-btn-fleet"
-            class="px-3 py-1 rounded-lg font-bold transition bg-gold-gradient text-slate-950 shadow-sm">
-            🖥️ Rigs & Fleet (<span id="tab-fleet-count">3</span>)
-          </button>
-          <button onclick="switchAdminTab('mining')" id="admin-tab-btn-mining"
-            class="px-3 py-1 rounded-lg font-medium transition text-[var(--text-muted)] hover:text-white">
-            ⛏️ Idle Mining & Revenue
-          </button>
-          <button onclick="switchAdminTab('swarm')" id="admin-tab-btn-swarm"
-            class="px-3 py-1 rounded-lg font-medium transition text-[var(--text-muted)] hover:text-white">
-            🤖 3-Node Swarm
-          </button>
-        </div>
-      </div>
-
-      <!-- ================= ADMIN TAB 1: FLEET & RIGS ================= -->
-      <section id="admin-sec-fleet" class="space-y-4 animate-fade-in">
-        <div class="flex items-center justify-between p-4 rounded-2xl luxury-card text-xs">
-          <div>
-            <h2 class="font-bold text-white flex items-center gap-2">
-              <span>Compute Nodes & Dual-GPU Rigs</span>
-              <span
-                class="text-[10px] text-gold-500 bg-[var(--gold-subtle)] border border-gold px-2 py-0.5 rounded-full font-mono">
-                Active Telemetry
-              </span>
-            </h2>
-            <p class="text-[11px] text-[var(--text-dim)] pt-0.5">Real-time VRAM allocation, GPU power, temperature, and
-              individual offload actions.</p>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <button onclick="openAddServerModal()"
-              class="px-3 py-1.5 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-[11px] flex items-center gap-1.5 shadow-sm shadow-gold-glow transition">
-              <i data-lucide="plus" class="w-3.5 h-3.5 stroke-[3]"></i> Add Compute Node
-            </button>
-            <button onclick="triggerManualRefresh()"
-              class="px-3 py-1.5 rounded-xl border border-[var(--border-app)] hover:border-gold text-white font-mono text-[11px] flex items-center gap-1.5 transition">
-              <i id="refresh-icon" data-lucide="refresh-cw" class="w-3 h-3 text-gold-500"></i> Refresh Fleet
-            </button>
-          </div>
-        </div>
-
-        <div id="admin-servers-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <!-- Populated by JavaScript -->
-        </div>
-      </section>
-
-      <!-- ================= ADMIN TAB 2: IDLE CRYPTO MINING ================= -->
-      <section id="admin-sec-mining" class="hidden space-y-4 animate-fade-in max-w-5xl mx-auto">
-        <!-- Autonomous Idle GPU Crypto Mining Control Card -->
-        <div class="p-5 rounded-2xl luxury-card space-y-4">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div
-                class="h-8 w-8 rounded-xl bg-gold-gradient flex items-center justify-center text-slate-950 font-black text-sm shadow-md shadow-gold-glow">
-                ⛏️
-              </div>
-              <div>
-                <h3 class="text-sm font-bold text-white">Autonomous Idle GPU Crypto Mining</h3>
-                <p class="text-xs text-[var(--text-dim)]">Mines Ethereum Classic (ETC) or Ergo when cluster is idle.
-                  Preempted in &lt;200ms when AI runs.</p>
-              </div>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <span id="mining-status-badge"
-                class="px-3 py-1 rounded-full text-xs font-mono border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-dim)] flex items-center gap-1.5">
-                <span id="mining-dot" class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
-                <span id="mining-status-text">Disabled</span>
-              </span>
-              <button id="mining-toggle-btn" onclick="toggleIdleMining()"
-                class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border border-gold bg-gold-gradient text-slate-950 shadow-sm hover:brightness-110">
-                <span id="mining-toggle-label">Enable Mining</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Revenue & Telemetry Strip (Dual GPU + CPU Mining & Micro/Nano Payouts) -->
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-xs font-mono">
-            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-gold/40 space-y-1">
-              <span class="text-[10px] text-[var(--text-dim)] block">GPU Hashrate</span>
-              <span id="mining-gpu-hashrate-val" class="font-bold text-gold-400 text-sm">92.1 MH/s</span>
-              <span class="text-[9px] text-[var(--text-dim)] block">6x P2000 (ETCHash)</span>
-            </div>
-            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-cyan-500/40 space-y-1">
-              <span class="text-[10px] text-[var(--text-dim)] block">CPU Hashrate</span>
-              <span id="mining-cpu-hashrate-val" class="font-bold text-cyan-400 text-sm">6,000 H/s</span>
-              <span class="text-[9px] text-[var(--text-dim)] block">36 Cores (RandomX)</span>
-            </div>
-            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-emerald-500/40 space-y-1">
-              <span class="text-[10px] text-[var(--text-dim)] block">Money Made (USD)</span>
-              <span id="mining-usd-val" class="font-bold text-emerald-400 text-sm">$0.0000 USD</span>
-              <span id="mining-crypto-val" class="text-[9px] text-gold-400 block truncate">0.00000 ETC</span>
-            </div>
-            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
-              <span class="text-[10px] text-[var(--text-dim)] block">Daily Run-Rate</span>
-              <span id="mining-daily-val" class="font-bold text-white text-xs">$0.00 / day</span>
-              <span class="text-[9px] text-emerald-400 block">~$1.39 / day at spot</span>
-            </div>
-            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
-              <span class="text-[10px] text-[var(--text-dim)] block">Payout Mechanism</span>
-              <span class="font-bold text-white text-xs">Nano / Micro Pool</span>
-              <span class="text-[9px] text-gold-500 block">Zero-Fee Micro Batches</span>
-            </div>
-            <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
-              <span class="text-[10px] text-[var(--text-dim)] block">Cluster Power</span>
-              <span id="mining-power-val" class="font-bold text-white text-xs">~540 Watts</span>
-              <span class="text-[9px] text-[var(--text-dim)] block">&lt;200ms Preemption</span>
-            </div>
-          </div>
-
-          <!-- Live Hashrate History SVG Chart (Dual GPU & CPU Telemetry) -->
-          <div class="p-4 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-2">
-            <div class="flex items-center justify-between text-xs">
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-white flex items-center gap-1.5"><i data-lucide="activity" class="w-3.5 h-3.5 text-gold-500"></i> Live Hashrate History (Rolling Snapshots)</span>
-                <span class="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 rounded-full">Active</span>
-              </div>
-              <div class="flex items-center gap-3 text-[10px] font-mono">
-                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gold-400"></span> GPU Hashrate (MH/s)</span>
-                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400"></span> CPU Hashrate (H/s)</span>
-              </div>
-            </div>
-            <div class="h-28 w-full relative pt-1">
-              <svg id="mining-chart-svg" class="w-full h-full" viewBox="0 0 600 100" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="gpuGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#D4AF37" stop-opacity="0.3"/>
-                    <stop offset="100%" stop-color="#D4AF37" stop-opacity="0.0"/>
-                  </linearGradient>
-                  <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.25"/>
-                    <stop offset="100%" stop-color="#22d3ee" stop-opacity="0.0"/>
-                  </linearGradient>
-                </defs>
-                <!-- Grid Lines -->
-                <line x1="0" y1="25" x2="600" y2="25" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3,3" />
-                <line x1="0" y1="50" x2="600" y2="50" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3,3" />
-                <line x1="0" y1="75" x2="600" y2="75" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3,3" />
-                <!-- Area and line paths populated dynamically by JS -->
-                <path id="mining-chart-gpu-area" fill="url(#gpuGrad)" d="M0,100 L600,100 Z" />
-                <path id="mining-chart-gpu-line" fill="none" stroke="#D4AF37" stroke-width="2" d="M0,100 L600,100" />
-                <path id="mining-chart-cpu-line" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="2,2" d="M0,100 L600,100" />
-              </svg>
-            </div>
-          <!-- Live Pool Payouts & Cashout Telemetry -->
-          <div class="pt-3 border-t border-[var(--border-app)] space-y-3">
-            <div class="flex items-center justify-between text-xs">
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-white flex items-center gap-1.5">
-                  <i data-lucide="wallet-cards" class="w-3.5 h-3.5 text-gold-500"></i>
-                  <span>2Miners Pool Cashout & Payout Telemetry</span>
-                </span>
-                <span id="cashout-status-badge" class="px-2.5 py-0.5 rounded-full text-[9px] font-mono border border-cyan-500/30 bg-cyan-950/30 text-cyan-400">
-                  Waiting for Threshold (0.1 ETC)
-                </span>
-              </div>
-              <a id="pool-explorer-link" href="https://etc.2miners.com/account/0xcC324D93f2F4d61c59a33A11C24eD2F6DF223439" target="_blank" rel="noopener noreferrer"
-                 class="text-[10px] font-mono text-gold-400 hover:text-gold-300 flex items-center gap-1 transition">
-                <span>View 2Miners Account</span>
-                <i data-lucide="external-link" class="w-3 h-3"></i>
-              </a>
-            </div>
-
-            <!-- Cashout Progress to 0.1 ETC Threshold -->
-            <div class="p-4 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-3">
-              <div class="flex items-center justify-between text-[11px] font-mono">
-                <div class="text-[var(--text-dim)]">
-                  Accumulated Towards Cashout: <span id="cashout-balance-val" class="text-white font-bold">0.00000 ETC</span> / <span id="cashout-threshold-val" class="text-gold-400">0.10000 ETC</span>
-                  (<span id="cashout-percent-val" class="text-gold-400 font-bold">0.0%</span>)
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class="text-[var(--text-dim)]">Est. Time to Cashout:</span>
-                  <span id="cashout-time-val" class="text-gold-400 font-bold">Calculating...</span>
-                </div>
-              </div>
-              <div class="w-full bg-[var(--bg-muted)] h-2.5 rounded-full overflow-hidden">
-                <div id="cashout-progress-bar" class="gold-progress-bar h-full rounded-full transition-all duration-500" style="width: 0%"></div>
-              </div>
-
-              <!-- 4-Box Telemetry Cards: Waiting vs Successful Cashouts -->
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 pt-1 text-xs font-mono">
-                <!-- Box 1: Waiting in Bot Cashouts -->
-                <div class="p-2.5 rounded-lg bg-[var(--bg-card)] border border-cyan-500/20 space-y-1">
-                  <div class="flex items-center justify-between text-[10px] text-[var(--text-dim)]">
-                    <span>Waiting in Bot</span>
-                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-                  </div>
-                  <div id="cashout-unpaid-total" class="font-bold text-cyan-300 text-xs">0.00000 ETC</div>
-                  <div class="text-[9px] text-[var(--text-dim)] leading-tight">
-                    <span id="cashout-confirmed-val" class="text-white">0.00000</span> Confirmed<br>
-                    <span id="cashout-immature-val" class="text-cyan-400">0.00000</span> Immature
-                  </div>
-                </div>
-
-                <!-- Box 2: Time to Next Cashout -->
-                <div class="p-2.5 rounded-lg bg-[var(--bg-card)] border border-gold/20 space-y-1">
-                  <div class="flex items-center justify-between text-[10px] text-[var(--text-dim)]">
-                    <span>Time to Next Cashout</span>
-                    <i data-lucide="clock" class="w-3 h-3 text-gold-500"></i>
-                  </div>
-                  <div id="cashout-time-card-val" class="font-bold text-gold-400 text-xs">Calculating...</div>
-                  <div class="text-[9px] text-[var(--text-dim)] leading-tight">
-                    Rate: <span id="cashout-daily-rate-val" class="text-white">~0.045 ETC/d</span><br>
-                    Threshold: <span class="text-gold-400">0.1000 ETC</span>
-                  </div>
-                </div>
-
-                <!-- Box 3: Successful Cashouts -->
-                <div class="p-2.5 rounded-lg bg-[var(--bg-card)] border border-emerald-500/20 space-y-1">
-                  <div class="flex items-center justify-between text-[10px] text-[var(--text-dim)]">
-                    <span>Successful Cashouts</span>
-                    <i data-lucide="check-circle-2" class="w-3 h-3 text-emerald-400"></i>
-                  </div>
-                  <div id="cashout-total-count" class="font-bold text-emerald-400 text-xs">0 Completed</div>
-                  <div class="text-[9px] text-[var(--text-dim)] leading-tight">
-                    Paid: <span id="cashout-paid-val" class="text-white font-bold">0.00000 ETC</span><br>
-                    Cycle: <span class="text-emerald-300">Every 2h on pool</span>
-                  </div>
-                </div>
-
-                <!-- Box 4: Pool Share Validation -->
-                <div class="p-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-app)] space-y-1">
-                  <div class="flex items-center justify-between text-[10px] text-[var(--text-dim)]">
-                    <span>Pool Validation</span>
-                    <i data-lucide="shield-check" class="w-3 h-3 text-emerald-400"></i>
-                  </div>
-                  <div id="cashout-shares-val" class="font-bold text-emerald-400 text-xs">0 Valid</div>
-                  <div class="text-[9px] text-[var(--text-dim)] leading-tight">
-                    Stale: <span id="cashout-rejected-val" class="text-rose-400">0</span> shares<br>
-                    Workers: <span id="cashout-workers-val" class="text-white">0 / 3 Rigs</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Settings -->
-          <div
-            class="pt-3 border-t border-[var(--border-app)] flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div class="flex items-center gap-2 flex-1 min-w-[280px]">
-              <span class="text-[11px] text-[var(--text-dim)] font-mono whitespace-nowrap">Wallet Address:</span>
-              <input id="mining-wallet-input" type="text" placeholder="Enter your public ETC / payout address..."
-                class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-lg px-3 py-1.5 text-xs font-mono text-gold-400 focus:outline-none focus:border-gold">
-            </div>
-
-              <select id="mining-coin-select"
-                class="bg-[var(--bg-input)] border border-[var(--border-app)] rounded-lg px-2.5 py-1.5 text-xs font-mono text-[var(--text-main)]">
-                <option value="MATIC" selected>Polygon (POL • Unmineable • 3 POL / $0.38 • Daily ~15h • Same 0x Wallet)</option>
-                <option value="ETC">Ethereum Classic (ETC • 2Miners • 0.1 ETC / $2.44)</option>
-                <option value="NANO">Nano Micro-Payout (XNO • Unmineable • 0.1 NANO / $0.09 • ~2h cashout)</option>
-                <option value="DOGE">Dogecoin Micro-Payout (DOGE • Unmineable • 5 DOGE / $0.50)</option>
-                <option value="LTC">Litecoin Micro-Payout (LTC • Unmineable • 0.005 LTC / $0.35)</option>
-                <option value="ERG">Ergo (ERG • HeroMiners)</option>
-                <option value="RVN">Ravencoin (RVN • 2Miners)</option>
-              </select>
-              <button type="button" onclick="openPayoutGuideModal()"
-                class="px-2.5 py-1.5 rounded-lg border border-cyan-500/40 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50 text-xs font-mono flex items-center gap-1 transition"
-                title="View how cashouts, thresholds, and instant withdrawals work">
-                <i data-lucide="help-circle" class="w-3.5 h-3.5 text-cyan-400"></i>
-                <span>Payout Guide</span>
-              </button>
-              <button onclick="saveMiningSettings()"
-                class="px-3 py-1.5 rounded-lg bg-gold-gradient text-slate-950 font-bold text-xs shadow-sm hover:brightness-110 transition">
-                Save Settings
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================= ADMIN TAB 3: 3-NODE SWARM ================= -->
-      <section id="admin-sec-swarm" class="hidden space-y-4 max-w-5xl mx-auto animate-fade-in">
-        <!-- Swarm Header -->
-        <div class="p-4 rounded-2xl luxury-card space-y-3">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <div
-                class="h-6 w-6 rounded-lg bg-gold-gradient flex items-center justify-center text-slate-950 font-black text-xs shadow-sm">
-                🤖
-              </div>
-              <div>
-                <h2 class="text-xs font-bold text-white">Autonomous 3-Node Agent Swarm</h2>
-                <p class="text-[10px] text-[var(--text-dim)]">7B Leader coordinates dual 14B Worker nodes continuously
-                  until the objective is 100% complete.</p>
-              </div>
-            </div>
-
-            <div id="swarm-status-badge"
-              class="px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-dim)] flex items-center gap-1.5">
-              <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
-              <span id="swarm-status-text">Idle</span>
-            </div>
-          </div>
-
-          <div class="space-y-2">
-            <textarea id="swarm-objective-input" rows="2"
-              placeholder="Describe the task for the cluster to execute autonomously..."
-              class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold resize-none transition font-sans"></textarea>
-
-            <div class="flex flex-wrap items-center justify-between gap-2 text-[10px]">
-              <div class="flex flex-wrap items-center gap-1.5">
-                <button
-                  onclick="setSwarmPrompt('Build an FRC RobotPy SwerveDrive subsystem with PathPlanner trajectory following and unit tests.')"
-                  class="px-2 py-0.5 rounded-lg bg-[var(--bg-muted)] hover:border-gold text-gold-500 border border-[var(--border-app)] transition">
-                  🤖 FRC Swerve & PathPlanner
-                </button>
-                <button
-                  onclick="setSwarmPrompt('Write a high-performance Python FastAPI service with Redis caching, JWT auth, and pytest suite.')"
-                  class="px-2 py-0.5 rounded-lg bg-[var(--bg-muted)] hover:border-gold text-gold-500 border border-[var(--border-app)] transition">
-                  🚀 FastAPI & Redis Service
-                </button>
-              </div>
-
-              <div class="flex items-center gap-2">
-                <select id="swarm-iterations-select"
-                  class="px-2.5 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] text-[11px] font-mono text-[var(--text-main)] focus:border-gold outline-none transition"
-                  title="Autonomous Swarm Refinement Loops">
-                  <option value="1">1 Loop (Fast)</option>
-                  <option value="3" selected>3 Loops (Standard)</option>
-                  <option value="5">5 Loops (Deep)</option>
-                </select>
-                <button id="swarm-stop-btn" onclick="stopCurrentSwarm()"
-                  class="hidden px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 font-bold text-xs border border-rose-700/50">
-                  Stop Swarm
-                </button>
-                <button id="swarm-start-btn" onclick="launchSwarmTask()"
-                  class="px-3.5 py-1.5 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-sm shadow-gold-glow transition">
-                  <i data-lucide="play" class="w-3 h-3 stroke-[3]"></i> Start Autonomous Swarm
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Real-Time Pipeline Node Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-          <div class="p-3 rounded-xl luxury-card space-y-1.5">
-            <span class="font-bold text-white flex items-center gap-1.5">
-              <span id="leader-dot" class="w-2 h-2 rounded-full bg-slate-500"></span> Leader (7B on kraken)
-            </span>
-            <p class="text-[10px] text-[var(--text-dim)]">Decomposes objectives, coordinates workers, verifies
-              acceptance criteria.</p>
-            <div id="leader-status-text" class="text-[10px] text-[var(--text-muted)] italic font-mono pt-1">Awaiting
-              assignment...</div>
-          </div>
-
-          <div class="p-3 rounded-xl luxury-card space-y-1.5">
-            <span class="font-bold text-white flex items-center gap-1.5">
-              <span id="w1-dot" class="w-2 h-2 rounded-full bg-slate-500"></span> Worker 1 (14B on cst6)
-            </span>
-            <p class="text-[10px] text-[var(--text-dim)]">Executes core architecture, algorithms, methods, and
-              implementation.</p>
-            <div id="w1-status-text" class="text-[10px] text-[var(--text-muted)] italic font-mono pt-1">Standby...</div>
-          </div>
-
-          <div class="p-3 rounded-xl luxury-card space-y-1.5">
-            <span class="font-bold text-white flex items-center gap-1.5">
-              <span id="w2-dot" class="w-2 h-2 rounded-full bg-slate-500"></span> Worker 2 (14B on cst7)
-            </span>
-            <p class="text-[10px] text-[var(--text-dim)]">Audits code, catches edge cases, memory leaks, and writes
-              tests.</p>
-            <div id="w2-status-text" class="text-[10px] text-[var(--text-muted)] italic font-mono pt-1">Standby...</div>
-          </div>
-        </div>
-
-        <!-- Live Swarm Timeline -->
-        <div class="p-4 rounded-2xl luxury-card space-y-3">
-          <div class="flex items-center justify-between border-b border-[var(--border-app)] pb-2 text-xs">
-            <span class="font-bold text-white">Live Swarm Feed</span>
-            <span id="swarm-iteration-counter" class="text-[10px] font-mono text-gold-500">Iteration 0/0</span>
-          </div>
-
-          <div id="swarm-feed" class="space-y-3 max-h-[350px] overflow-y-auto font-mono text-xs pr-1">
-            <div class="text-center py-8 text-[var(--text-dim)] italic text-xs">
-              Enter an objective above and click 'Start Autonomous Swarm' to initiate 3-node collaboration.
-            </div>
-          </div>
-
-          <div id="swarm-final-box" class="hidden pt-3 border-t border-[var(--border-app)] space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-xs text-gold-500 flex items-center gap-1.5">
-                <i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-400"></i> Swarm Output Ready
-              </span>
-              <button onclick="sendSwarmCodeToScratchpad()"
-                class="px-2.5 py-1 rounded-lg bg-gold-gradient text-slate-950 font-bold text-xs shadow-sm">
-                Open in Standard Scratchpad
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-
-
+    <div class="flex-1 flex items-center justify-center bg-white text-neutral-400 font-mono text-xs">
+      Admin screen ready from scratch
     </div>
+
   </div>
 
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2 pointer-events-none"></div>
 
-  <!-- ================================================================
-       MODAL: REGISTER NEW COMPUTE NODE
-       ================================================================ -->
-  <div id="add-server-modal"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden animate-fade-in">
-    <div
-      class="max-w-md w-full luxury-card p-5 rounded-2xl space-y-4 border border-gold modal-animate-in relative shadow-2xl">
-      <button onclick="closeAddServerModal()"
-        class="absolute top-4 right-4 text-[var(--text-dim)] hover:text-white transition">
-        <i data-lucide="x" class="w-4 h-4"></i>
-      </button>
-
-      <div class="flex items-center gap-2.5">
-        <div
-          class="w-8 h-8 rounded-lg bg-gold-gradient text-slate-950 flex items-center justify-center font-bold text-sm shadow-sm">
-          ➕
-        </div>
-        <div>
-          <h2 class="text-xs font-bold text-white">Register Compute Node</h2>
-          <p class="text-[10px] text-[var(--text-dim)]">Connect a new GPU server or Ollama instance into the cluster</p>
-        </div>
-      </div>
-
-      <form id="add-server-form" onsubmit="handleAddServerSubmit(event)" class="space-y-3 text-xs">
-        <div class="grid grid-cols-2 gap-2">
-          <div class="space-y-1">
-            <label class="text-[10px] font-mono text-[var(--text-muted)] block">Node ID</label>
-            <input id="new-server-id" type="text" placeholder="e.g. cst8" required
-              class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-gold">
-          </div>
-          <div class="space-y-1">
-            <label class="text-[10px] font-mono text-[var(--text-muted)] block">Friendly Name</label>
-            <input id="new-server-name" type="text" placeholder="cst8 (Node 4)" required
-              class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-gold">
-          </div>
-        </div>
-
-        <div class="grid grid-cols-3 gap-2">
-          <div class="col-span-2 space-y-1">
-            <label class="text-[10px] font-mono text-[var(--text-muted)] block">Host IP / Domain</label>
-            <input id="new-server-host" type="text" placeholder="10.11.2.25" required
-              class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-gold">
-          </div>
-          <div class="space-y-1">
-            <label class="text-[10px] font-mono text-[var(--text-muted)] block">Port</label>
-            <input id="new-server-port" type="number" value="11434" required
-              class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-gold">
-          </div>
-        </div>
-
-        <div class="space-y-1">
-          <label class="text-[10px] font-mono text-[var(--text-muted)] block">Preferred Model (Optional)</label>
-          <input id="new-server-model" type="text" placeholder="qwen2.5-coder:7b"
-            class="w-full bg-[var(--bg-input)] border border-[var(--border-app)] rounded-xl px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-gold">
-        </div>
-
-        <div class="pt-2 flex items-center justify-end gap-2">
-          <button type="button" onclick="closeAddServerModal()"
-            class="px-3 py-1.5 rounded-xl border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-muted)] text-xs transition">
-            Cancel
-          </button>
-          <button type="submit"
-            class="px-4 py-1.5 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-xs shadow-sm shadow-gold-glow transition">
-            Register Node
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-
-  <!-- ================================================================
-       MODAL: DETAILED NODE INSPECTION DASHBOARD (BLURRED BACKDROP)
-       ================================================================ -->
-  <div id="modal-node-detail"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl hidden animate-fade-in">
-    <div
-      class="max-w-4xl w-full luxury-card p-6 rounded-2xl space-y-5 border border-gold modal-animate-in relative shadow-2xl max-h-[92vh] overflow-y-auto">
-      
-      <!-- Close Button -->
-      <button onclick="closeNodeDetailModal()"
-        class="absolute top-4 right-4 text-[var(--text-dim)] hover:text-white transition p-1.5 rounded-lg hover:bg-[var(--bg-muted)]">
-        <i data-lucide="x" class="w-4 h-4"></i>
-      </button>
-
-      <!-- Modal Header -->
-      <div class="flex items-center justify-between pr-8">
-        <div class="flex items-center gap-3">
-          <div id="node-detail-avatar" class="w-10 h-10 rounded-xl bg-gold-gradient text-slate-950 flex items-center justify-center font-bold text-base shadow-sm">
-            🖥️
-          </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <h2 id="node-detail-title" class="text-sm font-bold text-white">kraken • Compute Node 1</h2>
-              <span id="node-detail-status-pill" class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                Online (14ms)
-              </span>
-            </div>
-            <p id="node-detail-subtitle" class="text-[11px] font-mono text-[var(--text-dim)]">10.11.2.22:11434 • Assigned: 7B Fast Coder</p>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <button id="node-detail-flush-btn" onclick="flushCurrentNodeVram()" class="px-3 py-1.5 rounded-xl border border-rose-800/40 bg-rose-950/20 hover:bg-rose-900/40 text-rose-300 text-xs font-mono flex items-center gap-1.5 transition" title="Offload models to free 100% VRAM">
-            <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-400"></i> Flush VRAM
-          </button>
-        </div>
-      </div>
-
-      <!-- Quick Metrics Grid -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-        <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
-          <span class="text-[10px] text-[var(--text-dim)] block">CPU Load</span>
-          <span id="node-detail-cpu-val" class="font-bold text-white text-sm">18.5%</span>
-        </div>
-        <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
-          <span class="text-[10px] text-[var(--text-dim)] block">System Memory</span>
-          <span id="node-detail-ram-val" class="font-bold text-white text-sm">8.4 / 32 GB (26%)</span>
-        </div>
-        <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-gold/40 space-y-1">
-          <span class="text-[10px] text-[var(--text-dim)] block">Total VRAM</span>
-          <span id="node-detail-vram-val" class="font-bold text-gold-400 text-sm">2.4 / 10.0 GB</span>
-        </div>
-        <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
-          <span class="text-[10px] text-[var(--text-dim)] block">Node State</span>
-          <span id="node-detail-state-val" class="font-bold text-emerald-400 text-sm">Inference Ready</span>
-        </div>
-      </div>
-
-      <!-- Dual GPUs Deep Telemetry Section -->
-      <div class="space-y-2">
-        <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
-          <i data-lucide="cpu" class="w-3.5 h-3.5 text-gold-500"></i> Dual NVIDIA Quadro P2000 Telemetry
-        </h3>
-        <div id="node-detail-gpus-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <!-- Populated by JS -->
-        </div>
-      </div>
-
-      <!-- Top Processes Table -->
-      <div class="space-y-2">
-        <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
-          <i data-lucide="terminal" class="w-3.5 h-3.5 text-gold-500"></i> Active Node Processes (Top CPU/GPU)
-        </h3>
-        <div class="overflow-x-auto rounded-xl border border-[var(--border-app)] bg-[var(--bg-input)]">
-          <table class="w-full text-left font-mono text-[11px]">
-            <thead class="bg-[var(--bg-muted)] text-[10px] text-[var(--text-dim)] uppercase border-b border-[var(--border-app)]">
-              <tr>
-                <th class="px-3 py-1.5">PID</th>
-                <th class="px-3 py-1.5">User</th>
-                <th class="px-3 py-1.5">% CPU</th>
-                <th class="px-3 py-1.5">% MEM</th>
-                <th class="px-3 py-1.5">Command</th>
-              </tr>
-            </thead>
-            <tbody id="node-detail-processes-tbody" class="divide-y divide-[var(--border-app)] text-[var(--text-secondary)]">
-              <!-- Populated by JS -->
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Resident AI Models in Memory -->
-      <div class="space-y-2">
-        <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
-          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-gold-500"></i> Available & Resident Ollama Models
-        </h3>
-        <div id="node-detail-models-list" class="flex flex-wrap gap-2 text-xs font-mono">
-          <!-- Populated by JS -->
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-
-  <!-- ================================================================
-       MODAL: INDIVIDUAL PROJECT & WORKSPACE SETTINGS (ANTIGRAVITY PARITY)
-       ================================================================ -->
-  <div id="modal-project-settings"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden animate-fade-in">
-    <div
-      class="max-w-lg w-full luxury-card p-6 rounded-2xl space-y-4 border border-gold modal-animate-in relative shadow-2xl">
-      <button onclick="closeProjectSettingsModal()"
-        class="absolute top-4 right-4 text-[var(--text-dim)] hover:text-white transition">
-        <i data-lucide="x" class="w-4 h-4"></i>
-      </button>
-
-      <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-lg bg-gold-gradient text-slate-950 flex items-center justify-center font-bold text-sm shadow-sm">
-          ⚙️
-        </div>
-        <div>
-          <h2 class="text-xs font-bold text-white">Project Governance & Rules</h2>
-          <p id="project-settings-subtitle" class="text-[10px] text-[var(--text-dim)] font-mono truncate max-w-sm">Configure permissions for this workspace</p>
-        </div>
-      </div>
-
-      <form onsubmit="saveProjectSettings(event)" class="space-y-3.5 text-xs">
-        
-        <!-- Setting 1: Terminal Command Execution -->
-        <div class="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)]">
-          <div class="space-y-0.5">
-            <span class="font-bold text-white block">Allow Terminal Command Execution</span>
-            <span class="text-[10px] text-[var(--text-dim)] block">Allows Courtesy to run builds, tests, and bash scripts</span>
-          </div>
-          <input type="checkbox" id="setting-allow-commands" class="w-4 h-4 accent-gold-500 cursor-pointer">
-        </div>
-
-        <!-- Setting 2: Auto-Apply File Modifications -->
-        <div class="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)]">
-          <div class="space-y-0.5">
-            <span class="font-bold text-white block">Auto-Apply File Modifications</span>
-            <span class="text-[10px] text-[var(--text-dim)] block">Automatically write approved code edits directly to disk</span>
-          </div>
-          <input type="checkbox" id="setting-auto-apply" class="w-4 h-4 accent-gold-500 cursor-pointer">
-        </div>
-
-        <!-- Setting 3: Preferred Model for this project -->
-        <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1">
-          <label class="font-bold text-white block">Preferred AI Model Override</label>
-          <select id="setting-preferred-model" class="w-full bg-[var(--bg-muted)] border border-[var(--border-app)] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-gold">
-            <option value="auto">Cluster Auto (Context-Aware)</option>
-            <option value="7b">7B Fast Coder (Pinned to kraken)</option>
-            <option value="14b">14B Heavy Coder (Pinned to cst7)</option>
-          </select>
-        </div>
-
-        <!-- Setting 4: Web Docs Grounding -->
-        <div class="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)]">
-          <div class="space-y-0.5">
-            <span class="font-bold text-white block">Web Research Grounding</span>
-            <span class="text-[10px] text-[var(--text-dim)] block">Search documentation & external libraries when needed</span>
-          </div>
-          <input type="checkbox" id="setting-web-access" checked class="w-4 h-4 accent-gold-500 cursor-pointer">
-        </div>
-
-        <!-- Setting 5: Custom Project Instructions -->
-        <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1.5">
-          <label class="font-bold text-white block">Custom Project Rules & Instructions</label>
-          <p class="text-[10px] text-[var(--text-dim)]">Special architectural conventions, style rules, or guidelines for this repo</p>
-          <textarea id="setting-custom-rules" rows="3" placeholder="e.g. Always write unit tests in tests/, use TypeScript strict mode, follow Tailwind CSS..." class="w-full bg-[var(--bg-muted)] border border-[var(--border-app)] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold resize-none font-sans"></textarea>
-        </div>
-
-        <div class="pt-2 flex items-center justify-end gap-2">
-          <button type="button" onclick="closeProjectSettingsModal()" class="px-3.5 py-1.5 rounded-xl border border-[var(--border-app)] hover:bg-[var(--bg-muted)] text-[var(--text-muted)] text-xs transition">
-            Cancel
-          </button>
-          <button type="submit" class="px-4 py-1.5 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-xs shadow-sm shadow-gold-glow transition">
-            Save Project Settings
-          </button>
-        </div>
-
-      </form>
-    </div>
-  </div>
-
-  <!-- Modal: Crypto Mining Payouts & Fast Cashout Guide -->
-  <div id="modal-mining-payout-guide" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl hidden animate-fade-in">
-    <div class="luxury-card border border-gold/40 rounded-2xl w-full max-w-xl p-5 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between pb-3 border-b border-[var(--border-app)]">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-gold-gradient text-slate-950 flex items-center justify-center font-bold text-base shadow-sm">
-            💰
-          </div>
-          <div>
-            <h2 class="text-sm font-bold text-white">Crypto Mining Payouts & Fast Cashouts</h2>
-            <p class="text-[11px] text-[var(--text-dim)]">How money accumulates and how to withdraw rapidly without waiting</p>
-          </div>
-        </div>
-        <button onclick="closePayoutGuideModal()" class="p-1 rounded-lg hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition">
-          <i data-lucide="x" class="w-4 h-4"></i>
-        </button>
-      </div>
-
-      <!-- Current Verified Status -->
-      <div class="p-3.5 rounded-xl bg-[var(--bg-input)] border border-emerald-500/30 space-y-2 text-xs font-mono">
-        <div class="flex items-center justify-between">
-          <span class="text-emerald-400 font-bold flex items-center gap-1.5"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Active Verified 2Miners Account</span>
-          <span class="text-[10px] bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded-full">On-Chain Safe</span>
-        </div>
-        <div class="grid grid-cols-2 gap-2 pt-1 text-[11px]">
-          <div>
-            <span class="text-[var(--text-dim)] block text-[10px]">Verified Unpaid Balance:</span>
-            <span id="guide-verified-bal" class="font-bold text-gold-400 text-xs">0.00267 ETC ($0.065 USD)</span>
-          </div>
-          <div>
-            <span class="text-[var(--text-dim)] block text-[10px]">Next Payout Threshold:</span>
-            <span class="font-bold text-white text-xs">0.10000 ETC (~$2.44 USD)</span>
-          </div>
-        </div>
-        <p class="text-[10px] text-[var(--text-dim)] pt-1">
-          Your cluster's 6x Quadro P2000s are actively hashing at <strong class="text-white">~95.4 MH/s</strong> into your public address.
-        </p>
-      </div>
-
-      <!-- Realistic Timeline: Why You DON'T Wait a Year -->
-      <div class="space-y-2 text-xs">
-        <h3 class="font-bold text-white flex items-center gap-1.5"><i data-lucide="clock" class="w-3.5 h-3.5 text-gold-400"></i> Realistic Payout Timeline (No 1-Year Waits!)</h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
-          <div class="p-3 rounded-xl bg-[var(--bg-card)] border border-[var(--border-app)] space-y-1">
-            <span class="text-gold-400 font-bold block">1. Full Continuous Mining</span>
-            <span class="text-white block font-bold text-sm">~45 Hours (~1.9 Days)</span>
-            <span class="text-[10px] text-[var(--text-dim)] block">At 95-105 MH/s (~0.052 ETC/day), you reach 0.1 ETC in less than 48 hours.</span>
-          </div>
-          <div class="p-3 rounded-xl bg-[var(--bg-card)] border border-[var(--border-app)] space-y-1">
-            <span class="text-cyan-400 font-bold block">2. Idle / Night Mining (8h/d)</span>
-            <span class="text-white block font-bold text-sm">~5.5 Days Total</span>
-            <span class="text-[10px] text-[var(--text-dim)] block">Mining only while sleeping or idle reaches the threshold in under a week.</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Fast / Same-Day Cashouts Option (Unmineable Micro-Payouts) -->
-      <div class="p-3.5 rounded-xl bg-gradient-to-br from-cyan-950/30 to-blue-950/20 border border-cyan-500/40 space-y-2 text-xs">
-        <div class="flex items-center gap-2">
-          <span class="text-cyan-400 font-bold text-xs flex items-center gap-1"><i data-lucide="zap" class="w-3.5 h-3.5"></i> Want Same-Day / 2-Hour Withdrawals?</span>
-          <span class="text-[9px] bg-cyan-900/40 text-cyan-300 px-1.5 py-0.5 rounded font-mono">Ultra-Fast</span>
-        </div>
-        <p class="text-[11px] text-[var(--text-dim)] leading-relaxed">
-          If you don't want to wait 45 hours for 0.1 ETC, you can switch to <strong class="text-white">Unmineable Micro-Payouts</strong>:
-        </p>
-        <ul class="list-disc list-inside space-y-1 text-[11px] text-[var(--text-secondary)] font-mono">
-          <li><strong class="text-white">NANO (Nano)</strong>: Minimum payout is <span class="text-emerald-400 font-bold">0.1 NANO (~$0.09 USD)</span>. Your cluster reaches this in <span class="text-gold-400 font-bold">~1.8 hours</span> with 0% fee!</li>
-          <li><strong class="text-white">DOGE (Dogecoin)</strong>: Minimum payout is <span class="text-emerald-400 font-bold">5 DOGE (~$0.50 USD)</span>. Reached in <span class="text-gold-400 font-bold">~10 hours</span>!</li>
-          <li><strong class="text-white">LTC (Litecoin)</strong>: Minimum payout is <span class="text-emerald-400 font-bold">0.005 LTC (~$0.35 USD)</span>. Reached in <span class="text-gold-400 font-bold">~7 hours</span>!</li>
-        </ul>
-        <p class="text-[10px] text-cyan-300/80">
-          Simply select Nano or Doge in the coin dropdown and enter your corresponding wallet address!
-        </p>
-      </div>
-
-      <!-- How 2Miners Auto-Payout Works -->
-      <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-app)] space-y-1.5 text-xs">
-        <span class="font-bold text-white block text-xs">Automatic 2-Hour Payout Cycle</span>
-        <p class="text-[11px] text-[var(--text-dim)] leading-relaxed">
-          2Miners executes automatic payouts <strong class="text-white">every 2 hours</strong>. The moment your balance hits 0.1 ETC, the pool automatically broadcasts the transaction to your wallet with <strong class="text-emerald-400">ZERO withdrawal fees</strong> (2Miners pays the gas fee).
-        </p>
-        <div class="pt-1 flex items-center gap-2">
-          <a href="https://etc.2miners.com/account/0xcC324D93f2F4d61c59a33A11C24eD2F6DF223439" target="_blank" rel="noopener noreferrer"
-            class="px-3 py-1.5 rounded-lg bg-gold-gradient text-slate-950 font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition shadow-sm">
-            <span>Open 2Miners Account Live</span>
-            <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
-          </a>
-          <span class="text-[10px] font-mono text-[var(--text-dim)]">Worker IP Hint: <code class="text-white">x.x.x.107</code></span>
-        </div>
-      </div>
-
-      <div class="pt-2 flex justify-end">
-        <button type="button" onclick="closePayoutGuideModal()" class="px-4 py-1.5 rounded-xl bg-[var(--bg-muted)] hover:bg-[var(--border-app)] text-white text-xs font-semibold transition">
-          Got it
-        </button>
-      </div>
-    </div>
-  <!-- Context Menu Container -->
-  <div id="context-menu" class="fixed z-[999] hidden">
-    <div
-      class="min-w-[180px] py-1.5 rounded-xl bg-[var(--bg-surface-elevated)] border border-[var(--border-app)] shadow-2xl backdrop-blur-xl text-xs">
-      <button onclick="ctxCut()" class="ctx-item"><i data-lucide="scissors" class="w-3.5 h-3.5"></i> Cut <span
-          class="ctx-shortcut">Ctrl+X</span></button>
-      <button onclick="ctxCopy()" class="ctx-item"><i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy <span
-          class="ctx-shortcut">Ctrl+C</span></button>
-      <button onclick="ctxPaste()" class="ctx-item"><i data-lucide="clipboard" class="w-3.5 h-3.5"></i> Paste <span
-          class="ctx-shortcut">Ctrl+V</span></button>
-      <div class="my-1 border-t border-[var(--border-app)]"></div>
-      <button onclick="ctxSelectAll()" class="ctx-item"><i data-lucide="text-select" class="w-3.5 h-3.5"></i> Select All
-        <span class="ctx-shortcut">Ctrl+A</span></button>
-      <div class="my-1 border-t border-[var(--border-app)]"></div>
-      <button onclick="ctxUndo()" class="ctx-item"><i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Undo <span
-          class="ctx-shortcut">Ctrl+Z</span></button>
-      <button onclick="ctxRedo()" class="ctx-item"><i data-lucide="redo-2" class="w-3.5 h-3.5"></i> Redo <span
-          class="ctx-shortcut">Ctrl+Y</span></button>
-      <div class="my-1 border-t border-[var(--border-app)]"></div>
-      <button onclick="window.location.reload()" class="ctx-item"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-        Reload App <span class="ctx-shortcut">Ctrl+R</span></button>
-      <button onclick="toggleTheme()" class="ctx-item"><i data-lucide="sun-moon" class="w-3.5 h-3.5"></i> Toggle
-        Theme</button>
-    </div>
-  </div>
-
-  <!-- Global Toast Notification Container -->
-  <div id="toast-container"></div>
-
-  <!-- Custom Scripts -->
   <script src="app.js"></script>
 </body>
 

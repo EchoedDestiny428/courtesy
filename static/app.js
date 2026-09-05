@@ -296,7 +296,9 @@ function switchWorkspace(folderPath) {
 
   // 4. Re-render projects sidebar
   renderProjectsList();
-  showToast(`Workspace: ${shortName}`, "📁");
+  if (currentView !== 'portal') {
+    showToast(`Workspace: ${shortName}`, "📁");
+  }
 
   // Preload workspace file tree for autonomous context & IDE explorer
   getWorkspaceFileList(folderPath).then(files => {
