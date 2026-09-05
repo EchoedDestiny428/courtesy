@@ -116,9 +116,28 @@ async function launchIdeSequence() {
     return;
   }
 
-  // 1. Hide buttons and show server sequence container
+  // 1. Hide buttons and show scanning message
   actionsEl.classList.add('hidden');
   seqEl.classList.remove('hidden');
+  seqEl.innerHTML = `
+    <div id="scan-status" class="flex items-center justify-between text-neutral-600 py-1">
+      <div class="flex items-center gap-2">
+        <span class="w-1.5 h-1.5 rounded-full bg-black animate-ping"></span>
+        <span>scanning for available servers<span id="scan-dots">.</span></span>
+      </div>
+      <span class="text-neutral-400 text-[10px]">cluster</span>
+    </div>
+  `;
+
+  const scanDots = document.getElementById('scan-dots');
+  let sDotCount = 1;
+  const scanTimer = setInterval(() => {
+    sDotCount = (sDotCount % 3) + 1;
+    if (scanDots) scanDots.textContent = '.'.repeat(sDotCount);
+  }, 180);
+
+  await new Promise(r => setTimeout(r, 750));
+  clearInterval(scanTimer);
   seqEl.innerHTML = '';
 
   // 2. Text display available servers row by row
@@ -139,10 +158,10 @@ async function launchIdeSequence() {
       </div>
     `;
     seqEl.appendChild(row);
-    await new Promise(r => setTimeout(r, 130));
+    await new Promise(r => setTimeout(r, 120));
   }
 
-  await new Promise(r => setTimeout(r, 180));
+  await new Promise(r => setTimeout(r, 160));
 
   // 3. '>' pointer auto moves until next available server
   let targetIndex = CLUSTER_SERVERS.findIndex(s => s.available);
@@ -169,7 +188,7 @@ async function launchIdeSequence() {
       curRow.classList.add('text-black', 'font-semibold');
     }
 
-    await new Promise(r => setTimeout(r, 380));
+    await new Promise(r => setTimeout(r, 360));
   }
 
   // 4. Animation that says connecting
@@ -190,10 +209,21 @@ async function launchIdeSequence() {
   const dotTimer = setInterval(() => {
     dotCount = (dotCount % 3) + 1;
     if (dotsEl) dotsEl.textContent = '.'.repeat(dotCount);
-  }, 220);
+  }, 200);
 
-  await new Promise(r => setTimeout(r, 1100));
+  await new Promise(r => setTimeout(r, 1000));
   clearInterval(dotTimer);
+
+  // 5. Connected successfully! confirmation
+  connBox.innerHTML = `
+    <div class="flex items-center gap-2 text-emerald-600 font-semibold animate-fade-in">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+      <span>connected successfully!</span>
+    </div>
+    <span class="text-emerald-500 text-[10px] font-mono">ok</span>
+  `;
+
+  await new Promise(r => setTimeout(r, 650));
 
   // Update connected node badge in IDE
   const ideNodeBadge = document.getElementById('ide-connected-node');
@@ -201,7 +231,7 @@ async function launchIdeSequence() {
     ideNodeBadge.innerText = `${activeServer.id} (${activeServer.ip})`;
   }
 
-  // 5. Then into the IDE
+  // 6. Then into the IDE
   startStandardMode();
 
   // Reset portal state for when user returns
