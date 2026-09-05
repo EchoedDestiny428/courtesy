@@ -168,12 +168,12 @@ async function launchIdeSequence() {
   actionsEl.classList.add('hidden');
   seqEl.classList.remove('hidden');
   seqEl.innerHTML = `
-    <div id="scan-status" class="flex items-center justify-between text-neutral-600 py-1">
+    <div id="scan-status" class="flex items-center justify-between text-neutral-600 py-1 px-1 animate-seq-fade">
       <div class="flex items-center gap-2">
-        <span class="w-1.5 h-1.5 rounded-full bg-black animate-ping"></span>
+        <span class="w-1.5 h-1.5 rounded-full bg-black animate-pulse"></span>
         <span>scanning for available servers<span id="scan-dots">.</span></span>
       </div>
-      <span class="text-neutral-400 text-[10px] font-mono">100.107.249.92</span>
+      <span class="text-neutral-400 text-[10px] font-mono tracking-wider">100.107.249.92</span>
     </div>
   `;
 
@@ -182,14 +182,16 @@ async function launchIdeSequence() {
   const scanTimer = setInterval(() => {
     sDotCount = (sDotCount % 3) + 1;
     if (scanDots) scanDots.textContent = '.'.repeat(sDotCount);
-  }, 180);
+  }, 220);
 
-  // Concurrently fetch real cluster data while animating scan (minimum 700ms)
+  // Concurrently fetch real cluster data while animating scan (1400ms pause for natural breathing room)
   const fetchPromise = fetchRealServerList();
-  const minWaitPromise = new Promise(r => setTimeout(r, 700));
+  const minWaitPromise = new Promise(r => setTimeout(r, 1400));
   const [servers] = await Promise.all([fetchPromise, minWaitPromise]);
 
   clearInterval(scanTimer);
+  // Brief smooth breath before revealing rows
+  await new Promise(r => setTimeout(r, 220));
   seqEl.innerHTML = '';
 
   // 2. Text display available servers row by row with real telemetry
@@ -197,13 +199,13 @@ async function launchIdeSequence() {
     const s = servers[i];
     const row = document.createElement('div');
     row.id = `srv-row-${i}`;
-    row.className = 'flex items-center justify-between text-neutral-400 py-1 transition-all duration-150';
+    row.className = 'flex items-center justify-between text-neutral-400 py-1.5 px-1.5 rounded-md transition-all duration-200 animate-seq-row';
     const latencyClass = s.online ? 'text-emerald-600 font-mono font-medium' : 'text-neutral-400 font-mono';
     const nameClass = s.online ? 'font-mono text-xs text-neutral-800' : 'font-mono text-xs text-neutral-400';
 
     row.innerHTML = `
       <div class="flex items-center whitespace-nowrap mr-3">
-        <span id="srv-ptr-${i}" class="font-bold w-3.5 text-black opacity-0 select-none mr-1">></span>
+        <span id="srv-ptr-${i}" class="font-bold w-3 text-black opacity-0 select-none mr-1.5 transition-opacity duration-150">></span>
         <span class="${nameClass}">${s.name}</span>
       </div>
       <div class="flex items-center gap-2 text-[11px] font-mono text-neutral-400 whitespace-nowrap ml-auto">
@@ -214,10 +216,11 @@ async function launchIdeSequence() {
       </div>
     `;
     seqEl.appendChild(row);
-    await new Promise(r => setTimeout(r, 120));
+    await new Promise(r => setTimeout(r, 220));
   }
 
-  await new Promise(r => setTimeout(r, 160));
+  // Generous pause so user can comfortably read all available servers before pointer starts moving
+  await new Promise(r => setTimeout(r, 800));
 
   // 3. '>' pointer auto moves until next available server
   let targetIndex = servers.findIndex(s => s.available);
@@ -231,7 +234,7 @@ async function launchIdeSequence() {
       const r = document.getElementById(`srv-row-${j}`);
       if (ptr) ptr.classList.add('opacity-0');
       if (r) {
-        r.classList.remove('text-black', 'font-semibold');
+        r.classList.remove('srv-row-active');
         r.classList.add('text-neutral-400');
       }
     }
@@ -242,22 +245,26 @@ async function launchIdeSequence() {
     if (curPtr) curPtr.classList.remove('opacity-0');
     if (curRow) {
       curRow.classList.remove('text-neutral-400');
-      curRow.classList.add('text-black', 'font-semibold');
+      curRow.classList.add('srv-row-active');
     }
 
-    await new Promise(r => setTimeout(r, 360));
+    // Deliberate inspection pause per server
+    await new Promise(r => setTimeout(r, 520));
   }
+
+  // Pause on chosen server to register selection before connecting
+  await new Promise(r => setTimeout(r, 650));
 
   // 4. Animation that says connecting
   const activeServer = servers[targetIndex];
   const connBox = document.createElement('div');
-  connBox.className = 'mt-2 pt-2 border-t border-neutral-200 flex items-center justify-between text-[11px] font-mono text-neutral-600';
+  connBox.className = 'mt-2 pt-2 border-t border-neutral-200/80 flex items-center justify-between text-[11px] font-mono text-neutral-600 animate-seq-fade px-1.5';
   connBox.innerHTML = `
     <div class="flex items-center gap-2">
       <span class="w-1.5 h-1.5 rounded-full bg-black animate-ping"></span>
       <span>connecting to <span class="font-bold text-black">${activeServer.id}</span><span id="conn-dots">.</span></span>
     </div>
-    <span class="text-neutral-400">${activeServer.ip}</span>
+    <span class="text-neutral-400 text-[10px] font-mono">${activeServer.ip}</span>
   `;
   seqEl.appendChild(connBox);
 
@@ -266,21 +273,23 @@ async function launchIdeSequence() {
   const dotTimer = setInterval(() => {
     dotCount = (dotCount % 3) + 1;
     if (dotsEl) dotsEl.textContent = '.'.repeat(dotCount);
-  }, 200);
+  }, 220);
 
-  await new Promise(r => setTimeout(r, 1000));
+  // Connecting handshake pause (allows dots to cycle smoothly)
+  await new Promise(r => setTimeout(r, 1500));
   clearInterval(dotTimer);
 
-  // 5. Connected successfully! confirmation
+  // 5. Connected successfully! confirmation with satisfying pause
   connBox.innerHTML = `
-    <div class="flex items-center gap-2 text-emerald-600 font-semibold animate-fade-in">
-      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+    <div class="flex items-center gap-2 text-emerald-600 font-semibold animate-seq-pop">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
       <span>connected successfully!</span>
     </div>
-    <span class="text-emerald-500 text-[10px] font-mono">${activeServer.latency}</span>
+    <span class="text-emerald-600 text-[10px] font-mono font-medium">${activeServer.latency}</span>
   `;
 
-  await new Promise(r => setTimeout(r, 650));
+  // Pause on connected successfully confirmation so user registers state
+  await new Promise(r => setTimeout(r, 1200));
 
   // 6. Then into the IDE
   startStandardMode(activeServer);

@@ -878,5 +878,47 @@ header.titlebar-drag-region .no-drag {
   background-color: var(--gold-500);
 }
 
+/* ================= IDE Launch Sequence Animations ================= */
+@keyframes seqRowFade {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
+@keyframes seqPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
 
+.animate-seq-row {
+  animation: seqRowFade 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-seq-fade {
+  animation: seqRowFade 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-seq-pop {
+  animation: seqPop 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.srv-row-active {
+  color: #000000 !important;
+  font-weight: 600;
+  background-color: rgba(0, 0, 0, 0.035);
+  border-radius: 6px;
+}
