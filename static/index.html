@@ -39,24 +39,28 @@
       </div>
     </div>
 
-    <!-- Centered Content: ONLY Logo and Buttons -->
+    <!-- Centered Content: Logo, Buttons, and Animated Server Sequence -->
     <div class="flex flex-col items-center space-y-6">
       
       <!-- Minimal Logo -->
-      <div class="cursor-pointer transition hover:opacity-85" onclick="startStandardMode()">
+      <div class="cursor-pointer transition hover:opacity-85" onclick="launchIdeSequence()">
         <img id="portal-logo-img" src="courtesy-black.png" alt="Courtesy" class="w-28 h-28 object-contain">
       </div>
 
       <!-- Minimal Buttons -->
-      <div class="flex items-center gap-3">
-        <button onclick="startStandardMode()"
+      <div id="portal-actions" class="flex items-center gap-3 transition-opacity duration-200">
+        <button id="btn-portal-ide" onclick="launchIdeSequence()"
           class="px-6 py-2.5 rounded-xl bg-black text-white font-medium text-xs shadow-sm hover:bg-neutral-800 transition">
           IDE
         </button>
-        <button onclick="showView('view-admin')"
+        <button id="btn-portal-admin" onclick="showView('view-admin')"
           class="px-6 py-2.5 rounded-xl border border-neutral-200 text-neutral-800 hover:border-black hover:text-black font-medium text-xs transition">
           Admin
         </button>
+      </div>
+
+      <!-- Dynamic Server Sequence Display (Shown on IDE click) -->
+      <div id="portal-server-sequence" class="hidden flex flex-col font-mono text-xs w-[360px] px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl space-y-1.5 select-none transition-all duration-200">
       </div>
 
     </div>
@@ -72,14 +76,23 @@
     <!-- Minimal Top Bar -->
     <header class="h-11 px-4 flex items-center justify-between border-b border-neutral-200 bg-white z-30 text-xs titlebar-drag-region select-none">
       
-      <!-- Left: Return to Portal -->
-      <div class="flex items-center gap-2 no-drag cursor-pointer hover:opacity-75 transition" onclick="returnToPortal()" title="Back">
-        <img src="courtesy-black.png" alt="Courtesy" class="w-4 h-4 object-contain">
-        <i data-lucide="arrow-left" class="w-3.5 h-3.5 text-neutral-500"></i>
+      <!-- Left: Return to Portal & Brand -->
+      <div class="flex items-center gap-3 no-drag">
+        <button onclick="returnToPortal()" class="p-1 hover:bg-neutral-100 text-neutral-400 hover:text-black rounded transition" title="Back to Portal">
+          <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+        </button>
+        <div class="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition" onclick="returnToPortal()">
+          <img src="courtesy-black.png" alt="Courtesy" class="w-4 h-4 object-contain">
+          <span class="font-semibold text-xs tracking-tight text-black">Courtesy</span>
+        </div>
       </div>
 
-      <!-- Center / Workspace action -->
+      <!-- Center: Connected Server Telemetry Badge -->
       <div class="flex items-center gap-2 no-drag">
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neutral-50 border border-neutral-200 text-[11px] font-mono text-neutral-600">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="ide-connected-node">cst7 (10.11.2.12)</span>
+        </div>
       </div>
 
       <!-- Right: Window Controls -->
@@ -100,7 +113,7 @@
     <!-- Clean Blank IDE Canvas Ready For You To Build From Scratch -->
     <div id="ide-canvas" class="flex-1 flex flex-col bg-white overflow-hidden relative">
       <textarea id="editor-textarea" spellcheck="false"
-        placeholder="Type here..."
+        placeholder="Start coding here..."
         class="flex-1 w-full h-full p-6 font-mono text-xs leading-6 bg-transparent text-black placeholder-neutral-300 resize-none focus:outline-none border-none select-text whitespace-pre overflow-auto"></textarea>
     </div>
 

@@ -84,19 +84,140 @@ function showView(viewId) {
   if (window.lucide) lucide.createIcons();
 }
 
+const CLUSTER_SERVERS = [
+  { id: 'cst1', name: 'cst1 (kraken)', ip: '10.11.2.22', specs: 'Dual P2000' },
+  { id: 'cst6', name: 'cst6',          ip: '10.11.16.29', specs: 'Dual P2000' },
+  { id: 'cst7', name: 'cst7',          ip: '10.11.2.12', specs: 'Dual P2000 • 14B', available: true }
+];
+
+let isLaunchingIde = false;
+
 function returnToPortal() {
   showView('view-portal');
+  const actionsEl = document.getElementById('portal-actions');
+  const seqEl = document.getElementById('portal-server-sequence');
+  if (actionsEl) actionsEl.classList.remove('hidden');
+  if (seqEl) {
+    seqEl.classList.add('hidden');
+    seqEl.innerHTML = '';
+  }
+  isLaunchingIde = false;
+}
+
+async function launchIdeSequence() {
+  if (isLaunchingIde) return;
+  isLaunchingIde = true;
+
+  const actionsEl = document.getElementById('portal-actions');
+  const seqEl = document.getElementById('portal-server-sequence');
+  if (!actionsEl || !seqEl) {
+    startStandardMode();
+    isLaunchingIde = false;
+    return;
+  }
+
+  // 1. Hide buttons and show server sequence container
+  actionsEl.classList.add('hidden');
+  seqEl.classList.remove('hidden');
+  seqEl.innerHTML = '';
+
+  // 2. Text display available servers row by row
+  for (let i = 0; i < CLUSTER_SERVERS.length; i++) {
+    const s = CLUSTER_SERVERS[i];
+    const row = document.createElement('div');
+    row.id = `srv-row-${i}`;
+    row.className = 'flex items-center justify-between text-neutral-400 py-1 transition-all duration-150';
+    row.innerHTML = `
+      <div class="flex items-center">
+        <span id="srv-ptr-${i}" class="font-bold w-4 text-black opacity-0 select-none mr-1">></span>
+        <span class="font-mono text-xs text-neutral-800">${s.name}</span>
+      </div>
+      <div class="flex items-center gap-2 text-[11px] font-mono text-neutral-400">
+        <span>${s.ip}</span>
+        <span class="text-neutral-300">•</span>
+        <span>${s.specs}</span>
+      </div>
+    `;
+    seqEl.appendChild(row);
+    await new Promise(r => setTimeout(r, 130));
+  }
+
+  await new Promise(r => setTimeout(r, 180));
+
+  // 3. '>' pointer auto moves until next available server
+  let targetIndex = CLUSTER_SERVERS.findIndex(s => s.available);
+  if (targetIndex < 0) targetIndex = CLUSTER_SERVERS.length - 1;
+
+  for (let step = 0; step <= targetIndex; step++) {
+    // Clear previous pointers
+    for (let j = 0; j < CLUSTER_SERVERS.length; j++) {
+      const ptr = document.getElementById(`srv-ptr-${j}`);
+      const r = document.getElementById(`srv-row-${j}`);
+      if (ptr) ptr.classList.add('opacity-0');
+      if (r) {
+        r.classList.remove('text-black', 'font-semibold');
+        r.classList.add('text-neutral-400');
+      }
+    }
+
+    // Set current pointer
+    const curPtr = document.getElementById(`srv-ptr-${step}`);
+    const curRow = document.getElementById(`srv-row-${step}`);
+    if (curPtr) curPtr.classList.remove('opacity-0');
+    if (curRow) {
+      curRow.classList.remove('text-neutral-400');
+      curRow.classList.add('text-black', 'font-semibold');
+    }
+
+    await new Promise(r => setTimeout(r, 380));
+  }
+
+  // 4. Animation that says connecting
+  const activeServer = CLUSTER_SERVERS[targetIndex];
+  const connBox = document.createElement('div');
+  connBox.className = 'mt-2 pt-2 border-t border-neutral-200 flex items-center justify-between text-[11px] font-mono text-neutral-600';
+  connBox.innerHTML = `
+    <div class="flex items-center gap-2">
+      <span class="w-1.5 h-1.5 rounded-full bg-black animate-ping"></span>
+      <span>connecting to <span class="font-bold text-black">${activeServer.id}</span><span id="conn-dots">.</span></span>
+    </div>
+    <span class="text-neutral-400">11434</span>
+  `;
+  seqEl.appendChild(connBox);
+
+  const dotsEl = document.getElementById('conn-dots');
+  let dotCount = 1;
+  const dotTimer = setInterval(() => {
+    dotCount = (dotCount % 3) + 1;
+    if (dotsEl) dotsEl.textContent = '.'.repeat(dotCount);
+  }, 220);
+
+  await new Promise(r => setTimeout(r, 1100));
+  clearInterval(dotTimer);
+
+  // Update connected node badge in IDE
+  const ideNodeBadge = document.getElementById('ide-connected-node');
+  if (ideNodeBadge) {
+    ideNodeBadge.innerText = `${activeServer.id} (${activeServer.ip})`;
+  }
+
+  // 5. Then into the IDE
+  startStandardMode();
+
+  // Reset portal state for when user returns
+  setTimeout(() => {
+    actionsEl.classList.remove('hidden');
+    seqEl.classList.add('hidden');
+    seqEl.innerHTML = '';
+    isLaunchingIde = false;
+  }, 400);
 }
 
 function startStandardMode() {
   showView('view-standard');
   const editor = document.getElementById('editor-textarea');
-  if (editor) {
-    if (!editor.value) {
-      editor.value = "# Courtesy Minimalist IDE\n# Built from scratch\n\ndef main():\n    print('Hello, Courtesy')\n\nif __name__ == '__main__':\n    main()\n";
-    }
-    syncEditorGutter();
-    updateCursorPositionStats();
+  if (editor && !editor.value) {
+    editor.value = "# Courtesy Minimalist IDE\n# Connected node: cst7 (10.11.2.12)\n\ndef main():\n    print('Hello, Courtesy')\n\nif __name__ == '__main__':\n    main()\n";
   }
 }
 
