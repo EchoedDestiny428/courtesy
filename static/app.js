@@ -303,16 +303,282 @@ async function launchIdeSequence() {
   }, 400);
 }
 
+let activeIdeServer = { id: 'cst7', ip: '10.11.2.12', latency: '21ms' };
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function startStandardMode(activeServer) {
   showView('view-standard');
-  const srv = activeServer || { id: 'cst7', ip: '10.11.2.12', latency: '21ms' };
+  if (activeServer) activeIdeServer = activeServer;
+  const srv = activeIdeServer;
   const ideNodeBadge = document.getElementById('ide-connected-node');
   if (ideNodeBadge) {
     ideNodeBadge.innerText = `${srv.id} (${srv.ip}${srv.latency ? ' • ' + srv.latency : ''})`;
   }
-  const editor = document.getElementById('editor-textarea');
-  if (editor && !editor.value) {
-    editor.value = `# Courtesy Minimalist IDE\n# Connected node: ${srv.id} (${srv.ip}${srv.latency ? ' • ' + srv.latency : ''})\n# Cluster Gateway: cst (100.107.249.92)\n\ndef main():\n    print('Hello, Courtesy')\n\nif __name__ == '__main__':\n    main()\n`;
+  const inputModelBadge = document.getElementById('ide-input-model-badge');
+  if (inputModelBadge) {
+    inputModelBadge.innerText = `${srv.id} • 14B`;
+  }
+  updateIdeWorkspaceUI();
+}
+
+function updateIdeWorkspaceUI() {
+  const emptyState = document.getElementById('ide-empty-state');
+  const workspaceView = document.getElementById('ide-workspace-view');
+  const topbarFolderBtn = document.getElementById('topbar-folder-name');
+  const closeFolderBtn = document.getElementById('btn-topbar-close-folder');
+
+  if (!currentWorkspaceFolder) {
+    // 1. Default Screen: No folder chosen
+    if (emptyState) emptyState.classList.remove('hidden');
+    if (workspaceView) workspaceView.classList.add('hidden');
+    if (topbarFolderBtn) topbarFolderBtn.innerText = 'Open Folder';
+    if (closeFolderBtn) closeFolderBtn.classList.add('hidden');
+  } else {
+    // 2. Active Workspace: Show Antigravity conversation and bottom input bar
+    if (emptyState) emptyState.classList.add('hidden');
+    if (workspaceView) {
+      workspaceView.classList.remove('hidden');
+      workspaceView.classList.add('animate-seq-fade');
+    }
+    const shortName = getFolderName(currentWorkspaceFolder);
+    if (topbarFolderBtn) topbarFolderBtn.innerText = shortName;
+    if (closeFolderBtn) closeFolderBtn.classList.remove('hidden');
+
+    const folderNameBadge = document.getElementById('ide-active-folder-name');
+    if (folderNameBadge) folderNameBadge.innerText = shortName;
+
+    const welcomeTitle = document.getElementById('ide-welcome-folder-title');
+    if (welcomeTitle) welcomeTitle.innerHTML = `Workspace: <span class="font-mono text-black">${shortName}</span>`;
+
+    const fileCountEl = document.getElementById('ide-welcome-file-count');
+    if (fileCountEl) fileCountEl.innerText = 'Scanning workspace files...';
+
+    getWorkspaceFileList(currentWorkspaceFolder).then(files => {
+      cachedWorkspaceFiles = files || [];
+      if (fileCountEl) {
+        const count = cachedWorkspaceFiles.length;
+        fileCountEl.innerText = `${count} ${count === 1 ? 'file' : 'files'} indexed • Ready for queries`;
+      }
+    }).catch(() => {
+      if (fileCountEl) fileCountEl.innerText = 'Workspace active • Ready for queries';
+    });
+
+    setTimeout(() => {
+      const input = document.getElementById('ide-chat-input');
+      if (input) input.focus();
+    }, 150);
+  }
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeWorkspaceFolder() {
+  currentWorkspaceFolder = '';
+  localStorage.removeItem('workspace_folder');
+  ideChatHistory = [];
+  const msgList = document.getElementById('ide-messages-list');
+  if (msgList) msgList.innerHTML = '';
+  const welcome = document.getElementById('ide-conversation-welcome');
+  if (welcome) welcome.classList.remove('hidden');
+  updateIdeWorkspaceUI();
+}
+
+let isIdeStreaming = false;
+let ideAbortController = null;
+let ideChatHistory = [];
+
+function initIdeChatInput() {
+  const input = document.getElementById('ide-chat-input');
+  if (!input) return;
+
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendIdeChat();
+    }
+  });
+}
+
+function sendQuickPrompt(promptText) {
+  const input = document.getElementById('ide-chat-input');
+  if (!input) return;
+  input.value = promptText;
+  if (promptText.endsWith(' ')) {
+    input.focus();
+    input.setSelectionRange(promptText.length, promptText.length);
+  } else {
+    sendIdeChat();
+  }
+}
+
+async function sendIdeChat() {
+  if (isIdeStreaming) return;
+  const input = document.getElementById('ide-chat-input');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+
+  const welcome = document.getElementById('ide-conversation-welcome');
+  if (welcome) welcome.classList.add('hidden');
+
+  const messagesList = document.getElementById('ide-messages-list');
+  const container = document.getElementById('ide-conversation-container');
+
+  // 1. Append User Message
+  const userMsg = document.createElement('div');
+  userMsg.className = 'flex flex-col items-end space-y-1 animate-seq-fade';
+  userMsg.innerHTML = `
+    <div class="px-4 py-2.5 rounded-2xl bg-neutral-100 text-black text-xs leading-relaxed max-w-[85%] select-text font-sans">
+      ${escapeHtml(text)}
+    </div>
+  `;
+  messagesList.appendChild(userMsg);
+  ideChatHistory.push({ role: 'user', content: text });
+
+  if (container) container.scrollTop = container.scrollHeight;
+
+  // 2. Append Assistant Placeholder
+  const msgId = `ide-msg-${Date.now()}`;
+  const assistantMsg = document.createElement('div');
+  assistantMsg.id = msgId;
+  assistantMsg.className = 'flex items-start gap-3 select-text animate-seq-fade';
+  assistantMsg.innerHTML = `
+    <div class="w-6 h-6 rounded-full bg-black flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+      <img src="courtesy-black.png" alt="" class="w-3.5 h-3.5 invert">
+    </div>
+    <div class="flex-1 min-w-0 space-y-1.5">
+      <div class="text-[11px] font-mono text-neutral-400 flex items-center gap-2">
+        <span class="font-semibold text-neutral-800">Courtesy</span>
+        <span>•</span>
+        <span class="text-neutral-500">${activeIdeServer.id} (14B)</span>
+      </div>
+      <div id="${msgId}-content" class="markdown-body text-xs text-neutral-900 leading-relaxed min-h-[1.5rem]">
+        <span class="inline-block w-1.5 h-3.5 bg-black animate-pulse align-middle"></span>
+      </div>
+    </div>
+  `;
+  messagesList.appendChild(assistantMsg);
+
+  if (container) container.scrollTop = container.scrollHeight;
+
+  isIdeStreaming = true;
+  ideAbortController = new AbortController();
+  const sendBtn = document.getElementById('ide-send-btn');
+  const stopBtn = document.getElementById('ide-stop-btn');
+  if (sendBtn) sendBtn.classList.add('hidden');
+  if (stopBtn) stopBtn.classList.remove('hidden');
+
+  const contentEl = document.getElementById(`${msgId}-content`);
+  let fullText = '';
+
+  try {
+    let filesSnippet = '';
+    if (cachedWorkspaceFiles && cachedWorkspaceFiles.length > 0) {
+      filesSnippet = cachedWorkspaceFiles.slice(0, 35).map(f => f.name || f.path.split(/[\\/]/).pop()).join(', ');
+    }
+    const systemPrompt = `You are Courtesy, an elite autonomous Antigravity AI coding assistant and pair programmer.\nActive Workspace Folder: ${currentWorkspaceFolder}\nFiles in Workspace: ${filesSnippet || 'Standard project'}\nProvide clean, production-ready code blocks with filename headers and clear explanations.`;
+
+    const response = await fetch(`${apiBaseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      signal: ideAbortController.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer courtesy-local'
+      },
+      body: JSON.stringify({
+        model: 'qwen2.5-coder:14b',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...ideChatHistory
+        ],
+        stream: true,
+        temperature: 0.2
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Inference server responded with HTTP ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(':')) continue;
+        if (trimmed === 'data: [DONE]') continue;
+
+        if (trimmed.startsWith('data: ')) {
+          try {
+            const parsed = JSON.parse(trimmed.slice(6));
+            const delta = parsed.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              fullText += delta;
+              if (contentEl) {
+                if (window.marked) {
+                  contentEl.innerHTML = marked.parse(fullText);
+                } else {
+                  contentEl.textContent = fullText;
+                }
+                if (window.hljs) {
+                  contentEl.querySelectorAll('pre code').forEach(block => {
+                    if (!block.dataset.highlighted) {
+                      hljs.highlightElement(block);
+                      block.dataset.highlighted = 'true';
+                    }
+                  });
+                }
+              }
+              if (container) container.scrollTop = container.scrollHeight;
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    ideChatHistory.push({ role: 'assistant', content: fullText });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      if (contentEl && !fullText) contentEl.innerHTML = '<span class="text-neutral-400 italic">Generation stopped.</span>';
+    } else {
+      console.error('IDE Chat error:', err);
+      if (contentEl) {
+        contentEl.innerHTML = `<div class="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs"><b>Inference Notice:</b> ${err.message || 'Unable to connect to Ollama on server.'}</div>`;
+      }
+    }
+  } finally {
+    isIdeStreaming = false;
+    ideAbortController = null;
+    if (sendBtn) sendBtn.classList.remove('hidden');
+    if (stopBtn) stopBtn.classList.add('hidden');
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
+function stopIdeChat() {
+  if (ideAbortController) {
+    ideAbortController.abort();
   }
 }
 
@@ -524,10 +790,12 @@ function switchWorkspace(folderPath) {
     refreshWorkspaceGitStatus();
   });
   loadWorkspaceFileTree();
+  updateIdeWorkspaceUI();
 }
 
 function setWorkspaceFolder(path) {
   addProjectFolder(path, true);
+  updateIdeWorkspaceUI();
 }
 
 // Remove project folder from list
@@ -4484,6 +4752,11 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     toggleTerminalPanel();
   }
+  // Ctrl+O: Open Folder in IDE
+  if (e.ctrlKey && e.key.toLowerCase() === 'o' && currentView === 'standard') {
+    e.preventDefault();
+    pickWorkspaceFolder();
+  }
   // Ctrl+Shift+F: Toggle Workspace Code Search
   if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'f' && currentView === 'standard') {
     e.preventDefault();
@@ -4500,6 +4773,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(fetchMiningStatus, 6000);
   initContextMenu();
   fetchLiveCoinPrice('ETC'); // Pre-fetch coin price at startup
+  initIdeChatInput();
 
   // Initialize Courtesy IDE Workbench
   const savedIdeMode = localStorage.getItem('courtesy_ide_view_mode') || 'chat';
