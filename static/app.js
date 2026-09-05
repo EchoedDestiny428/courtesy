@@ -84,11 +84,59 @@ function showView(viewId) {
   if (window.lucide) lucide.createIcons();
 }
 
-const CLUSTER_SERVERS = [
-  { id: 'cst1', name: 'cst1 (kraken)', ip: '10.11.2.22', specs: 'Dual P2000' },
-  { id: 'cst6', name: 'cst6',          ip: '10.11.16.29', specs: 'Dual P2000' },
-  { id: 'cst7', name: 'cst7',          ip: '10.11.2.12', specs: 'Dual P2000 • 14B', available: true }
-];
+async function fetchRealServerList() {
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/servers`, {
+      signal: AbortSignal.timeout(2500)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.json();
+    if (!Array.isArray(raw) || raw.length === 0) throw new Error('Empty cluster response');
+
+    // Filter to compute nodes (exclude the gateway itself if compute nodes exist)
+    const computeNodes = raw.filter(s => s.id !== 'cst');
+    const nodes = computeNodes.length > 0 ? computeNodes : raw;
+
+    return nodes.map(s => {
+      const isOnline = Boolean(s.status?.online);
+      const latencyStr = (s.status?.latency_ms != null && isOnline)
+        ? `${Math.round(s.status.latency_ms)}ms`
+        : (isOnline ? 'online' : 'offline');
+
+      let specs = 'Dual P2000';
+      const has14b = s.status?.models?.some(m => m.name && m.name.includes('14b')) ||
+                     s.preferred_model?.includes('14b');
+      if (has14b && isOnline) {
+        specs += ' • 14B';
+      }
+
+      let displayName = s.id;
+      if (s.id === 'kraken') {
+        displayName = 'cst1 (kraken)';
+      } else if (s.name) {
+        displayName = s.name.replace(/\s*\(.*?\)/, '').trim();
+      }
+
+      return {
+        id: s.id,
+        name: displayName,
+        ip: s.host || '10.11.2.x',
+        specs: specs,
+        latency: latencyStr,
+        online: isOnline,
+        // Target server: prefer cst7 if online, otherwise first online server
+        available: isOnline && (s.id === 'cst7' || !nodes.some(n => n.id === 'cst7' && n.status?.online))
+      };
+    });
+  } catch (err) {
+    console.warn('[Courtesy] Live server fetch failed, using fallback cluster telemetry:', err);
+    return [
+      { id: 'cst1', name: 'cst1 (kraken)', ip: '10.11.2.22', specs: 'Dual P2000', latency: '22ms', online: true, available: false },
+      { id: 'cst6', name: 'cst6',          ip: '10.11.16.29', specs: 'Dual P2000', latency: 'offline', online: false, available: false },
+      { id: 'cst7', name: 'cst7',          ip: '10.11.2.12', specs: 'Dual P2000 • 14B', latency: '21ms', online: true, available: true }
+    ];
+  }
+}
 
 let isLaunchingIde = false;
 
@@ -125,7 +173,7 @@ async function launchIdeSequence() {
         <span class="w-1.5 h-1.5 rounded-full bg-black animate-ping"></span>
         <span>scanning for available servers<span id="scan-dots">.</span></span>
       </div>
-      <span class="text-neutral-400 text-[10px]">cluster</span>
+      <span class="text-neutral-400 text-[10px] font-mono">100.107.249.92</span>
     </div>
   `;
 
@@ -136,25 +184,33 @@ async function launchIdeSequence() {
     if (scanDots) scanDots.textContent = '.'.repeat(sDotCount);
   }, 180);
 
-  await new Promise(r => setTimeout(r, 750));
+  // Concurrently fetch real cluster data while animating scan (minimum 700ms)
+  const fetchPromise = fetchRealServerList();
+  const minWaitPromise = new Promise(r => setTimeout(r, 700));
+  const [servers] = await Promise.all([fetchPromise, minWaitPromise]);
+
   clearInterval(scanTimer);
   seqEl.innerHTML = '';
 
-  // 2. Text display available servers row by row
-  for (let i = 0; i < CLUSTER_SERVERS.length; i++) {
-    const s = CLUSTER_SERVERS[i];
+  // 2. Text display available servers row by row with real telemetry
+  for (let i = 0; i < servers.length; i++) {
+    const s = servers[i];
     const row = document.createElement('div');
     row.id = `srv-row-${i}`;
     row.className = 'flex items-center justify-between text-neutral-400 py-1 transition-all duration-150';
+    const latencyClass = s.online ? 'text-emerald-600 font-mono font-medium' : 'text-neutral-400 font-mono';
+    const nameClass = s.online ? 'font-mono text-xs text-neutral-800' : 'font-mono text-xs text-neutral-400';
+
     row.innerHTML = `
-      <div class="flex items-center">
-        <span id="srv-ptr-${i}" class="font-bold w-4 text-black opacity-0 select-none mr-1">></span>
-        <span class="font-mono text-xs text-neutral-800">${s.name}</span>
+      <div class="flex items-center whitespace-nowrap mr-3">
+        <span id="srv-ptr-${i}" class="font-bold w-3.5 text-black opacity-0 select-none mr-1">></span>
+        <span class="${nameClass}">${s.name}</span>
       </div>
-      <div class="flex items-center gap-2 text-[11px] font-mono text-neutral-400">
+      <div class="flex items-center gap-2 text-[11px] font-mono text-neutral-400 whitespace-nowrap ml-auto">
         <span>${s.ip}</span>
         <span class="text-neutral-300">•</span>
-        <span>${s.specs}</span>
+        ${s.online ? `<span>${s.specs}</span><span class="text-neutral-300">•</span>` : ''}
+        <span class="${latencyClass}">${s.latency}</span>
       </div>
     `;
     seqEl.appendChild(row);
@@ -164,12 +220,13 @@ async function launchIdeSequence() {
   await new Promise(r => setTimeout(r, 160));
 
   // 3. '>' pointer auto moves until next available server
-  let targetIndex = CLUSTER_SERVERS.findIndex(s => s.available);
-  if (targetIndex < 0) targetIndex = CLUSTER_SERVERS.length - 1;
+  let targetIndex = servers.findIndex(s => s.available);
+  if (targetIndex < 0) targetIndex = servers.findIndex(s => s.online);
+  if (targetIndex < 0) targetIndex = servers.length - 1;
 
   for (let step = 0; step <= targetIndex; step++) {
     // Clear previous pointers
-    for (let j = 0; j < CLUSTER_SERVERS.length; j++) {
+    for (let j = 0; j < servers.length; j++) {
       const ptr = document.getElementById(`srv-ptr-${j}`);
       const r = document.getElementById(`srv-row-${j}`);
       if (ptr) ptr.classList.add('opacity-0');
@@ -192,7 +249,7 @@ async function launchIdeSequence() {
   }
 
   // 4. Animation that says connecting
-  const activeServer = CLUSTER_SERVERS[targetIndex];
+  const activeServer = servers[targetIndex];
   const connBox = document.createElement('div');
   connBox.className = 'mt-2 pt-2 border-t border-neutral-200 flex items-center justify-between text-[11px] font-mono text-neutral-600';
   connBox.innerHTML = `
@@ -200,7 +257,7 @@ async function launchIdeSequence() {
       <span class="w-1.5 h-1.5 rounded-full bg-black animate-ping"></span>
       <span>connecting to <span class="font-bold text-black">${activeServer.id}</span><span id="conn-dots">.</span></span>
     </div>
-    <span class="text-neutral-400">11434</span>
+    <span class="text-neutral-400">${activeServer.ip}</span>
   `;
   seqEl.appendChild(connBox);
 
@@ -220,19 +277,13 @@ async function launchIdeSequence() {
       <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
       <span>connected successfully!</span>
     </div>
-    <span class="text-emerald-500 text-[10px] font-mono">ok</span>
+    <span class="text-emerald-500 text-[10px] font-mono">${activeServer.latency}</span>
   `;
 
   await new Promise(r => setTimeout(r, 650));
 
-  // Update connected node badge in IDE
-  const ideNodeBadge = document.getElementById('ide-connected-node');
-  if (ideNodeBadge) {
-    ideNodeBadge.innerText = `${activeServer.id} (${activeServer.ip})`;
-  }
-
   // 6. Then into the IDE
-  startStandardMode();
+  startStandardMode(activeServer);
 
   // Reset portal state for when user returns
   setTimeout(() => {
@@ -243,11 +294,16 @@ async function launchIdeSequence() {
   }, 400);
 }
 
-function startStandardMode() {
+function startStandardMode(activeServer) {
   showView('view-standard');
+  const srv = activeServer || { id: 'cst7', ip: '10.11.2.12', latency: '21ms' };
+  const ideNodeBadge = document.getElementById('ide-connected-node');
+  if (ideNodeBadge) {
+    ideNodeBadge.innerText = `${srv.id} (${srv.ip}${srv.latency ? ' • ' + srv.latency : ''})`;
+  }
   const editor = document.getElementById('editor-textarea');
   if (editor && !editor.value) {
-    editor.value = "# Courtesy Minimalist IDE\n# Connected node: cst7 (10.11.2.12)\n\ndef main():\n    print('Hello, Courtesy')\n\nif __name__ == '__main__':\n    main()\n";
+    editor.value = `# Courtesy Minimalist IDE\n# Connected node: ${srv.id} (${srv.ip}${srv.latency ? ' • ' + srv.latency : ''})\n# Cluster Gateway: cst (100.107.249.92)\n\ndef main():\n    print('Hello, Courtesy')\n\nif __name__ == '__main__':\n    main()\n`;
   }
 }
 
