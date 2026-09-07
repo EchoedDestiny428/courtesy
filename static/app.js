@@ -203,7 +203,7 @@ async function launchIdeSequence() {
   actionsEl.classList.add('hidden');
   seqEl.classList.remove('hidden');
   seqEl.innerHTML = `
-    <div id="scan-status" class="flex items-center justify-between text-neutral-600 dark:text-neutral-300 py-1 px-1 animate-seq-fade">
+    <div id="scan-status" class="flex items-center justify-between text-neutral-600 dark:text-neutral-300 py-1.5 px-1 animate-seq-fade font-mono text-xs">
       <div class="flex items-center gap-2">
         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
         <span>Pinging cluster gateway at 100.107.249.92:8000<span id="scan-dots">.</span></span>
@@ -217,14 +217,17 @@ async function launchIdeSequence() {
   const scanTimer = setInterval(() => {
     sDotCount = (sDotCount % 3) + 1;
     if (scanDots) scanDots.textContent = '.'.repeat(sDotCount);
-  }, 180);
+  }, 220);
 
-  // 2. Real cluster discovery: ping gateway & query live nodes
+  // 2. Real cluster discovery: ping gateway & query live nodes concurrently with deliberate breathing pause
   const t0 = performance.now();
-  const allServers = await fetchRealServerList();
+  const fetchPromise = fetchRealServerList();
+  const minWaitPromise = new Promise(r => setTimeout(r, 1300));
+  const [allServers] = await Promise.all([fetchPromise, minWaitPromise]);
   const probeDuration = Math.round(performance.now() - t0);
 
   clearInterval(scanTimer);
+  await new Promise(r => setTimeout(r, 220));
 
   const computeNodes = allServers.filter(s => !s.isGateway);
   const displayNodes = computeNodes.length > 0 ? computeNodes : allServers;
@@ -234,17 +237,18 @@ async function launchIdeSequence() {
   seqEl.innerHTML = `
     <div class="flex items-center justify-between pb-2 border-b border-neutral-200 dark:border-neutral-800 text-[11px]">
       <div class="flex items-center gap-2">
+        <span id="srv-ptr-head" class="font-bold font-mono text-black dark:text-white opacity-0 select-none transition-opacity duration-150 w-3 text-sm">></span>
         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
         <span class="font-semibold text-black dark:text-white">Live Cluster Telemetry</span>
         <span class="text-neutral-400 dark:text-neutral-500 font-mono text-[10px]">(${probeDuration}ms)</span>
       </div>
       <span class="text-neutral-400 dark:text-neutral-500 text-[10px] font-mono">${onlineCount}/${displayNodes.length} Online</span>
     </div>
-    <div id="seq-node-list" class="space-y-1.5 my-1"></div>
+    <div id="seq-node-list" class="space-y-1.5 my-1.5"></div>
     <div id="seq-conn-status" class="pt-2 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-[11px] font-mono text-neutral-600 dark:text-neutral-300">
       <div class="flex items-center gap-2">
-        <span class="w-1.5 h-1.5 rounded-full bg-black dark:bg-white animate-ping"></span>
-        <span>Evaluating optimal node for ${(ideSelectedModel || '14b').toUpperCase()}...</span>
+        <span class="w-1.5 h-1.5 rounded-full bg-black dark:bg-white animate-pulse"></span>
+        <span>Auto-selecting first available compute node...</span>
       </div>
     </div>
   `;
@@ -262,9 +266,10 @@ async function launchIdeSequence() {
 
     card.innerHTML = `
       <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5">
+          <span id="srv-ptr-${i}" class="font-bold font-mono text-black dark:text-white opacity-0 select-none transition-opacity duration-150 w-3 text-sm">></span>
           <span class="w-1.5 h-1.5 rounded-full ${onlineDot}"></span>
-          <span class="font-bold text-neutral-900 dark:text-white">${s.id}</span>
+          <span class="font-bold text-neutral-900 dark:text-white">${s.name || s.id}</span>
           <span class="text-neutral-400 dark:text-neutral-500 text-[10px] font-mono">${s.ip}</span>
         </div>
         <div class="flex items-center gap-2">
@@ -272,7 +277,7 @@ async function launchIdeSequence() {
           <span class="text-[10px] font-mono ${latencyColor}">${s.latency}</span>
         </div>
       </div>
-      <div class="flex items-center gap-2 text-[10px] font-mono text-neutral-500 dark:text-neutral-400 pt-0.5">
+      <div class="flex items-center gap-2 text-[10px] font-mono text-neutral-500 dark:text-neutral-400 pt-0.5 pl-6">
         <span title="Amount of GPUs and VRAM">🎮 ${s.gpuSummary}${s.vramSummary ? ' (' + s.vramSummary + ')' : ''}</span>
         <span class="text-neutral-300 dark:text-neutral-700">•</span>
         <span title="CPU specifications & utilization">⚡ ${s.cpuSpecs} (${s.cpuLoad})</span>
@@ -282,33 +287,97 @@ async function launchIdeSequence() {
     `;
 
     if (listEl) listEl.appendChild(card);
-    await new Promise(r => setTimeout(r, 70));
+    await new Promise(r => setTimeout(r, 180));
   }
 
-  // 4. Resolve optimal target server:
-  const onlineNodes = displayNodes.filter(s => s.online);
-  let targetServer = null;
+  // Generous reading pause so user can comfortably inspect all node metrics before pointer moves
+  await new Promise(r => setTimeout(r, 750));
 
-  if (ideSelectedModel === '14b') {
-    targetServer = onlineNodes.find(s => s.id === 'cst7') || onlineNodes[0];
-  } else {
-    targetServer = onlineNodes.find(s => s.loadedInVram?.includes('7B')) ||
-                   onlineNodes.find(s => s.id === 'cst1') ||
-                   onlineNodes[0];
-  }
+  // 4. '>' pointer auto moves until first available server
+  let targetIndex = displayNodes.findIndex(s => s.available && s.online);
+  if (targetIndex < 0) targetIndex = displayNodes.findIndex(s => s.online);
+  if (targetIndex < 0) targetIndex = 0;
 
-  if (!targetServer) {
-    targetServer = displayNodes[0] || { id: 'cst1', ip: '10.11.2.22', latency: '20ms' };
-  }
-
-  // Highlight chosen server card
-  const chosenCard = document.getElementById(`srv-card-${targetServer.id}`);
-  if (chosenCard) {
-    chosenCard.classList.add('srv-row-active');
-  }
-
-  // 5. Connected confirmation
+  const headPtr = document.getElementById('srv-ptr-head');
   const connStatusEl = document.getElementById('seq-conn-status');
+
+  // Initial gateway probe cursor step
+  if (headPtr) headPtr.classList.remove('opacity-0');
+  if (connStatusEl) {
+    connStatusEl.innerHTML = `
+      <div class="flex items-center gap-2 text-neutral-600 dark:text-neutral-300">
+        <span class="w-1.5 h-1.5 rounded-full bg-black dark:bg-white animate-pulse"></span>
+        <span>Scanning cluster nodes for first available server...</span>
+      </div>
+    `;
+  }
+  await new Promise(r => setTimeout(r, 450));
+  if (headPtr) headPtr.classList.add('opacity-0');
+
+  // Step down through nodes until targetIndex is reached (stops at first available node)
+  for (let step = 0; step <= targetIndex; step++) {
+    // Clear previous pointers and active card styles
+    for (let j = 0; j < displayNodes.length; j++) {
+      const ptr = document.getElementById(`srv-ptr-${j}`);
+      const card = document.getElementById(`srv-card-${displayNodes[j].id}`);
+      if (ptr) ptr.classList.add('opacity-0');
+      if (card) {
+        card.classList.remove('srv-row-active');
+      }
+    }
+
+    // Activate current pointer and card
+    const curPtr = document.getElementById(`srv-ptr-${step}`);
+    const curCard = document.getElementById(`srv-card-${displayNodes[step].id}`);
+    if (curPtr) curPtr.classList.remove('opacity-0');
+    if (curCard) {
+      curCard.classList.add('srv-row-active');
+    }
+
+    const curServer = displayNodes[step];
+    const isTarget = (step === targetIndex);
+    if (connStatusEl) {
+      connStatusEl.innerHTML = `
+        <div class="flex items-center gap-2 text-neutral-700 dark:text-neutral-200">
+          <span class="font-bold text-black dark:text-white font-mono">></span>
+          <span>Evaluating <span class="font-bold text-black dark:text-white">${curServer.id}</span> (${curServer.ip}): ${isTarget ? '<span class="text-emerald-600 dark:text-emerald-400 font-semibold">Available • Selected!</span>' : 'Checking...'}</span>
+        </div>
+        <span class="text-neutral-400 text-[10px] font-mono">${curServer.latency}</span>
+      `;
+    }
+
+    // Deliberate inspection pause per server
+    await new Promise(r => setTimeout(r, 520));
+  }
+
+  // Pause on chosen server to register selection before connecting handshake
+  await new Promise(r => setTimeout(r, 650));
+
+  const targetServer = displayNodes[targetIndex] || { id: 'cst1', ip: '10.11.2.22', latency: '20ms' };
+
+  // 5. Connecting handshake animation with cycling dots
+  if (connStatusEl) {
+    connStatusEl.innerHTML = `
+      <div class="flex items-center gap-2 text-neutral-700 dark:text-neutral-300 animate-seq-fade">
+        <span class="w-1.5 h-1.5 rounded-full bg-black dark:bg-white animate-pulse"></span>
+        <span>connecting to <span class="font-bold text-black dark:text-white">${targetServer.id}</span><span id="conn-dots">.</span></span>
+      </div>
+      <span class="text-neutral-400 text-[10px] font-mono">${targetServer.ip}:11434</span>
+    `;
+  }
+
+  const dotsEl = document.getElementById('conn-dots');
+  let dotCount = 1;
+  const dotTimer = setInterval(() => {
+    dotCount = (dotCount % 3) + 1;
+    if (dotsEl) dotsEl.textContent = '.'.repeat(dotCount);
+  }, 220);
+
+  // Connecting handshake pause (allows dots to cycle smoothly)
+  await new Promise(r => setTimeout(r, 1400));
+  clearInterval(dotTimer);
+
+  // 6. Connected successfully confirmation with satisfying pause
   if (connStatusEl) {
     connStatusEl.innerHTML = `
       <div class="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold animate-seq-pop">
@@ -319,10 +388,10 @@ async function launchIdeSequence() {
     `;
   }
 
-  // Short natural breathing pause so user sees confirmation before entering IDE
-  await new Promise(r => setTimeout(r, 500));
+  // Pause on connected successfully confirmation so user registers state
+  await new Promise(r => setTimeout(r, 1100));
 
-  // 6. Enter IDE
+  // 7. Then transition smoothly into the IDE
   startStandardMode(targetServer);
 
   // Reset portal state for when user returns
