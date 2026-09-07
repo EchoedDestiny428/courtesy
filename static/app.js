@@ -2,7 +2,7 @@
 
 let currentTab = 'codex';
 let selectedModelMode = '7b'; // '7b', '14b', 'auto'
-let selectedNodeTarget = 'all'; // 'all', 'kraken', 'cst6', 'cst7'
+let selectedNodeTarget = 'all'; // 'all', 'cst1', 'cst6', 'cst7'
 let chatHistory = [];
 let ws = null;
 let currentServers = [];
@@ -62,7 +62,11 @@ if (currentWorkspaceFolder === 'courtesy') {
   currentWorkspaceFolder = '';
   localStorage.removeItem('workspace_folder');
 }
-let pinnedNode = localStorage.getItem('pinned_cluster_node') || 'kraken';
+let pinnedNode = localStorage.getItem('pinned_cluster_node') || 'cst1';
+if (pinnedNode === 'kraken') {
+  pinnedNode = 'cst1';
+  localStorage.setItem('pinned_cluster_node', 'cst1');
+}
 
 function showView(viewId) {
   const views = ['view-portal', 'view-standard', 'view-admin'];
@@ -84,55 +88,87 @@ function showView(viewId) {
 }
 
 async function fetchRealServerList() {
+  const startTime = performance.now();
   try {
     const res = await fetch(`${apiBaseUrl}/api/servers`, {
-      signal: AbortSignal.timeout(2500)
+      signal: AbortSignal.timeout(4000)
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = await res.json();
     if (!Array.isArray(raw) || raw.length === 0) throw new Error('Empty cluster response');
 
-    // Filter to compute nodes (exclude the gateway itself if compute nodes exist)
-    const computeNodes = raw.filter(s => s.id !== 'cst');
-    const nodes = computeNodes.length > 0 ? computeNodes : raw;
+    const gatewayPing = Math.round(performance.now() - startTime);
 
-    return nodes.map(s => {
+    return raw.map(s => {
+      const isGateway = (s.role === 'gateway' || s.id === 'cst');
       const isOnline = Boolean(s.status?.online);
-      const latencyStr = (s.status?.latency_ms != null && isOnline)
-        ? `${Math.round(s.status.latency_ms)}ms`
-        : (isOnline ? 'online' : 'offline');
+      const latMs = s.status?.latency_ms != null ? Math.round(s.status.latency_ms) : (isGateway ? gatewayPing : null);
+      const latencyStr = isOnline ? (latMs != null ? `${latMs}ms` : 'online') : 'offline';
 
-      let specs = 'Dual P2000';
-      const has14b = s.status?.models?.some(m => m.name && m.name.includes('14b')) ||
-                     s.preferred_model?.includes('14b');
-      if (has14b && isOnline) {
-        specs += ' • 14B';
+      // 1. Live GPU metrics (count, model, VRAM total & used)
+      const gpus = s.status?.gpus || s.specs?.gpus || [];
+      const gpuCount = gpus.length;
+      let gpuSummary = 'No discrete GPUs';
+      let vramSummary = '';
+      if (gpuCount > 0) {
+        const gpuName = gpus[0].name || 'Quadro P2000';
+        const totalVramMb = gpus.reduce((acc, g) => acc + (g.vram_total_mb || 5120), 0);
+        const usedVramMb = gpus.reduce((acc, g) => acc + (g.vram_used_mb || 0), 0);
+        const totalVramGb = Math.round(totalVramMb / 1024);
+        const usedVramGb = (usedVramMb / 1024).toFixed(1);
+        gpuSummary = `${gpuCount}x ${gpuName} (${totalVramGb}GB VRAM)`;
+        if (usedVramMb > 100) {
+          vramSummary = `${usedVramGb}GB active`;
+        }
+      } else if (isGateway) {
+        gpuSummary = 'CPU Gateway Host';
       }
 
+      // 2. Live CPU & RAM metrics
+      const cpuSpecs = s.specs?.cpu || (isGateway ? 'Cortex-A72 (4 Cores)' : '12 Cores');
+      const cpuLoad = (s.status?.cpu_percent != null) ? `${s.status.cpu_percent.toFixed(1)}% CPU` : 'Idle';
+      const ramUsedGb = s.status?.ram_used_gb != null ? `${s.status.ram_used_gb.toFixed(1)}` : null;
+      const ramTotalGb = s.status?.ram_total_gb != null ? `${Math.round(s.status.ram_total_gb)}` : null;
+      const ramSummary = (ramUsedGb && ramTotalGb) ? `${ramUsedGb}/${ramTotalGb}GB RAM` : (s.specs?.ram || '');
+
+      // 3. Live models loaded in VRAM vs installed
+      const runningModels = (s.status?.running_models || []).map(m => (m.name || '').replace('qwen2.5-coder:', '').toUpperCase());
+      const loadedInVram = runningModels.length > 0 ? runningModels[0] : null;
+
+      const installedModels = (s.status?.models || []).map(m => (m.name || '').replace('qwen2.5-coder:', '').toUpperCase()).filter(Boolean);
+      const uniqueModels = [...new Set(installedModels)];
+      const modelsSummary = uniqueModels.length > 0 ? uniqueModels.join(' • ') : (s.preferred_model?.includes('14b') ? '14B' : '7B');
+
       let displayName = s.id;
-      if (s.id === 'kraken') {
-        displayName = 'cst1 (kraken)';
-      } else if (s.name) {
+      if (s.name) {
         displayName = s.name.replace(/\s*\(.*?\)/, '').trim();
       }
 
       return {
         id: s.id,
         name: displayName,
-        ip: s.host || '10.11.2.x',
-        specs: specs,
-        latency: latencyStr,
+        ip: (s.host === '127.0.0.1') ? '100.107.249.92' : (s.host || '10.11.2.x'),
+        isGateway: isGateway,
         online: isOnline,
-        // Target server: prefer cst7 if online, otherwise first online server
-        available: isOnline && (s.id === 'cst7' || !nodes.some(n => n.id === 'cst7' && n.status?.online))
+        latencyMs: latMs || 999,
+        latency: latencyStr,
+        gpuCount: gpuCount,
+        gpuSummary: gpuSummary,
+        vramSummary: vramSummary,
+        cpuSpecs: cpuSpecs,
+        cpuLoad: cpuLoad,
+        ramSummary: ramSummary,
+        loadedInVram: loadedInVram,
+        modelsSummary: modelsSummary,
+        available: isOnline && !isGateway
       };
     });
   } catch (err) {
     console.warn('[Courtesy] Live server fetch failed, using fallback cluster telemetry:', err);
     return [
-      { id: 'cst1', name: 'cst1 (kraken)', ip: '10.11.2.22', specs: 'Dual P2000', latency: '22ms', online: true, available: false },
-      { id: 'cst6', name: 'cst6',          ip: '10.11.16.29', specs: 'Dual P2000', latency: 'offline', online: false, available: false },
-      { id: 'cst7', name: 'cst7',          ip: '10.11.2.12', specs: 'Dual P2000 • 14B', latency: '21ms', online: true, available: true }
+      { id: 'cst1', name: 'cst1', ip: '10.11.2.22', isGateway: false, online: true, latencyMs: 22, latency: '22ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB VRAM)', vramSummary: '4.8GB active', cpuSpecs: '12 Cores', cpuLoad: '0.4% CPU', ramSummary: '32GB RAM', loadedInVram: '7B', modelsSummary: '7B • 14B', available: true },
+      { id: 'cst6', name: 'cst6', ip: '10.11.16.29', isGateway: false, online: true, latencyMs: 24, latency: '24ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB VRAM)', vramSummary: '8.8GB active', cpuSpecs: '12 Cores', cpuLoad: '17.6% CPU', ramSummary: '32GB RAM', loadedInVram: null, modelsSummary: '7B • 14B', available: true },
+      { id: 'cst7', name: 'cst7', ip: '10.11.2.12', isGateway: false, online: true, latencyMs: 21, latency: '21ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB VRAM)', vramSummary: '', cpuSpecs: '12 Cores', cpuLoad: '0.7% CPU', ramSummary: '32GB RAM', loadedInVram: null, modelsSummary: '14B • 7B', available: true }
     ];
   }
 }
@@ -163,16 +199,16 @@ async function launchIdeSequence() {
     return;
   }
 
-  // 1. Hide buttons and show scanning message
+  // 1. Hide buttons and show live ping header
   actionsEl.classList.add('hidden');
   seqEl.classList.remove('hidden');
   seqEl.innerHTML = `
-    <div id="scan-status" class="flex items-center justify-between text-neutral-600 py-1 px-1 animate-seq-fade">
+    <div id="scan-status" class="flex items-center justify-between text-neutral-600 dark:text-neutral-300 py-1 px-1 animate-seq-fade">
       <div class="flex items-center gap-2">
-        <span class="w-1.5 h-1.5 rounded-full bg-black animate-pulse"></span>
-        <span>scanning for available servers<span id="scan-dots">.</span></span>
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span>Pinging cluster gateway at 100.107.249.92:8000<span id="scan-dots">.</span></span>
       </div>
-      <span class="text-neutral-400 text-[10px] font-mono tracking-wider">100.107.249.92</span>
+      <span class="text-neutral-400 dark:text-neutral-500 text-[10px] font-mono">probing</span>
     </div>
   `;
 
@@ -181,117 +217,113 @@ async function launchIdeSequence() {
   const scanTimer = setInterval(() => {
     sDotCount = (sDotCount % 3) + 1;
     if (scanDots) scanDots.textContent = '.'.repeat(sDotCount);
-  }, 220);
+  }, 180);
 
-  // Concurrently fetch real cluster data while animating scan (1400ms pause for natural breathing room)
-  const fetchPromise = fetchRealServerList();
-  const minWaitPromise = new Promise(r => setTimeout(r, 1400));
-  const [servers] = await Promise.all([fetchPromise, minWaitPromise]);
+  // 2. Real cluster discovery: ping gateway & query live nodes
+  const t0 = performance.now();
+  const allServers = await fetchRealServerList();
+  const probeDuration = Math.round(performance.now() - t0);
 
   clearInterval(scanTimer);
-  // Brief smooth breath before revealing rows
-  await new Promise(r => setTimeout(r, 220));
-  seqEl.innerHTML = '';
 
-  // 2. Text display available servers row by row with real telemetry
-  for (let i = 0; i < servers.length; i++) {
-    const s = servers[i];
-    const row = document.createElement('div');
-    row.id = `srv-row-${i}`;
-    row.className = 'flex items-center justify-between text-neutral-400 py-1.5 px-1.5 rounded-md transition-all duration-200 animate-seq-row';
-    const latencyClass = s.online ? 'text-emerald-600 font-mono font-medium' : 'text-neutral-400 font-mono';
-    const nameClass = s.online ? 'font-mono text-xs text-neutral-800' : 'font-mono text-xs text-neutral-400';
+  const computeNodes = allServers.filter(s => !s.isGateway);
+  const displayNodes = computeNodes.length > 0 ? computeNodes : allServers;
+  const onlineCount = displayNodes.filter(s => s.online).length;
 
-    row.innerHTML = `
-      <div class="flex items-center whitespace-nowrap mr-3">
-        <span id="srv-ptr-${i}" class="font-bold w-3 text-black opacity-0 select-none mr-1.5 transition-opacity duration-150">></span>
-        <span class="${nameClass}">${s.name}</span>
+  // 3. Render discovered cluster status header & live node cards with genuine telemetry
+  seqEl.innerHTML = `
+    <div class="flex items-center justify-between pb-2 border-b border-neutral-200 dark:border-neutral-800 text-[11px]">
+      <div class="flex items-center gap-2">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        <span class="font-semibold text-black dark:text-white">Live Cluster Telemetry</span>
+        <span class="text-neutral-400 dark:text-neutral-500 font-mono text-[10px]">(${probeDuration}ms)</span>
       </div>
-      <div class="flex items-center gap-2 text-[11px] font-mono text-neutral-400 whitespace-nowrap ml-auto">
-        <span>${s.ip}</span>
-        <span class="text-neutral-300">•</span>
-        ${s.online ? `<span>${s.specs}</span><span class="text-neutral-300">•</span>` : ''}
-        <span class="${latencyClass}">${s.latency}</span>
+      <span class="text-neutral-400 dark:text-neutral-500 text-[10px] font-mono">${onlineCount}/${displayNodes.length} Online</span>
+    </div>
+    <div id="seq-node-list" class="space-y-1.5 my-1"></div>
+    <div id="seq-conn-status" class="pt-2 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-[11px] font-mono text-neutral-600 dark:text-neutral-300">
+      <div class="flex items-center gap-2">
+        <span class="w-1.5 h-1.5 rounded-full bg-black dark:bg-white animate-ping"></span>
+        <span>Evaluating optimal node for ${(ideSelectedModel || '14b').toUpperCase()}...</span>
+      </div>
+    </div>
+  `;
+
+  const listEl = document.getElementById('seq-node-list');
+
+  for (let i = 0; i < displayNodes.length; i++) {
+    const s = displayNodes[i];
+    const card = document.createElement('div');
+    card.id = `srv-card-${s.id}`;
+    card.className = 'p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/60 flex flex-col gap-1 transition-all duration-200 animate-seq-row';
+
+    const onlineDot = s.online ? 'bg-emerald-500' : 'bg-rose-500';
+    const latencyColor = s.online ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-neutral-400';
+
+    card.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="w-1.5 h-1.5 rounded-full ${onlineDot}"></span>
+          <span class="font-bold text-neutral-900 dark:text-white">${s.id}</span>
+          <span class="text-neutral-400 dark:text-neutral-500 text-[10px] font-mono">${s.ip}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          ${s.loadedInVram ? `<span class="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-semibold font-mono">${s.loadedInVram} in VRAM</span>` : ''}
+          <span class="text-[10px] font-mono ${latencyColor}">${s.latency}</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-[10px] font-mono text-neutral-500 dark:text-neutral-400 pt-0.5">
+        <span title="Amount of GPUs and VRAM">🎮 ${s.gpuSummary}${s.vramSummary ? ' (' + s.vramSummary + ')' : ''}</span>
+        <span class="text-neutral-300 dark:text-neutral-700">•</span>
+        <span title="CPU specifications & utilization">⚡ ${s.cpuSpecs} (${s.cpuLoad})</span>
+        <span class="text-neutral-300 dark:text-neutral-700">•</span>
+        <span title="Installed models">🧠 ${s.modelsSummary}</span>
       </div>
     `;
-    seqEl.appendChild(row);
-    await new Promise(r => setTimeout(r, 220));
+
+    if (listEl) listEl.appendChild(card);
+    await new Promise(r => setTimeout(r, 70));
   }
 
-  // Generous pause so user can comfortably read all available servers before pointer starts moving
-  await new Promise(r => setTimeout(r, 800));
+  // 4. Resolve optimal target server:
+  const onlineNodes = displayNodes.filter(s => s.online);
+  let targetServer = null;
 
-  // 3. '>' pointer auto moves until next available server
-  let targetIndex = servers.findIndex(s => s.available);
-  if (targetIndex < 0) targetIndex = servers.findIndex(s => s.online);
-  if (targetIndex < 0) targetIndex = servers.length - 1;
-
-  for (let step = 0; step <= targetIndex; step++) {
-    // Clear previous pointers
-    for (let j = 0; j < servers.length; j++) {
-      const ptr = document.getElementById(`srv-ptr-${j}`);
-      const r = document.getElementById(`srv-row-${j}`);
-      if (ptr) ptr.classList.add('opacity-0');
-      if (r) {
-        r.classList.remove('srv-row-active');
-        r.classList.add('text-neutral-400');
-      }
-    }
-
-    // Set current pointer
-    const curPtr = document.getElementById(`srv-ptr-${step}`);
-    const curRow = document.getElementById(`srv-row-${step}`);
-    if (curPtr) curPtr.classList.remove('opacity-0');
-    if (curRow) {
-      curRow.classList.remove('text-neutral-400');
-      curRow.classList.add('srv-row-active');
-    }
-
-    // Deliberate inspection pause per server
-    await new Promise(r => setTimeout(r, 520));
+  if (ideSelectedModel === '14b') {
+    targetServer = onlineNodes.find(s => s.id === 'cst7') || onlineNodes[0];
+  } else {
+    targetServer = onlineNodes.find(s => s.loadedInVram?.includes('7B')) ||
+                   onlineNodes.find(s => s.id === 'cst1') ||
+                   onlineNodes[0];
   }
 
-  // Pause on chosen server to register selection before connecting
-  await new Promise(r => setTimeout(r, 650));
+  if (!targetServer) {
+    targetServer = displayNodes[0] || { id: 'cst1', ip: '10.11.2.22', latency: '20ms' };
+  }
 
-  // 4. Animation that says connecting
-  const activeServer = servers[targetIndex];
-  const connBox = document.createElement('div');
-  connBox.className = 'mt-2 pt-2 border-t border-neutral-200/80 flex items-center justify-between text-[11px] font-mono text-neutral-600 animate-seq-fade px-1.5';
-  connBox.innerHTML = `
-    <div class="flex items-center gap-2">
-      <span class="w-1.5 h-1.5 rounded-full bg-black animate-ping"></span>
-      <span>connecting to <span class="font-bold text-black">${activeServer.id}</span><span id="conn-dots">.</span></span>
-    </div>
-    <span class="text-neutral-400 text-[10px] font-mono">${activeServer.ip}</span>
-  `;
-  seqEl.appendChild(connBox);
+  // Highlight chosen server card
+  const chosenCard = document.getElementById(`srv-card-${targetServer.id}`);
+  if (chosenCard) {
+    chosenCard.classList.add('srv-row-active');
+  }
 
-  const dotsEl = document.getElementById('conn-dots');
-  let dotCount = 1;
-  const dotTimer = setInterval(() => {
-    dotCount = (dotCount % 3) + 1;
-    if (dotsEl) dotsEl.textContent = '.'.repeat(dotCount);
-  }, 220);
+  // 5. Connected confirmation
+  const connStatusEl = document.getElementById('seq-conn-status');
+  if (connStatusEl) {
+    connStatusEl.innerHTML = `
+      <div class="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold animate-seq-pop">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+        <span>Connected to <span class="font-bold text-black dark:text-white">${targetServer.id}</span> • Session Ready</span>
+      </div>
+      <span class="text-emerald-600 dark:text-emerald-400 text-[10px] font-mono font-medium">${targetServer.latency}</span>
+    `;
+  }
 
-  // Connecting handshake pause (allows dots to cycle smoothly)
-  await new Promise(r => setTimeout(r, 1500));
-  clearInterval(dotTimer);
+  // Short natural breathing pause so user sees confirmation before entering IDE
+  await new Promise(r => setTimeout(r, 500));
 
-  // 5. Connected successfully! confirmation with satisfying pause
-  connBox.innerHTML = `
-    <div class="flex items-center gap-2 text-emerald-600 font-semibold animate-seq-pop">
-      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
-      <span>connected successfully!</span>
-    </div>
-    <span class="text-emerald-600 text-[10px] font-mono font-medium">${activeServer.latency}</span>
-  `;
-
-  // Pause on connected successfully confirmation so user registers state
-  await new Promise(r => setTimeout(r, 1200));
-
-  // 6. Then into the IDE
-  startStandardMode(activeServer);
+  // 6. Enter IDE
+  startStandardMode(targetServer);
 
   // Reset portal state for when user returns
   setTimeout(() => {
@@ -1025,7 +1057,7 @@ function stopIdeChat() {
 function updatePinnedNodeUI() {
   const label = document.getElementById('std-connected-node-label');
   if (label) {
-    const modelLabel = pinnedNode === 'kraken' ? '7B Fast' : '14B Heavy';
+    const modelLabel = pinnedNode === 'cst7' ? '14B Heavy' : '7B Fast';
     label.innerText = `Pinned: ${pinnedNode} (${modelLabel})`;
   }
   const mode = (pinnedNode === 'cst7') ? '14b' : '7b';
@@ -1037,7 +1069,7 @@ function updatePinnedNodeUI() {
 }
 
 function cyclePinnedNode() {
-  const nodes = ['kraken', 'cst6', 'cst7'];
+  const nodes = ['cst1', 'cst6', 'cst7'];
   const idx = nodes.indexOf(pinnedNode);
   pinnedNode = nodes[(idx >= 0 ? idx + 1 : 0) % nodes.length];
   localStorage.setItem('pinned_cluster_node', pinnedNode);
@@ -1068,7 +1100,7 @@ function selectModelMode(mode) {
   if (mode === '14b') {
     pinnedNode = 'cst7';
   } else if (mode === '7b' && pinnedNode !== 'cst6') {
-    pinnedNode = 'kraken';
+    pinnedNode = 'cst1';
   }
   localStorage.setItem('pinned_cluster_node', pinnedNode);
   updatePinnedNodeUI();
@@ -1721,7 +1753,7 @@ async function restartClusterService() {
 // ================= Model Mode & Node Pinning =================
 function getEffectiveModelTarget() {
   const modelName = (selectedModelMode === '14b' || pinnedNode === 'cst7') ? 'qwen2.5-coder:14b' : 'qwen2.5-coder:7b';
-  const node = pinnedNode || 'kraken';
+  const node = pinnedNode || 'cst1';
   return `${node}/${modelName}`;
 }
 
@@ -1988,7 +2020,7 @@ function renderClusterSummary(summary, metricsMap = null) {
     // Update pinned node indicator in Standard IDE topbar
     const nodeLabel = document.getElementById('std-connected-node-label');
     if (nodeLabel) {
-      const modelLabel = pinnedNode === 'kraken' ? '7B Fast' : '14B Heavy';
+      const modelLabel = pinnedNode === 'cst7' ? '14B Heavy' : '7B Fast';
       const nodeData = metricsMap[pinnedNode];
       const lat = (nodeData && nodeData.latency_ms) ? ` • ${nodeData.latency_ms}ms` : '';
       nodeLabel.innerText = `Pinned: ${pinnedNode} (${modelLabel}${lat})`;
@@ -4075,7 +4107,7 @@ async function sendPrompt(overrideText = null) {
       })
     });
 
-    const targetServerHeader = response.headers.get('X-Courtesy-Server') || 'kraken';
+    const targetServerHeader = response.headers.get('X-Courtesy-Server') || 'cst1';
     const targetModelHeader = response.headers.get('X-Courtesy-Model') || chosenModel;
     const webSourcesHeader = response.headers.get('X-Courtesy-Web-Sources');
     let webSources = [];

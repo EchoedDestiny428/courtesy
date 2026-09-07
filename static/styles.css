@@ -919,8 +919,15 @@ header.titlebar-drag-region .no-drag {
 .srv-row-active {
   color: #000000 !important;
   font-weight: 600;
-  background-color: rgba(0, 0, 0, 0.035);
-  border-radius: 6px;
+  background-color: rgba(0, 0, 0, 0.04);
+  border-color: #000000 !important;
+  border-radius: 0.75rem;
+}
+
+html.dark .srv-row-active {
+  color: #FFFFFF !important;
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.25) !important;
 }
 
 /* ================= Antigravity Markdown Styling ================= */

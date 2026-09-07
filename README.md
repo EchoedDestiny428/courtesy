@@ -16,15 +16,15 @@ graph TD
     end
 
     subgraph Cluster ["High-Speed Local Ethernet LAN (10.11.0.0/16)"]
-        Kraken["kraken (cst1.local • 10.11.2.22)<br>Ubuntu 24.04 • 12 Cores • 32GB RAM<br>🎮 2x NVIDIA Quadro P2000 (10GB VRAM)<br>⚡ Models: qwen2.5-coder:7b & 14b"]
-        CST6["cst6 (cst6.local • 10.11.2.21)<br>Ubuntu 24.04 • 12 Cores • 32GB RAM<br>🎮 2x NVIDIA Quadro P2000 (10GB VRAM)<br>⚡ Models: qwen2.5-coder:7b & 14b"]
+        CST1["cst1 (cst1.local • 10.11.2.22)<br>Ubuntu 24.04 • 12 Cores • 32GB RAM<br>🎮 2x NVIDIA Quadro P2000 (10GB VRAM)<br>⚡ Models: qwen2.5-coder:7b & 14b"]
+        CST6["cst6 (cst6.local • 10.11.16.29)<br>Ubuntu 24.04 • 12 Cores • 32GB RAM<br>🎮 2x NVIDIA Quadro P2000 (10GB VRAM)<br>⚡ Models: qwen2.5-coder:7b & 14b"]
         CST7["cst7 (cst7.local • 10.11.2.12)<br>Ubuntu 24.04 • 12 Cores • 32GB RAM<br>🎮 2x NVIDIA Quadro P2000 (10GB VRAM)<br>🧠 Models: qwen2.5-coder:7b & 14b"]
         NewNode["nodeX (Modular Future Nodes)<br>Dynamically added via GUI / REST API"]
     end
 
     Client --> Tailscale
     Tailscale --> Pi
-    Pi --> Kraken
+    Pi --> CST1
     Pi --> CST6
     Pi --> CST7
     Pi -.-> NewNode
@@ -48,7 +48,7 @@ graph TD
   - `auto`: Intelligently routes to the least-loaded or lowest-latency GPU node.
   - `qwen2.5-coder:7b`: Auto-balances across all nodes hosting the 7B model.
   - `qwen2.5-coder:14b`: Auto-balances across all nodes hosting the 14B model.
-  - Direct pinning: e.g. `kraken/qwen2.5-coder:7b`, `cst6/qwen2.5-coder:7b`, `cst7/qwen2.5-coder:14b`.
+  - Direct pinning: e.g. `cst1/qwen2.5-coder:7b`, `cst6/qwen2.5-coder:7b`, `cst7/qwen2.5-coder:14b`.
 - **Native Streaming `/api/chat` Gateway**: High-performance SSE token streaming with VRAM headroom preservation and optional live web grounding.
 
 ---
@@ -114,7 +114,7 @@ with httpx.stream("POST", "http://100.107.249.92:8000/api/chat", json=payload, t
 ```
 courtesy/
 ├── config/
-│   └── servers.json       # Modular server registry (kraken, cst6, cst7, cst)
+│   └── servers.json       # Modular server registry (cst1, cst6, cst7, cst)
 ├── src/
 │   ├── app.py             # FastAPI REST & WebSocket server with /api/chat gateway
 │   ├── config.py          # Dynamic configuration manager (CRUD)

@@ -13,7 +13,7 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 SERVERS = [
-    {"id": "kraken", "name": "kraken (Node 1)", "host": "10.11.2.22", "port": 11434},
+    {"id": "cst1", "name": "cst1 (Node 1)", "host": "10.11.2.22", "port": 11434},
     {"id": "cst6", "name": "cst6 (Node 2)", "host": "10.11.16.29", "port": 11434},
     {"id": "cst7", "name": "cst7 (Node 3)", "host": "10.11.2.12", "port": 11434},
 ]
@@ -46,7 +46,7 @@ async def test_node_reachability():
 async def test_cross_node_inference():
     print("\n[2] Testing 7B & 14B Cross-Node Direct Inference:")
     tests = [
-        ("kraken", "qwen2.5-coder:7b", "Write a 1-line Python return statement for adding 2 numbers."),
+        ("cst1", "qwen2.5-coder:7b", "Write a 1-line Python return statement for adding 2 numbers."),
         ("cst6", "qwen2.5-coder:7b", "Write a 1-line Python lambda for subtracting 2 numbers."),
         ("cst6", "qwen2.5-coder:14b", "Write a 1-line Python lambda for multiplying 2 numbers."),
         ("cst7", "qwen2.5-coder:14b", "Write a 1-line Python lambda for dividing 2 numbers."),

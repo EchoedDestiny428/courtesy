@@ -56,7 +56,7 @@ def resolve_route(model_query: str = "auto", preferred_server: Optional[str] = N
     if not servers:
         raise ValueError("No active inference servers configured in the cluster.")
 
-    # 1. Direct server targeting: e.g. "kraken", "cst7", "kraken/qwen2.5-coder", "cst7:qwen2.5-coder"
+    # 1. Direct server targeting: e.g. "cst1", "cst7", "cst1/qwen2.5-coder", "cst7:qwen2.5-coder"
     target_server_id = preferred_server
     clean_model = model_query.strip()
 

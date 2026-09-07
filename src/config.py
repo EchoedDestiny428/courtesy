@@ -38,8 +38,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "tags": ["gateway", "tailscale", "arm64"]
         },
         {
-            "id": "kraken",
-            "name": "kraken (cst1 - Node 1)",
+            "id": "cst1",
+            "name": "cst1 (Node 1)",
             "role": "inference",
             "type": "ollama",
             "host": "10.11.2.22",
