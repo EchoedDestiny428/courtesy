@@ -8,7 +8,6 @@ let ws = null;
 let currentServers = [];
 let isStreaming = false;
 let lastMetricsMap = {};
-let lastMiningState = 'disabled';
 let cachedWorkspaceFiles = [];
 
 // API Base URL (defaults to Pi gateway 100.107.249.92:8000, or local if hosted there)
@@ -920,7 +919,7 @@ async function sendIdeChat() {
 
     const modelName = (ideSelectedModel === '7b') ? 'qwen2.5-coder:7b' : 'qwen2.5-coder:14b';
 
-    const response = await fetch(`${apiBaseUrl}/v1/chat/completions`, {
+    const response = await fetch(`${apiBaseUrl}/api/chat`, {
       method: 'POST',
       signal: ideAbortController.signal,
       headers: {
@@ -1624,7 +1623,6 @@ async function handleAdminLogin(event) {
     showToast("Admin Authenticated", "👑");
     if (btn) btn.disabled = false;
     fetchServersRest();
-    fetchMiningStatus();
     return;
   }
 
@@ -1642,7 +1640,6 @@ async function handleAdminLogin(event) {
       closeAdminLoginModal();
       showView('view-admin');
       fetchServersRest();
-      fetchMiningStatus();
       showToast("Admin Authenticated", "👑");
       return;
     } else {
@@ -1674,7 +1671,7 @@ async function logoutAdmin() {
 }
 
 function switchAdminTab(tabId) {
-  const tabs = ['fleet', 'mining', 'swarm'];
+  const tabs = ['fleet'];
   tabs.forEach(t => {
     const sec = document.getElementById(`admin-sec-${t}`);
     const btn = document.getElementById(`admin-tab-btn-${t}`);
@@ -1874,7 +1871,7 @@ function setApiEndpoint(url) {
 // ================= Tab Switching =================
 function switchTab(tabId) {
   currentTab = tabId;
-  const tabs = ['codex', 'swarm', 'fleet', 'ide'];
+  const tabs = ['codex', 'fleet', 'ide'];
   tabs.forEach(t => {
     const sec = document.getElementById(`tab-${t}`);
     const btn = document.getElementById(`tab-btn-${t}`);
@@ -1890,206 +1887,6 @@ function switchTab(tabId) {
   });
 
   if (window.lucide) lucide.createIcons();
-}
-
-// ================= Autonomous Swarm Orchestrator Client =================
-let currentSwarmTaskId = null;
-let currentSwarmFinalCode = "";
-let swarmWs = null;
-
-function setSwarmPrompt(text) {
-  const input = document.getElementById('swarm-objective-input');
-  if (input) input.value = text;
-}
-
-function clearSwarmFeed() {
-  const feed = document.getElementById('swarm-feed');
-  if (feed) {
-    feed.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)] italic text-xs">Feed cleared.</div>`;
-  }
-}
-
-function initSwarmWebSocket() {
-  let wsUrl;
-  if (apiBaseUrl.startsWith('https://')) {
-    wsUrl = apiBaseUrl.replace('https://', 'wss://') + '/ws/swarm';
-  } else {
-    wsUrl = apiBaseUrl.replace('http://', 'ws://') + '/ws/swarm';
-  }
-
-  try {
-    swarmWs = new WebSocket(wsUrl);
-    swarmWs.onmessage = (event) => {
-      try {
-        const ev = JSON.parse(event.data);
-        handleSwarmEvent(ev);
-      } catch (e) {}
-    };
-  } catch (e) {}
-}
-
-function handleSwarmEvent(ev) {
-  const feed = document.getElementById('swarm-feed');
-  if (!feed) return;
-
-  const type = ev.type;
-
-  if (type === 'init') {
-    feed.innerHTML = '';
-    appendSwarmLog('System', ev.message || 'Swarm initialized', 'text-gold-500 font-bold');
-    setNodeStatus('leader', 'thinking', 'Active: Decomposing architecture');
-    setNodeStatus('w1', 'idle', 'Standby');
-    setNodeStatus('w2', 'idle', 'Standby');
-  } else if (type === 'iteration_start') {
-    const counter = document.getElementById('swarm-iteration-counter');
-    if (counter) counter.innerText = `Iteration ${ev.iteration}/${ev.max_iterations}`;
-    appendSwarmLog('System', `--- Starting Iteration ${ev.iteration} of ${ev.max_iterations} ---`, 'text-gold-400 font-bold');
-  } else if (type === 'agent_thinking') {
-    appendSwarmLog(ev.role, `[${ev.node}] ${ev.step_name}...`, 'text-[var(--text-dim)] italic');
-    if (ev.role.includes('Leader')) {
-      setNodeStatus('leader', 'thinking', ev.step_name);
-    } else if (ev.role.includes('Worker 1')) {
-      setNodeStatus('w1', 'thinking', ev.step_name);
-    } else if (ev.role.includes('Worker 2')) {
-      setNodeStatus('w2', 'thinking', ev.step_name);
-    }
-  } else if (type === 'agent_message') {
-    appendSwarmAgentMessage(ev.role, ev.node, ev.model, ev.content);
-    if (ev.role.includes('Leader')) {
-      setNodeStatus('leader', 'idle', 'Completed plan');
-    } else if (ev.role.includes('Worker 1')) {
-      setNodeStatus('w1', 'idle', 'Completed implementation');
-    } else if (ev.role.includes('Worker 2')) {
-      setNodeStatus('w2', 'idle', 'Completed review');
-    }
-  } else if (type === 'completed') {
-    setSwarmRunningUI(false);
-    currentSwarmFinalCode = ev.final_code || '';
-    const finalBox = document.getElementById('swarm-final-box');
-    if (finalBox) finalBox.classList.remove('hidden');
-    appendSwarmLog('System', `✓ Autonomous Task Completed with status: ${ev.status}`, 'text-emerald-400 font-bold');
-    showToast("Autonomous Swarm Completed Task!", "🤖");
-  } else if (type === 'error') {
-    setSwarmRunningUI(false);
-    appendSwarmLog('Error', ev.error, 'text-rose-500 font-bold');
-  }
-}
-
-function appendSwarmLog(sender, text, css = 'text-[var(--text-secondary)]') {
-  const feed = document.getElementById('swarm-feed');
-  if (!feed) return;
-  const item = document.createElement('div');
-  item.className = `p-2 rounded-lg bg-[var(--bg-input)] border border-[var(--border-app)] ${css}`;
-  item.innerHTML = `<span class="font-bold mr-1.5">[${sender}]</span>${escapeHtml(text)}`;
-  feed.appendChild(item);
-  feed.scrollTop = feed.scrollHeight;
-}
-
-function appendSwarmAgentMessage(role, node, model, content) {
-  const feed = document.getElementById('swarm-feed');
-  if (!feed) return;
-  const item = document.createElement('div');
-  item.className = 'p-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-app)] space-y-2';
-  item.innerHTML = `
-    <div class="flex items-center justify-between border-b border-[var(--border-app)] pb-1 text-[10px]">
-      <span class="font-bold text-gold-500 flex items-center gap-1.5">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> ${role}
-      </span>
-      <span class="text-[var(--text-dim)]">${node} • ${model}</span>
-    </div>
-    <div class="text-[11px] text-[var(--text-main)] chat-markdown leading-relaxed">
-      ${marked.parse(content)}
-    </div>
-  `;
-  feed.appendChild(item);
-  attachCodeBlockHeaders(item);
-  feed.scrollTop = feed.scrollHeight;
-}
-
-function setNodeStatus(roleKey, state, text) {
-  const dot = document.getElementById(`${roleKey}-dot`);
-  const statusEl = document.getElementById(`${roleKey}-status-text`);
-  if (dot) {
-    if (state === 'thinking') {
-      dot.className = "w-2 h-2 rounded-full bg-gold-400 animate-ping";
-    } else if (state === 'idle') {
-      dot.className = "w-2 h-2 rounded-full bg-emerald-400";
-    } else {
-      dot.className = "w-2 h-2 rounded-full bg-slate-500";
-    }
-  }
-  if (statusEl) statusEl.innerText = text;
-}
-
-async function launchSwarmTask() {
-  const input = document.getElementById('swarm-objective-input');
-  const objective = input ? input.value.trim() : '';
-  if (!objective) {
-    showToast("Please enter an objective for the swarm", "⚠");
-    return;
-  }
-
-  const iterSelect = document.getElementById('swarm-iterations-select');
-  const maxIters = iterSelect ? parseInt(iterSelect.value, 10) : 3;
-
-  setSwarmRunningUI(true);
-  initSwarmWebSocket();
-
-  try {
-    const res = await fetch(`${apiBaseUrl}/api/swarm/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ objective, max_iterations: maxIters })
-    });
-    const data = await res.json();
-    currentSwarmTaskId = data.task_id;
-    showToast(`Swarm Launched [ID: ${currentSwarmTaskId}]`, "🚀");
-  } catch (e) {
-    setSwarmRunningUI(false);
-    showToast("Failed to launch swarm", "⚠");
-  }
-}
-
-async function stopCurrentSwarm() {
-  if (currentSwarmTaskId) {
-    try {
-      await fetch(`${apiBaseUrl}/api/swarm/stop/${currentSwarmTaskId}`, { method: 'POST' });
-      showToast("Swarm task stopped");
-    } catch (e) {}
-  }
-  setSwarmRunningUI(false);
-}
-
-function setSwarmRunningUI(running) {
-  const startBtn = document.getElementById('swarm-start-btn');
-  const stopBtn = document.getElementById('swarm-stop-btn');
-  const badge = document.getElementById('swarm-status-badge');
-  const text = document.getElementById('swarm-status-text');
-
-  if (startBtn && stopBtn) {
-    if (running) {
-      startBtn.classList.add('hidden');
-      stopBtn.classList.remove('hidden');
-      if (badge) badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-gold bg-[var(--gold-subtle)] text-gold-500 flex items-center gap-1.5";
-      if (text) text.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Active`;
-    } else {
-      startBtn.classList.remove('hidden');
-      stopBtn.classList.add('hidden');
-      if (badge) badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-dim)] flex items-center gap-1.5";
-      if (text) text.innerText = "Idle";
-      setNodeStatus('leader', 'off', 'Standby');
-      setNodeStatus('w1', 'off', 'Standby');
-      setNodeStatus('w2', 'off', 'Standby');
-    }
-  }
-}
-
-function sendSwarmCodeToScratchpad() {
-  if (currentSwarmFinalCode) {
-    insertCodeIntoEditor(currentSwarmFinalCode, 'python');
-    showView('view-standard');
-    showToast("Swarm code loaded into Scratchpad!", "⚡");
-  }
 }
 
 // ================= WebSocket Telemetry =================
@@ -2306,10 +2103,6 @@ function createMinimalServerCardHtml(s) {
     inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-rose-950/40 text-rose-400 border border-rose-800/40">Offline</span>`;
   } else if (s.running_models && s.running_models.length > 0) {
     inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> AI Active</span>`;
-  } else if (!isGateway && lastMiningState === 'mining') {
-    inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Mining Active</span>`;
-  } else if (!isGateway && lastMiningState === 'preempted_inference') {
-    inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span> Preempted</span>`;
   } else {
     inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-[var(--bg-muted)] text-[var(--text-dim)] border border-[var(--border-app)]">Idle (Ready)</span>`;
   }
@@ -2414,8 +2207,6 @@ function populateNodeDetailModal(s) {
   let stateText = 'Idle (Ready)';
   if (!isOnline) stateText = 'Offline';
   else if (s.running_models && s.running_models.length > 0) stateText = 'AI Inference Active';
-  else if (!isGateway && lastMiningState === 'mining') stateText = 'Mining (Etchash)';
-  else if (!isGateway && lastMiningState === 'preempted_inference') stateText = 'Preempted (AI Priority)';
   else if (isGateway) stateText = 'Orchestrating Cluster';
   const stateEl = document.getElementById('node-detail-state-val');
   if (stateEl) stateEl.innerText = stateText;
@@ -4267,7 +4058,7 @@ async function sendPrompt(overrideText = null) {
   }, 100);
 
   try {
-    const response = await fetch(`${apiBaseUrl}/v1/chat/completions`, {
+    const response = await fetch(`${apiBaseUrl}/api/chat`, {
       method: 'POST',
       signal: currentAbortController.signal,
       headers: {
@@ -4620,36 +4411,6 @@ function copyCode(elementId) {
   }
 }
 
-function drawMiningHistoryChart(history) {
-  const svg = document.getElementById('mining-chart-svg');
-  if (!svg || !history || history.length < 2) return;
-
-  const gpuArea = document.getElementById('mining-chart-gpu-area');
-  const gpuLine = document.getElementById('mining-chart-gpu-line');
-  const cpuLine = document.getElementById('mining-chart-cpu-line');
-
-  const width = 600;
-  const height = 100;
-  const maxGpu = 120.0;
-  const maxCpu = 8000.0;
-  const stepX = width / (history.length - 1);
-
-  let gpuPoints = [];
-  let cpuPoints = [];
-
-  history.forEach((pt, i) => {
-    const x = Math.round(i * stepX);
-    const yGpu = Math.max(5, Math.min(95, Math.round(height - ((pt.gpu_mhs || 0) / maxGpu) * height)));
-    const yCpu = Math.max(5, Math.min(95, Math.round(height - ((pt.cpu_hs || 0) / maxCpu) * height)));
-    gpuPoints.push(`${x},${yGpu}`);
-    cpuPoints.push(`${x},${yCpu}`);
-  });
-
-  if (gpuLine) gpuLine.setAttribute('d', `M${gpuPoints.join(' L')}`);
-  if (gpuArea) gpuArea.setAttribute('d', `M0,100 L${gpuPoints.join(' L')} L${width},100 Z`);
-  if (cpuLine) cpuLine.setAttribute('d', `M${cpuPoints.join(' L')}`);
-}
-
 function scrollToBottom() {
   const container = document.getElementById('chat-messages');
   if (container) container.scrollTop = container.scrollHeight;
@@ -4659,324 +4420,13 @@ function escapeHtml(string) {
   return String(string).replace(/[&<>"']/g, s => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[s]));
-}
-
-// ================= Autonomous Idle GPU Crypto Mining UI =================
-let miningPollInterval = null;
-let initialMiningLoaded = false;
-
-async function fetchMiningStatus() {
-  try {
-    const res = await fetch(`${apiBaseUrl}/api/mining/status`);
-    if (!res.ok) return;
-    const data = await res.json();
-    updateMiningUI(data);
-  } catch (e) {}
-}
-
-let _lastPoolFetch = 0;
-let _cachedPoolData = null;
-
-async function fetchLive2MinersPoolStats(wallet) {
-  const now = Date.now();
-  if (_cachedPoolData && (now - _lastPoolFetch) < 20000) {
-    return _cachedPoolData;
-  }
-  if (!wallet || !wallet.startsWith('0x')) return null;
-
-  try {
-    const res = await fetch(`https://etc.2miners.com/api/accounts/${wallet}`, {
-      signal: AbortSignal.timeout(6000)
-    });
-    if (res.ok) {
-      const data = await res.json();
-      _cachedPoolData = data;
-      _lastPoolFetch = now;
-      return data;
-    }
-  } catch (e) {
-    console.debug("2Miners pool direct API check:", e);
-  }
-  return _cachedPoolData;
-}
-
-function applyCashoutDom(bal, confirmed, immature, threshold, progress, paid, totalCount, validSh, staleSh, timeStr, label, dRate, workersOnline) {
-  const cashoutBadge = document.getElementById('cashout-status-badge');
-  const cashoutBalanceVal = document.getElementById('cashout-balance-val');
-  const cashoutThresholdVal = document.getElementById('cashout-threshold-val');
-  const cashoutPercentVal = document.getElementById('cashout-percent-val');
-  const cashoutTimeVal = document.getElementById('cashout-time-val');
-  const cashoutTimeCardVal = document.getElementById('cashout-time-card-val');
-  const cashoutProgressBar = document.getElementById('cashout-progress-bar');
-  const cashoutUnpaidTotal = document.getElementById('cashout-unpaid-total');
-  const cashoutConfirmedVal = document.getElementById('cashout-confirmed-val');
-  const cashoutImmatureVal = document.getElementById('cashout-immature-val');
-  const cashoutDailyRateVal = document.getElementById('cashout-daily-rate-val');
-  const cashoutSharesVal = document.getElementById('cashout-shares-val');
-  const cashoutRejectedVal = document.getElementById('cashout-rejected-val');
-  const cashoutPaidVal = document.getElementById('cashout-paid-val');
-  const cashoutTotalCount = document.getElementById('cashout-total-count');
-  const cashoutWorkersVal = document.getElementById('cashout-workers-val');
-
-  if (cashoutBadge) {
-    cashoutBadge.innerText = label;
-    if (bal >= threshold) {
-      cashoutBadge.className = "px-2.5 py-0.5 rounded-full text-[9px] font-mono border border-emerald-500/40 bg-emerald-950/40 text-emerald-300 animate-pulse";
-    } else {
-      cashoutBadge.className = "px-2.5 py-0.5 rounded-full text-[9px] font-mono border border-cyan-500/30 bg-cyan-950/30 text-cyan-400";
-    }
-  }
-
-  if (cashoutBalanceVal) cashoutBalanceVal.innerText = `${bal.toFixed(5)} ETC`;
-  if (cashoutThresholdVal) cashoutThresholdVal.innerText = `${threshold.toFixed(4)} ETC`;
-  if (cashoutPercentVal) cashoutPercentVal.innerText = `${progress.toFixed(2)}%`;
-  if (cashoutTimeVal) cashoutTimeVal.innerText = timeStr;
-  if (cashoutTimeCardVal) cashoutTimeCardVal.innerText = timeStr;
-  if (cashoutProgressBar) cashoutProgressBar.style.width = `${Math.min(100.0, Math.max(0.5, progress)).toFixed(1)}%`;
-  if (cashoutUnpaidTotal) cashoutUnpaidTotal.innerText = `${bal.toFixed(5)} ETC`;
-  if (cashoutConfirmedVal) cashoutConfirmedVal.innerText = `${confirmed.toFixed(5)} ETC`;
-  if (cashoutImmatureVal) cashoutImmatureVal.innerText = `${immature.toFixed(5)} ETC`;
-  if (cashoutDailyRateVal) cashoutDailyRateVal.innerText = `~${(dRate || 0.045).toFixed(3)} ETC/d`;
-  if (cashoutSharesVal) cashoutSharesVal.innerText = `${validSh} Valid`;
-  if (cashoutRejectedVal) cashoutRejectedVal.innerText = `${staleSh}`;
-  if (cashoutPaidVal) cashoutPaidVal.innerText = `${paid.toFixed(5)} ETC`;
-  if (cashoutTotalCount) cashoutTotalCount.innerText = `${totalCount} Completed`;
-  if (cashoutWorkersVal) cashoutWorkersVal.innerText = `${workersOnline || 0} / 3 Rigs`;
 
   if (window.lucide && typeof window.lucide.createIcons === 'function') {
     window.lucide.createIcons();
   }
 }
 
-function updateMiningUI(data) {
-  const badge = document.getElementById('mining-status-badge');
-  const dot = document.getElementById('mining-dot');
-  const text = document.getElementById('mining-status-text');
-  const toggleBtn = document.getElementById('mining-toggle-btn');
-  const toggleLabel = document.getElementById('mining-toggle-label');
-  const walletInput = document.getElementById('mining-wallet-input');
-  const coinSelect = document.getElementById('mining-coin-select');
 
-  if (!initialMiningLoaded) {
-    if (walletInput && data.wallet) walletInput.value = data.wallet;
-    if (coinSelect && data.coin) coinSelect.value = data.coin;
-    initialMiningLoaded = true;
-  }
-
-  if (data.state === 'mining') {
-    if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping";
-    if (text) text.innerText = "Mining Active";
-    if (badge) badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-emerald-500/40 bg-emerald-950/30 text-emerald-400 flex items-center gap-1.5";
-    if (toggleLabel) toggleLabel.innerText = "Disable Mining";
-    if (toggleBtn) toggleBtn.className = "px-3 py-1 rounded-xl text-xs font-bold transition border border-rose-800/50 bg-rose-950/40 text-rose-300 hover:bg-rose-900/60";
-  } else if (data.state === 'preempted_inference') {
-    if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse";
-    if (text) text.innerText = "Preempted (AI Active)";
-    if (badge) badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-amber-500/40 bg-amber-950/30 text-amber-400 flex items-center gap-1.5";
-    if (toggleLabel) toggleLabel.innerText = "Disable Mining";
-    if (toggleBtn) toggleBtn.className = "px-3 py-1 rounded-xl text-xs font-bold transition border border-rose-800/50 bg-rose-950/40 text-rose-300 hover:bg-rose-900/60";
-  } else if (data.state === 'idle_waiting') {
-    if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-cyan-400";
-    if (text) text.innerText = `Idle Waiting (${data.idle_seconds}s)`;
-    if (badge) badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-cyan-500/40 bg-cyan-950/30 text-cyan-300 flex items-center gap-1.5";
-    if (toggleLabel) toggleLabel.innerText = "Disable Mining";
-    if (toggleBtn) toggleBtn.className = "px-3 py-1 rounded-xl text-xs font-bold transition border border-rose-800/50 bg-rose-950/40 text-rose-300 hover:bg-rose-900/60";
-  } else {
-    if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-slate-500";
-    if (text) text.innerText = "Disabled";
-    if (badge) badge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-[var(--border-app)] bg-[var(--bg-muted)] text-[var(--text-dim)] flex items-center gap-1.5";
-    if (toggleLabel) toggleLabel.innerText = "Enable Mining";
-    if (toggleBtn) toggleBtn.className = "px-3 py-1 rounded-xl text-xs font-bold transition border border-gold bg-gold-gradient text-slate-950 shadow-sm hover:brightness-110";
-  }
-
-  const topMiningEl = document.getElementById('admin-top-mining-status');
-  if (topMiningEl) {
-    if (data.state === 'mining') topMiningEl.innerText = `${data.coin || 'ETC'} Active (${(data.estimated_hashrate_mhs || 0).toFixed(0)} MH/s)`;
-    else if (data.state === 'preempted_inference') topMiningEl.innerText = 'Preempted (AI Active)';
-    else if (data.state === 'idle_waiting') topMiningEl.innerText = `Idle Waiting (${data.idle_seconds}s)`;
-    else topMiningEl.innerText = 'Disabled';
-  }
-
-  lastMiningState = data.state;
-
-  // Dual mining hashrates
-  const gpuHashEl = document.getElementById('mining-gpu-hashrate-val');
-  const cpuHashEl = document.getElementById('mining-cpu-hashrate-val');
-  const powerEl = document.getElementById('mining-power-val');
-
-  const gpuMhs = data.gpu_hashrate_mhs || 0.0;
-  const cpuHs = data.cpu_hashrate_hs || 0;
-  const powerW = data.power_watts || 0;
-
-  if (gpuHashEl) gpuHashEl.innerText = `${gpuMhs.toFixed(1)} MH/s`;
-  if (cpuHashEl) cpuHashEl.innerText = `${cpuHs.toLocaleString()} H/s`;
-  if (powerEl) powerEl.innerText = `${powerW} Watts`;
-
-  // 2Miners Live Cashout & Payout Telemetry
-  const poolLink = document.getElementById('pool-explorer-link');
-  if (poolLink && data.wallet) {
-    poolLink.href = `https://etc.2miners.com/account/${data.wallet}`;
-  }
-
-  // Baseline from API response
-  let poolBal = (data.pool_balance_etc !== undefined) ? data.pool_balance_etc : 0.0;
-  let poolConfirmed = (data.pool_confirmed_etc !== undefined) ? data.pool_confirmed_etc : 0.0;
-  let poolImmature = (data.pool_immature_etc !== undefined) ? data.pool_immature_etc : 0.0;
-  let poolMinPayout = (data.min_payout_etc !== undefined) ? data.min_payout_etc : 0.1;
-  let progressPct = (data.payout_progress_percent !== undefined) ? data.payout_progress_percent : 0.0;
-  let paidEtc = (data.pool_paid_etc !== undefined) ? data.pool_paid_etc : 0.0;
-  let paymentsTotal = (data.payments_total !== undefined) ? data.payments_total : 0;
-  let validShares = (data.shares_accepted !== undefined) ? data.shares_accepted : 0;
-  let rejectedShares = (data.shares_rejected !== undefined) ? data.shares_rejected : 0;
-  let timeToCashout = data.time_to_cashout_str || "Calculating...";
-  let statusLabel = data.cashout_status_label || "Waiting for Threshold (0.1 ETC)";
-  let workersOnline = data.workers_online || data.active_miners || 0;
-  let clusterHr = data.gpu_hashrate_mhs || 92.1;
-  let dRate = (clusterHr / 92.1) * 0.045;
-
-  // Apply baseline immediately
-  applyCashoutDom(poolBal, poolConfirmed, poolImmature, poolMinPayout, progressPct, paidEtc, paymentsTotal, validShares, rejectedShares, timeToCashout, statusLabel, dRate, workersOnline);
-
-  // Directly fetch live 2Miners account telemetry from browser
-  if (data.wallet && data.wallet.startsWith('0x')) {
-    fetchLive2MinersPoolStats(data.wallet).then(pData => {
-      if (!pData) return;
-      const stats = pData.stats || {};
-      const pCfg = pData.config || {};
-      const balUnits = stats.balance || 0;
-      const immUnits = stats.immature || 0;
-      const pdUnits = stats.paid || 0;
-      const mnUnits = pCfg.minPayout || 100000000;
-
-      poolConfirmed = balUnits / 1e9;
-      poolImmature = immUnits / 1e9;
-      poolBal = (balUnits + immUnits) / 1e9;
-      poolMinPayout = mnUnits / 1e9;
-      paidEtc = pdUnits / 1e9;
-      progressPct = Math.min(100.0, (poolBal / poolMinPayout) * 100.0);
-      validShares = pData.sharesValid || 0;
-      rejectedShares = pData.sharesStale || 0;
-      paymentsTotal = pData.paymentsTotal || 0;
-      workersOnline = pData.workersOnline || 0;
-
-      clusterHr = data.gpu_hashrate_mhs || (pData.currentHashrate ? pData.currentHashrate / 1e6 : 95.0);
-      dRate = (clusterHr / 92.1) * 0.048; // ~0.050 ETC / day across cluster
-      const rem = Math.max(0, poolMinPayout - poolBal);
-      const hrsFull = (rem / Math.max(0.0001, dRate)) * 24.0;
-      const daysIdle = hrsFull / 8.0; // on typical 8h/day idle mining schedule
-
-      if (poolBal >= poolMinPayout) {
-        timeToCashout = "Ready (Next 2h Pool Cycle)";
-        statusLabel = "Threshold Met • In Cashout Queue";
-      } else if (data.state !== 'mining') {
-        timeToCashout = `~${hrsFull < 48 ? Math.round(hrsFull) + 'h full' : (hrsFull / 24.0).toFixed(1) + 'd'} (${daysIdle.toFixed(1)}d on 8h/d idle)`;
-        statusLabel = "Accumulating to 0.1 ETC Threshold";
-      } else {
-        timeToCashout = `~${Math.round(hrsFull)}h full (~${daysIdle.toFixed(1)}d on 8h/d idle)`;
-        statusLabel = "Accumulating to 0.1 ETC (2h Auto-Batch)";
-      }
-
-      applyCashoutDom(poolBal, poolConfirmed, poolImmature, poolMinPayout, progressPct, paidEtc, paymentsTotal, validShares, rejectedShares, timeToCashout, statusLabel, dRate, workersOnline);
-
-      // Sync fresh pool telemetry back to Courtesy server
-      fetch('/api/mining/pool-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pData)
-      }).catch(() => {});
-    });
-  }
-
-  // Draw SVG live hashrate history chart
-  if (data.history && data.history.length > 0) {
-    drawMiningHistoryChart(data.history);
-  }
-
-  // Live Revenue & Crypto Earnings Telemetry (Real Verified Pool Money + Live CoinGecko Spot Price)
-  const cryptoEl = document.getElementById('mining-crypto-val');
-  const usdEl = document.getElementById('mining-usd-val');
-  const dailyEl = document.getElementById('mining-daily-val');
-
-  const coin = (data.coin || 'ETC').toUpperCase();
-
-  // Fetch live spot prices asynchronously (cached, rate-limited to 1 call/min)
-  Promise.all([fetchLiveCoinPrice('ETC'), fetchLiveCoinPrice('XMR')]).then(([etcPrice, xmrPrice]) => {
-    // Ground total mined crypto in the REAL verified 2Miners balance (0.00267 ETC)
-    const verifiedPoolCrypto = (data.pool_balance_etc !== undefined && data.pool_balance_etc > 0) ? data.pool_balance_etc : poolBal;
-    let sessionMinedCrypto = parseFloat(localStorage.getItem('courtesy_mined_crypto') || '0.00000');
-    
-    // Always preserve at least the verified pool balance
-    if (verifiedPoolCrypto > sessionMinedCrypto) {
-      sessionMinedCrypto = verifiedPoolCrypto;
-      localStorage.setItem('courtesy_mined_crypto', sessionMinedCrypto.toString());
-    }
-
-    const activeMiners = data.active_miners || (data.workers_online || 0);
-    if (data.state === 'mining' && activeMiners > 0) {
-      const tickFraction = activeMiners / 3.0;
-      sessionMinedCrypto += 0.000003125 * tickFraction;
-      localStorage.setItem('courtesy_mined_crypto', sessionMinedCrypto.toString());
-    }
-
-    const hasDualMining = !!data.dual_mining;
-    const usdValue = (sessionMinedCrypto * etcPrice) + (hasDualMining ? ((sessionMinedCrypto * 0.04) * (xmrPrice || 160.0)) : 0);
-    const minerRatio = Math.max(1, activeMiners) / 3.0;
-    const dailyRateUsd = (data.state === 'mining')
-      ? ((0.050 * etcPrice * minerRatio) + (hasDualMining ? (0.0018 * (xmrPrice || 160.0) * minerRatio) : 0))
-      : (0.050 * etcPrice);
-
-    if (cryptoEl) cryptoEl.innerText = `${sessionMinedCrypto.toFixed(5)} ETC (Verified)`;
-    if (usdEl) usdEl.innerText = `$${usdValue.toFixed(4)} USD`;
-    if (dailyEl) {
-      if (data.state === 'mining') {
-        dailyEl.innerText = `~$${dailyRateUsd.toFixed(2)} / day`;
-        dailyEl.title = `ETC: $${etcPrice.toFixed(2)} • Active Hashrate: ${(data.gpu_hashrate_mhs || 95).toFixed(1)} MH/s`;
-      } else {
-        dailyEl.innerText = `$0.00 / day (Idle)`;
-        dailyEl.title = `Full run rate when active: ~$${dailyRateUsd.toFixed(2)}/day (ETC: $${etcPrice.toFixed(2)})`;
-      }
-    }
-  });
-}
-
-// ================= Live Crypto Price Fetching (Cached, Rate-Limited) =================
-let _cachedPrices = {};
-let _lastPriceFetch = 0;
-
-async function fetchLiveCoinPrice(coin) {
-  const now = Date.now();
-  const key = coin.toUpperCase();
-  // Return cache if fetched within last 60 seconds
-  if (_cachedPrices[key] && (now - _lastPriceFetch) < 60000) {
-    return _cachedPrices[key];
-  }
-  try {
-    const coinIds = { 
-      'ETC': 'ethereum-classic', 
-      'XMR': 'monero',
-      'ERG': 'ergo', 
-      'RVN': 'ravencoin', 
-      'BTC': 'bitcoin', 
-      'SOL': 'solana', 
-      'USDT': 'tether' 
-    };
-    const id = coinIds[key] || 'ethereum-classic';
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`, {
-      signal: AbortSignal.timeout(5000)
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const price = data[id]?.usd;
-      if (price) {
-        _cachedPrices[key] = price;
-        _lastPriceFetch = now;
-        return price;
-      }
-    }
-  } catch (e) { /* fallback to cached or defaults */ }
-  // Fallback defaults
-  return _cachedPrices[key] || ({ 'XMR': 160.0, 'ERG': 1.45, 'RVN': 0.022, 'BTC': 62000, 'SOL': 145, 'USDT': 1.00 }[key] || 24.50);
-}
 
 // ================= Smart Contextual Right-Click Menu =================
 function initContextMenu() {
@@ -5107,60 +4557,6 @@ function retryWithAlternativeModel() {
   retryLastPrompt();
 }
 
-async function toggleIdleMining() {
-  try {
-    const statusRes = await fetch(`${apiBaseUrl}/api/mining/status`);
-    const status = await statusRes.json();
-    const endpoint = status.enabled ? '/api/mining/stop' : '/api/mining/start';
-    const res = await fetch(`${apiBaseUrl}${endpoint}`, { method: 'POST' });
-    if (res.ok) {
-      showToast(status.enabled ? "Idle mining disabled" : "Idle mining enabled!", "⛏️");
-      await fetchMiningStatus();
-    }
-  } catch (e) {
-    showToast("Failed to toggle mining", "⚠");
-  }
-}
-
-async function saveMiningSettings() {
-  const walletInput = document.getElementById('mining-wallet-input');
-  const coinSelect = document.getElementById('mining-coin-select');
-  const wallet = walletInput ? walletInput.value.trim() : '';
-  const coin = coinSelect ? coinSelect.value : 'ETC';
-
-  if (!wallet) {
-    showToast("Please enter a wallet address", "⚠");
-    return;
-  }
-
-  try {
-    const res = await fetch(`${apiBaseUrl}/api/mining/config`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallet, coin })
-    });
-    if (res.ok) {
-      showToast("Mining settings saved!", "💾");
-      await fetchMiningStatus();
-    }
-  } catch (e) {
-    showToast("Failed to save mining settings", "⚠");
-  }
-}
-
-function openPayoutGuideModal() {
-  const modal = document.getElementById('modal-mining-payout-guide');
-  if (modal) {
-    modal.classList.remove('hidden');
-    if (window.lucide) lucide.createIcons();
-  }
-}
-
-function closePayoutGuideModal() {
-  const modal = document.getElementById('modal-mining-payout-guide');
-  if (modal) modal.classList.add('hidden');
-}
-
 // Global Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
   // Escape: stop streaming or close modals
@@ -5213,10 +4609,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initWebSocket();
   fetchServersRest();
-  fetchMiningStatus();
-  setInterval(fetchMiningStatus, 6000);
   initContextMenu();
-  fetchLiveCoinPrice('ETC'); // Pre-fetch coin price at startup
   initIdeChatInput();
 
   // Initialize Courtesy IDE Workbench

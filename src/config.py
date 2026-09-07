@@ -39,15 +39,15 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         },
         {
             "id": "kraken",
-            "name": "kraken (cst1 - Fast Inference)",
+            "name": "kraken (cst1 - Node 1)",
             "role": "inference",
             "type": "ollama",
-            "host": "10.11.16.28",
+            "host": "10.11.2.22",
             "port": 11434,
             "ssh_host": "cst1.local",
-            "ssh_user": "kraken",
+            "ssh_user": "cst1",
             "enabled": True,
-            "preferred_model": "qwen2.5-coder:7b-instruct-q4_K_M",
+            "preferred_model": "qwen2.5-coder:7b",
             "specs": {
                 "cpu": "12 Cores",
                 "ram": "32 GB",
@@ -56,19 +56,40 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                     {"index": 1, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120}
                 ]
             },
-            "tags": ["compute", "gpu", "dual-p2000", "fast-coder"]
+            "tags": ["compute", "gpu", "dual-p2000", "7b", "14b"]
+        },
+        {
+            "id": "cst6",
+            "name": "cst6 (Inference Node 2)",
+            "role": "inference",
+            "type": "ollama",
+            "host": "10.11.16.29",
+            "port": 11434,
+            "ssh_host": "cst6.local",
+            "ssh_user": "cst6",
+            "enabled": True,
+            "preferred_model": "qwen2.5-coder:7b",
+            "specs": {
+                "cpu": "12 Cores",
+                "ram": "32 GB",
+                "gpus": [
+                    {"index": 0, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120},
+                    {"index": 1, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120}
+                ]
+            },
+            "tags": ["compute", "gpu", "dual-p2000", "7b", "14b"]
         },
         {
             "id": "cst7",
-            "name": "cst7 (Heavy Reasoning Node)",
+            "name": "cst7 (Heavy Node 3)",
             "role": "inference",
             "type": "ollama",
             "host": "10.11.2.12",
             "port": 11434,
-            "ssh_host": "10.11.2.12",
+            "ssh_host": "cst7.local",
             "ssh_user": "cst7",
             "enabled": True,
-            "preferred_model": "qwen2.5-coder:14b-instruct",
+            "preferred_model": "qwen2.5-coder:14b",
             "specs": {
                 "cpu": "12 Cores",
                 "ram": "32 GB",
@@ -77,7 +98,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                     {"index": 1, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120}
                 ]
             },
-            "tags": ["compute", "gpu", "dual-p2000", "heavy-reasoning"]
+            "tags": ["compute", "gpu", "dual-p2000", "heavy-reasoning", "7b", "14b"]
         }
     ],
     "routing": {

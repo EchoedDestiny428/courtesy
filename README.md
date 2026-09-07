@@ -12,7 +12,7 @@ graph TD
     Tailscale["Tailscale Mesh (100.107.249.92:8000)"]
     
     subgraph Gateway ["cst (Gateway Node)"]
-        Pi["Raspberry Pi 4 (Debian 13)<br>FastAPI + WebSocket Telemetry<br>OpenAI Codex Reverse Proxy"]
+        Pi["Raspberry Pi 4 (Debian 13)<br>FastAPI + WebSocket Telemetry<br>Native /api/chat Streaming Gateway"]
     end
 
     subgraph Cluster ["High-Speed Local Ethernet LAN (10.11.0.0/16)"]
@@ -49,7 +49,7 @@ graph TD
   - `qwen2.5-coder:7b`: Auto-balances across all nodes hosting the 7B model.
   - `qwen2.5-coder:14b`: Auto-balances across all nodes hosting the 14B model.
   - Direct pinning: e.g. `kraken/qwen2.5-coder:7b`, `cst6/qwen2.5-coder:7b`, `cst7/qwen2.5-coder:14b`.
-- **Standard OpenAI API**: Drop-in replacement for `/v1/chat/completions` (streaming SSE) and `/v1/models`.
+- **Native Streaming `/api/chat` Gateway**: High-performance SSE token streaming with VRAM headroom preservation and optional live web grounding.
 
 ---
 
@@ -73,69 +73,38 @@ Open:
 
 ---
 
-## 🔌 IDE & Agent Integration
+## 🔌 API & Client Integration
 
-### 1. VS Code Continue.dev (`~/.continue/config.json`)
-```json
-{
-  "models": [
-    {
-      "title": "Courtesy Codex (Auto Cluster)",
-      "provider": "openai",
-      "model": "auto",
-      "apiBase": "http://100.107.249.92:8000/v1",
-      "apiKey": "courtesy-local"
-    },
-    {
-      "title": "Courtesy Kraken (Fast 7B)",
-      "provider": "openai",
-      "model": "kraken/qwen2.5-coder:7b",
-      "apiBase": "http://100.107.249.92:8000/v1",
-      "apiKey": "courtesy-local"
-    },
-    {
-      "title": "Courtesy CST6 (Fast 7B)",
-      "provider": "openai",
-      "model": "cst6/qwen2.5-coder:7b",
-      "apiBase": "http://100.107.249.92:8000/v1",
-      "apiKey": "courtesy-local"
-    },
-    {
-      "title": "Courtesy CST7 (Heavy 14B)",
-      "provider": "openai",
-      "model": "cst7/qwen2.5-coder:14b",
-      "apiBase": "http://100.107.249.92:8000/v1",
-      "apiKey": "courtesy-local"
-    }
-  ]
-}
-```
-
-### 2. Cline / Roo Code
-- **API Provider**: `OpenAI Compatible`
-- **Base URL**: `http://100.107.249.92:8000/v1`
-- **API Key**: `courtesy`
-- **Model ID**: `auto` (or `qwen2.5-coder:7b`, `qwen2.5-coder:14b`)
-
-### 3. Aider CLI
+### 1. cURL Streaming Chat Request
 ```bash
-aider --openai-api-base http://100.107.249.92:8000/v1 --openai-api-key courtesy --model openai/auto
+curl -N -X POST http://100.107.249.92:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "auto",
+    "messages": [{"role": "user", "content": "Write a quicksort in Rust."}],
+    "stream": true
+  }'
 ```
 
-### 4. Python OpenAI SDK
+### 2. Python Streaming Client (`httpx`)
 ```python
-from openai import OpenAI
+import httpx
+import json
 
-client = OpenAI(
-    base_url="http://100.107.249.92:8000/v1",
-    api_key="courtesy-local"
-)
+payload = {
+    "model": "auto",
+    "messages": [{"role": "user", "content": "Write a quicksort in Rust."}],
+    "stream": True
+}
 
-response = client.chat.completions.create(
-    model="auto",
-    messages=[{"role": "user", "content": "Write a quicksort in Rust."}]
-)
-print(response.choices[0].message.content)
+with httpx.stream("POST", "http://100.107.249.92:8000/api/chat", json=payload, timeout=60.0) as response:
+    for line in response.iter_lines():
+        if line.startswith("data: "):
+            chunk = line[6:]
+            if chunk == "[DONE]":
+                break
+            data = json.loads(chunk)
+            print(data["choices"][0]["delta"]["content"], end="", flush=True)
 ```
 
 ---
@@ -147,18 +116,19 @@ courtesy/
 ├── config/
 │   └── servers.json       # Modular server registry (kraken, cst6, cst7, cst)
 ├── src/
-│   ├── app.py             # FastAPI REST & WebSocket server
+│   ├── app.py             # FastAPI REST & WebSocket server with /api/chat gateway
 │   ├── config.py          # Dynamic configuration manager (CRUD)
 │   ├── collector.py       # Asynchronous GPU & Ollama telemetry collector
-│   ├── router.py          # Intelligent load balancer & inference router
-│   └── openai_proxy.py    # OpenAI-compatible /v1/chat/completions gateway
+│   └── router.py          # Intelligent load balancer & inference router
 ├── static/
 │   ├── index.html         # Antigravity IDE & Codex playground
-│   ├── app.js             # Telemetry UI logic, streaming chat, scratchpad editor
-│   └── styles.css         # Luxury obsidian & champagne gold theme, animations
+│   ├── app.js             # Telemetry UI logic, streaming chat, workspace explorer
+│   └── styles.css         # Clean light/dark minimal theme & styling
 ├── electron/
 │   ├── main.js            # Electron desktop window process
 │   └── preload.js         # IPC security bridge
+├── scripts/
+│   └── test_inter_server.py # Cluster verification & inference test suite
 ├── launch-app.ps1         # 1-click Antigravity Desktop app launcher
 ├── run.ps1                # Windows local backend launcher
 ├── requirements.txt       # Python dependencies

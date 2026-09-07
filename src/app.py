@@ -6,24 +6,22 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, Query, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+import httpx
 
 from src.config import (
     load_config, get_servers, get_server_by_id, add_server,
     update_server, delete_server, get_routing_settings, get_general_settings
 )
 from src.collector import update_all_metrics, get_cached_metrics, get_cluster_summary
-from src.openai_proxy import router as openai_router
-from src.router import offload_server_models
-from src.web_agent import search_web, fetch_webpage, generate_grounded_context
-from src.swarm import start_swarm_task, stop_swarm_task, get_swarm_status, register_swarm_subscriber, unregister_swarm_subscriber
-from src.miner_manager import (
-    load_mining_config, save_mining_config, get_cluster_mining_status,
-    start_mining_cluster, preempt_mining, idle_mining_watcher_loop, update_pool_stats_from_client
+from src.router import (
+    resolve_route, track_request_start, track_request_end,
+    ensure_vram_headroom, offload_server_models, _active_requests
 )
+from src.web_agent import search_web, fetch_webpage, generate_grounded_context
 from src.auth import verify_admin_credentials, create_admin_session, is_valid_admin_token, revoke_admin_session, require_admin_auth
 from src.router import _active_requests
 
@@ -60,7 +58,6 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 background_task: asyncio.Task = None
-mining_task: asyncio.Task = None
 
 
 async def metrics_poller_task():
@@ -84,23 +81,20 @@ async def metrics_poller_task():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting Courtesy Cluster Manager & Codex Gateway...")
+    logger.info("Starting Courtesy Cluster Manager & IDE Gateway...")
     # Initial metrics fetch
     await update_all_metrics()
-    global background_task, mining_task
+    global background_task
     background_task = asyncio.create_task(metrics_poller_task())
-    mining_task = asyncio.create_task(idle_mining_watcher_loop(lambda: sum(_active_requests.values())))
     yield
     if background_task:
         background_task.cancel()
-    if mining_task:
-        mining_task.cancel()
     logger.info("Courtesy service shut down.")
 
 
 app = FastAPI(
-    title="Courtesy Codex & Cluster Engine",
-    description="Autonomous AI Cluster Manager and Codex/Claude Gateway",
+    title="Courtesy Cluster Engine",
+    description="Autonomous AI Cluster Manager and Antigravity IDE Gateway",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -112,9 +106,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Include OpenAI-compatible Codex endpoint
-app.include_router(openai_router)
 
 
 # --- REST API Endpoints ---
@@ -273,6 +264,173 @@ async def api_web_ground(payload: Dict[str, Any]):
     force = payload.get("force", True)
     context, sources = await generate_grounded_context(prompt, force=force)
     return {"context": context, "sources": sources}
+
+
+# --- Native Courtesy IDE Chat Stream Endpoint ---
+
+@app.post("/api/chat")
+async def api_chat(request: Request):
+    """
+    Lightweight, streaming inference endpoint tailored specifically for Courtesy IDE.
+    Directly routes to optimal cluster node using intelligent load balancing.
+    """
+    body = await request.json()
+    model_req = body.get("model", "auto")
+    stream = body.get("stream", True)
+    web_access = body.get("web_access", False)
+
+    # Perform live web & documentation grounding if requested
+    sources = []
+    if web_access:
+        messages = body.get("messages", [])
+        last_user_idx = None
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i].get("role") == "user":
+                last_user_idx = i
+                break
+        
+        if last_user_idx is not None:
+            user_content = messages[last_user_idx].get("content", "")
+            if isinstance(user_content, str) and user_content.strip():
+                try:
+                    grounded_ctx, sources = await generate_grounded_context(user_content, force=True)
+                    if grounded_ctx:
+                        messages[last_user_idx]["content"] = user_content + grounded_ctx
+                        body["messages"] = messages
+                except Exception as e:
+                    logger.warning(f"Web grounding failed: {e}")
+
+    try:
+        target = resolve_route(model_query=model_req)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    logger.info(f"Routing chat for '{model_req}' -> {target.server_id} ({target.server_name}) model '{target.model_name}'")
+
+    resp_headers = {
+        "X-Courtesy-Server": target.server_id,
+        "X-Courtesy-Model": target.model_name,
+        "X-Courtesy-Web-Sources": json.dumps(sources),
+        "Access-Control-Expose-Headers": "X-Courtesy-Server, X-Courtesy-Model, X-Courtesy-Web-Sources"
+    }
+
+    if stream:
+        async def stream_generator():
+            await track_request_start(target.server_id)
+            endpoint = f"{target.base_url}/v1/chat/completions"
+            req_payload = body.copy()
+            req_payload["model"] = target.model_name
+            req_payload["stream"] = True
+
+            try:
+                can_direct = True
+                try:
+                    async with httpx.AsyncClient(timeout=120.0) as client:
+                        await ensure_vram_headroom(target, client)
+                        async with client.stream("POST", endpoint, json=req_payload) as resp:
+                            if resp.status_code == 200:
+                                async for chunk in resp.aiter_text():
+                                    yield chunk
+                                can_direct = False
+                except Exception:
+                    can_direct = True
+
+                if can_direct:
+                    json_input = json.dumps(req_payload)
+                    from src.collector import IS_ON_CST
+                    if IS_ON_CST:
+                        cmd = ["curl", "-s", "-N", "-H", "Content-Type: application/json", endpoint, "-d", "@-"]
+                        proc = await asyncio.create_subprocess_exec(
+                            *cmd,
+                            stdin=asyncio.subprocess.PIPE,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE
+                        )
+                    else:
+                        curl_cmd = f"curl -s -N -H 'Content-Type: application/json' {endpoint} -d @-"
+                        proc = await asyncio.create_subprocess_exec(
+                            "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes", "cst@cst",
+                            curl_cmd,
+                            stdin=asyncio.subprocess.PIPE,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE
+                        )
+
+                    if proc.stdin:
+                        proc.stdin.write(json_input.encode("utf-8"))
+                        await proc.stdin.drain()
+                        proc.stdin.close()
+
+                    while True:
+                        line = await proc.stdout.readline()
+                        if not line:
+                            break
+                        yield line.decode("utf-8", errors="ignore")
+
+                    await proc.wait()
+
+            except Exception as e:
+                logger.error(f"Chat streaming error on {target.server_id}: {e}")
+                err_chunk = {"choices": [{"delta": {"content": f"\n\n[Cluster Error on {target.server_name}: {str(e)}]"}}]}
+                yield f"data: {json.dumps(err_chunk)}\n\ndata: [DONE]\n\n"
+            finally:
+                await track_request_end(target.server_id)
+
+        return StreamingResponse(
+            stream_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                **resp_headers
+            }
+        )
+
+    # Non-streaming request
+    await track_request_start(target.server_id)
+    endpoint = f"{target.base_url}/v1/chat/completions"
+    req_payload = body.copy()
+    req_payload["model"] = target.model_name
+    req_payload["stream"] = False
+
+    try:
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                await ensure_vram_headroom(target, client)
+                resp = await client.post(endpoint, json=req_payload)
+                if resp.status_code == 200:
+                    return JSONResponse(content=resp.json(), headers=resp_headers)
+        except Exception:
+            pass
+
+        from src.collector import IS_ON_CST
+        json_input = json.dumps(req_payload)
+        if IS_ON_CST:
+            cmd = ["curl", "-s", "-H", "Content-Type: application/json", endpoint, "-d", "@-"]
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+        else:
+            curl_cmd = f"curl -s -H 'Content-Type: application/json' {endpoint} -d @-"
+            proc = await asyncio.create_subprocess_exec(
+                "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes", "cst@cst",
+                curl_cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+        stdout, _ = await proc.communicate(input=json_input.encode("utf-8"))
+        res_data = json.loads(stdout.decode("utf-8"))
+        return JSONResponse(content=res_data, headers=resp_headers)
+
+    except Exception as e:
+        logger.error(f"Inference error on {target.server_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Inference failed on {target.server_name}: {str(e)}")
+    finally:
+        await track_request_end(target.server_id)
 
 
 # --- Local & Remote Workspace Filespace Endpoints ---
@@ -604,97 +762,6 @@ async def api_workspace_git(payload: Dict[str, Any]):
 
 
 
-# --- Autonomous Multi-Agent Swarm Endpoints ---
-
-@app.post("/api/swarm/start")
-async def api_swarm_start(payload: Dict[str, Any]):
-    """Launches an autonomous multi-node swarm task."""
-    objective = payload.get("objective", "").strip()
-    if not objective:
-        raise HTTPException(status_code=400, detail="Objective is required.")
-    max_iterations = int(payload.get("max_iterations", 3))
-    task_id = start_swarm_task(objective, max_iterations=max_iterations)
-    return {"status": "started", "task_id": task_id}
-
-
-@app.get("/api/swarm/status/{task_id}")
-async def api_swarm_status(task_id: str):
-    """Fetches status and final artifacts of a swarm task."""
-    st = get_swarm_status(task_id)
-    if not st:
-        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found.")
-    return st
-
-
-@app.post("/api/swarm/stop/{task_id}")
-async def api_swarm_stop(task_id: str):
-    """Stops an active swarm workflow."""
-    success = stop_swarm_task(task_id)
-    return {"status": "stopped" if success else "not_found", "task_id": task_id}
-
-
-@app.websocket("/ws/swarm")
-async def websocket_swarm_endpoint(websocket: WebSocket):
-    """Streams live multi-agent swarm dialogue and step events to the GUI."""
-    await websocket.accept()
-    queue = register_swarm_subscriber()
-    try:
-        while True:
-            event = await queue.get()
-            await websocket.send_json(event)
-    except WebSocketDisconnect:
-        unregister_swarm_subscriber(queue)
-    except Exception:
-        unregister_swarm_subscriber(queue)
-
-
-# --- Autonomous Idle GPU Crypto Mining Endpoints ---
-
-@app.get("/api/mining/status")
-async def api_mining_status():
-    """Returns current status of cluster idle mining."""
-    return await get_cluster_mining_status()
-
-
-@app.post("/api/mining/config")
-async def api_mining_config(payload: Dict[str, Any]):
-    """Updates mining configuration (wallet, coin, pool, idle threshold, power limit)."""
-    cfg = load_mining_config()
-    for k, v in payload.items():
-        if k in cfg:
-            cfg[k] = v
-    save_mining_config(cfg)
-    return {"status": "success", "config": cfg}
-
-
-@app.post("/api/mining/start")
-async def api_mining_start():
-    """Manually triggers mining across the cluster."""
-    cfg = load_mining_config()
-    cfg["enabled"] = True
-    save_mining_config(cfg)
-    await start_mining_cluster()
-    return {"status": "started"}
-
-
-@app.post("/api/mining/stop")
-async def api_mining_stop():
-    """Manually stops/preempts mining across the cluster."""
-    cfg = load_mining_config()
-    cfg["enabled"] = False
-    save_mining_config(cfg)
-    await preempt_mining()
-    return {"status": "stopped"}
-
-
-@app.post("/api/mining/pool-sync")
-async def api_mining_pool_sync(payload: Dict[str, Any] = Body(...)):
-    """Receives live pool telemetry from frontend browser and syncs it with Courtesy."""
-    stats = update_pool_stats_from_client(payload)
-    return {"status": "synced", "stats": stats}
-
-
-
 # --- Authentication & Administrative Control Endpoints ---
 
 @app.post("/api/auth/login")
@@ -732,7 +799,6 @@ async def api_admin_terminate_sessions(admin_token: str = Depends(require_admin_
         if s.get("enabled", True):
             res = await offload_server_models(s)
             results[s["id"]] = res
-    await preempt_mining()
     return {"status": "sessions_terminated", "servers": results}
 
 

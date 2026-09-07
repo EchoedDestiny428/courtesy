@@ -34,7 +34,7 @@
       "host": "10.11.2.22",
       "port": 11434,
       "ssh_host": "cst1.local",
-      "ssh_user": "kraken",
+      "ssh_user": "cst1",
       "enabled": true,
       "preferred_model": "qwen2.5-coder:7b",
       "specs": {

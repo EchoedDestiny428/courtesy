@@ -62,7 +62,7 @@ async def test_cross_node_inference():
                 "stream": False
             }
             try:
-                r = await client.post(f"{GATEWAY}/v1/chat/completions", json=payload, timeout=45.0)
+                r = await client.post(f"{GATEWAY}/api/chat", json=payload, timeout=45.0)
                 dur = round(time.time() - start, 2)
                 if r.status_code == 200:
                     data = r.json()
