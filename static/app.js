@@ -105,39 +105,19 @@ async function fetchRealServerList() {
       const latMs = s.status?.latency_ms != null ? Math.round(s.status.latency_ms) : (isGateway ? gatewayPing : null);
       const latencyStr = isOnline ? (latMs != null ? `${latMs}ms` : 'online') : 'offline';
 
-      // 1. Live GPU metrics (count, model, VRAM total & used)
+      // Live GPU metrics: only GPU info (count, model, total VRAM)
       const gpus = s.status?.gpus || s.specs?.gpus || [];
       const gpuCount = gpus.length;
-      let gpuSummary = 'No discrete GPUs';
-      let vramSummary = '';
+      let gpuSummary = 'No GPU';
       if (gpuCount > 0) {
-        const gpuName = gpus[0].name || 'Quadro P2000';
+        const rawName = gpus[0].name || 'Quadro P2000';
+        const cleanName = rawName.replace(/^NVIDIA\s+/i, '').trim();
         const totalVramMb = gpus.reduce((acc, g) => acc + (g.vram_total_mb || 5120), 0);
-        const usedVramMb = gpus.reduce((acc, g) => acc + (g.vram_used_mb || 0), 0);
         const totalVramGb = Math.round(totalVramMb / 1024);
-        const usedVramGb = (usedVramMb / 1024).toFixed(1);
-        gpuSummary = `${gpuCount}x ${gpuName} (${totalVramGb}GB VRAM)`;
-        if (usedVramMb > 100) {
-          vramSummary = `${usedVramGb}GB active`;
-        }
+        gpuSummary = `${gpuCount}x ${cleanName} (${totalVramGb}GB)`;
       } else if (isGateway) {
-        gpuSummary = 'CPU Gateway Host';
+        gpuSummary = 'Gateway Host';
       }
-
-      // 2. Live CPU & RAM metrics
-      const cpuSpecs = s.specs?.cpu || (isGateway ? 'Cortex-A72 (4 Cores)' : '12 Cores');
-      const cpuLoad = (s.status?.cpu_percent != null) ? `${s.status.cpu_percent.toFixed(1)}% CPU` : 'Idle';
-      const ramUsedGb = s.status?.ram_used_gb != null ? `${s.status.ram_used_gb.toFixed(1)}` : null;
-      const ramTotalGb = s.status?.ram_total_gb != null ? `${Math.round(s.status.ram_total_gb)}` : null;
-      const ramSummary = (ramUsedGb && ramTotalGb) ? `${ramUsedGb}/${ramTotalGb}GB RAM` : (s.specs?.ram || '');
-
-      // 3. Live models loaded in VRAM vs installed
-      const runningModels = (s.status?.running_models || []).map(m => (m.name || '').replace('qwen2.5-coder:', '').toUpperCase());
-      const loadedInVram = runningModels.length > 0 ? runningModels[0] : null;
-
-      const installedModels = (s.status?.models || []).map(m => (m.name || '').replace('qwen2.5-coder:', '').toUpperCase()).filter(Boolean);
-      const uniqueModels = [...new Set(installedModels)];
-      const modelsSummary = uniqueModels.length > 0 ? uniqueModels.join(' • ') : (s.preferred_model?.includes('14b') ? '14B' : '7B');
 
       let displayName = s.id;
       if (s.name) {
@@ -154,21 +134,15 @@ async function fetchRealServerList() {
         latency: latencyStr,
         gpuCount: gpuCount,
         gpuSummary: gpuSummary,
-        vramSummary: vramSummary,
-        cpuSpecs: cpuSpecs,
-        cpuLoad: cpuLoad,
-        ramSummary: ramSummary,
-        loadedInVram: loadedInVram,
-        modelsSummary: modelsSummary,
         available: isOnline && !isGateway
       };
     });
   } catch (err) {
     console.warn('[Courtesy] Live server fetch failed, using fallback cluster telemetry:', err);
     return [
-      { id: 'cst1', name: 'cst1', ip: '10.11.2.22', isGateway: false, online: true, latencyMs: 22, latency: '22ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB VRAM)', vramSummary: '4.8GB active', cpuSpecs: '12 Cores', cpuLoad: '0.4% CPU', ramSummary: '32GB RAM', loadedInVram: '7B', modelsSummary: '7B • 14B', available: true },
-      { id: 'cst6', name: 'cst6', ip: '10.11.16.29', isGateway: false, online: true, latencyMs: 24, latency: '24ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB VRAM)', vramSummary: '8.8GB active', cpuSpecs: '12 Cores', cpuLoad: '17.6% CPU', ramSummary: '32GB RAM', loadedInVram: null, modelsSummary: '7B • 14B', available: true },
-      { id: 'cst7', name: 'cst7', ip: '10.11.2.12', isGateway: false, online: true, latencyMs: 21, latency: '21ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB VRAM)', vramSummary: '', cpuSpecs: '12 Cores', cpuLoad: '0.7% CPU', ramSummary: '32GB RAM', loadedInVram: null, modelsSummary: '14B • 7B', available: true }
+      { id: 'cst1', name: 'cst1', ip: '10.11.2.22', isGateway: false, online: true, latencyMs: 22, latency: '22ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true },
+      { id: 'cst6', name: 'cst6', ip: '10.11.16.29', isGateway: false, online: true, latencyMs: 24, latency: '24ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true },
+      { id: 'cst7', name: 'cst7', ip: '10.11.2.12', isGateway: false, online: true, latencyMs: 21, latency: '21ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true }
     ];
   }
 }
@@ -203,12 +177,12 @@ async function launchIdeSequence() {
   actionsEl.classList.add('hidden');
   seqEl.classList.remove('hidden');
   seqEl.innerHTML = `
-    <div id="scan-status" class="flex items-center justify-between text-neutral-600 dark:text-neutral-300 py-1.5 px-1 animate-seq-fade font-mono text-xs">
+    <div id="scan-status" class="flex items-center justify-between text-neutral-600 dark:text-neutral-400 py-1 px-1 animate-seq-fade font-mono text-xs">
       <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span>Pinging cluster gateway at 100.107.249.92:8000<span id="scan-dots">.</span></span>
+        <span class="w-1.5 h-1.5 rounded-full bg-black dark:bg-white animate-pulse"></span>
+        <span>scanning for available servers<span id="scan-dots">.</span></span>
       </div>
-      <span class="text-neutral-400 dark:text-neutral-500 text-[10px] font-mono">probing</span>
+      <span class="text-neutral-400 dark:text-neutral-500 text-[10px] font-mono tracking-wider">100.107.249.92</span>
     </div>
   `;
 
@@ -219,152 +193,93 @@ async function launchIdeSequence() {
     if (scanDots) scanDots.textContent = '.'.repeat(sDotCount);
   }, 220);
 
-  // 2. Real cluster discovery: ping gateway & query live nodes concurrently with deliberate breathing pause
-  const t0 = performance.now();
+  // Concurrently fetch real cluster data while animating scan (1300ms pause for natural breathing room)
   const fetchPromise = fetchRealServerList();
   const minWaitPromise = new Promise(r => setTimeout(r, 1300));
   const [allServers] = await Promise.all([fetchPromise, minWaitPromise]);
-  const probeDuration = Math.round(performance.now() - t0);
 
   clearInterval(scanTimer);
+  // Brief smooth breath before revealing rows
   await new Promise(r => setTimeout(r, 220));
+  seqEl.innerHTML = '';
 
   const computeNodes = allServers.filter(s => !s.isGateway);
-  const displayNodes = computeNodes.length > 0 ? computeNodes : allServers;
-  const onlineCount = displayNodes.filter(s => s.online).length;
+  const servers = computeNodes.length > 0 ? computeNodes : allServers;
 
-  // 3. Render discovered cluster status header & live node cards with genuine telemetry
-  seqEl.innerHTML = `
-    <div class="flex items-center justify-between pb-2 border-b border-neutral-200 dark:border-neutral-800 text-[11px]">
-      <div class="flex items-center gap-2">
-        <span id="srv-ptr-head" class="font-bold font-mono text-black dark:text-white opacity-0 select-none transition-opacity duration-150 w-3 text-sm">></span>
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-        <span class="font-semibold text-black dark:text-white">Live Cluster Telemetry</span>
-        <span class="text-neutral-400 dark:text-neutral-500 font-mono text-[10px]">(${probeDuration}ms)</span>
+  // 2. Text display available servers row by row with real GPU telemetry (minimalist monospace)
+  for (let i = 0; i < servers.length; i++) {
+    const s = servers[i];
+    const row = document.createElement('div');
+    row.id = `srv-row-${i}`;
+    row.className = 'flex items-center justify-between text-neutral-400 dark:text-neutral-500 py-1.5 px-2 rounded-md transition-all duration-200 animate-seq-row font-mono text-xs';
+    const latencyClass = s.online ? 'text-emerald-600 dark:text-emerald-400 font-mono font-medium' : 'text-neutral-400 dark:text-neutral-500 font-mono';
+    const nameClass = s.online ? 'font-mono text-xs text-neutral-800 dark:text-neutral-200' : 'font-mono text-xs text-neutral-400 dark:text-neutral-500';
+
+    row.innerHTML = `
+      <div class="flex items-center whitespace-nowrap mr-3">
+        <span id="srv-ptr-${i}" class="font-bold w-3 text-black dark:text-white opacity-0 select-none mr-1.5 transition-opacity duration-150">></span>
+        <span class="${nameClass}">${s.name || s.id}</span>
       </div>
-      <span class="text-neutral-400 dark:text-neutral-500 text-[10px] font-mono">${onlineCount}/${displayNodes.length} Online</span>
-    </div>
-    <div id="seq-node-list" class="space-y-1.5 my-1.5"></div>
-    <div id="seq-conn-status" class="pt-2 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-[11px] font-mono text-neutral-600 dark:text-neutral-300">
-      <div class="flex items-center gap-2">
-        <span class="w-1.5 h-1.5 rounded-full bg-black dark:bg-white animate-pulse"></span>
-        <span>Auto-selecting first available compute node...</span>
-      </div>
-    </div>
-  `;
-
-  const listEl = document.getElementById('seq-node-list');
-
-  for (let i = 0; i < displayNodes.length; i++) {
-    const s = displayNodes[i];
-    const card = document.createElement('div');
-    card.id = `srv-card-${s.id}`;
-    card.className = 'p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/60 flex flex-col gap-1 transition-all duration-200 animate-seq-row';
-
-    const onlineDot = s.online ? 'bg-emerald-500' : 'bg-rose-500';
-    const latencyColor = s.online ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-neutral-400';
-
-    card.innerHTML = `
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-1.5">
-          <span id="srv-ptr-${i}" class="font-bold font-mono text-black dark:text-white opacity-0 select-none transition-opacity duration-150 w-3 text-sm">></span>
-          <span class="w-1.5 h-1.5 rounded-full ${onlineDot}"></span>
-          <span class="font-bold text-neutral-900 dark:text-white">${s.name || s.id}</span>
-          <span class="text-neutral-400 dark:text-neutral-500 text-[10px] font-mono">${s.ip}</span>
-        </div>
-        <div class="flex items-center gap-2">
-          ${s.loadedInVram ? `<span class="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-semibold font-mono">${s.loadedInVram} in VRAM</span>` : ''}
-          <span class="text-[10px] font-mono ${latencyColor}">${s.latency}</span>
-        </div>
-      </div>
-      <div class="flex items-center gap-2 text-[10px] font-mono text-neutral-500 dark:text-neutral-400 pt-0.5 pl-6">
-        <span title="Amount of GPUs and VRAM">🎮 ${s.gpuSummary}${s.vramSummary ? ' (' + s.vramSummary + ')' : ''}</span>
+      <div class="flex items-center gap-2 text-[11px] font-mono text-neutral-400 dark:text-neutral-500 whitespace-nowrap ml-auto">
+        <span>${s.ip}</span>
         <span class="text-neutral-300 dark:text-neutral-700">•</span>
-        <span title="CPU specifications & utilization">⚡ ${s.cpuSpecs} (${s.cpuLoad})</span>
+        <span>${s.gpuSummary}</span>
         <span class="text-neutral-300 dark:text-neutral-700">•</span>
-        <span title="Installed models">🧠 ${s.modelsSummary}</span>
+        <span class="${latencyClass}">${s.latency}</span>
       </div>
     `;
-
-    if (listEl) listEl.appendChild(card);
-    await new Promise(r => setTimeout(r, 180));
+    seqEl.appendChild(row);
+    await new Promise(r => setTimeout(r, 220));
   }
 
-  // Generous reading pause so user can comfortably inspect all node metrics before pointer moves
-  await new Promise(r => setTimeout(r, 750));
+  // Generous pause so user can comfortably read all available servers before pointer starts moving
+  await new Promise(r => setTimeout(r, 800));
 
-  // 4. '>' pointer auto moves until first available server
-  let targetIndex = displayNodes.findIndex(s => s.available && s.online);
-  if (targetIndex < 0) targetIndex = displayNodes.findIndex(s => s.online);
+  // 3. '>' pointer auto moves until next available server (stops at first available node)
+  let targetIndex = servers.findIndex(s => s.available && s.online);
+  if (targetIndex < 0) targetIndex = servers.findIndex(s => s.online);
   if (targetIndex < 0) targetIndex = 0;
 
-  const headPtr = document.getElementById('srv-ptr-head');
-  const connStatusEl = document.getElementById('seq-conn-status');
-
-  // Initial gateway probe cursor step
-  if (headPtr) headPtr.classList.remove('opacity-0');
-  if (connStatusEl) {
-    connStatusEl.innerHTML = `
-      <div class="flex items-center gap-2 text-neutral-600 dark:text-neutral-300">
-        <span class="w-1.5 h-1.5 rounded-full bg-black dark:bg-white animate-pulse"></span>
-        <span>Scanning cluster nodes for first available server...</span>
-      </div>
-    `;
-  }
-  await new Promise(r => setTimeout(r, 450));
-  if (headPtr) headPtr.classList.add('opacity-0');
-
-  // Step down through nodes until targetIndex is reached (stops at first available node)
   for (let step = 0; step <= targetIndex; step++) {
-    // Clear previous pointers and active card styles
-    for (let j = 0; j < displayNodes.length; j++) {
+    // Clear previous pointers and active styling
+    for (let j = 0; j < servers.length; j++) {
       const ptr = document.getElementById(`srv-ptr-${j}`);
-      const card = document.getElementById(`srv-card-${displayNodes[j].id}`);
+      const r = document.getElementById(`srv-row-${j}`);
       if (ptr) ptr.classList.add('opacity-0');
-      if (card) {
-        card.classList.remove('srv-row-active');
+      if (r) {
+        r.classList.remove('srv-row-active');
+        r.classList.add('text-neutral-400', 'dark:text-neutral-500');
       }
     }
 
-    // Activate current pointer and card
+    // Set current pointer and active styling
     const curPtr = document.getElementById(`srv-ptr-${step}`);
-    const curCard = document.getElementById(`srv-card-${displayNodes[step].id}`);
+    const curRow = document.getElementById(`srv-row-${step}`);
     if (curPtr) curPtr.classList.remove('opacity-0');
-    if (curCard) {
-      curCard.classList.add('srv-row-active');
-    }
-
-    const curServer = displayNodes[step];
-    const isTarget = (step === targetIndex);
-    if (connStatusEl) {
-      connStatusEl.innerHTML = `
-        <div class="flex items-center gap-2 text-neutral-700 dark:text-neutral-200">
-          <span class="font-bold text-black dark:text-white font-mono">></span>
-          <span>Evaluating <span class="font-bold text-black dark:text-white">${curServer.id}</span> (${curServer.ip}): ${isTarget ? '<span class="text-emerald-600 dark:text-emerald-400 font-semibold">Available • Selected!</span>' : 'Checking...'}</span>
-        </div>
-        <span class="text-neutral-400 text-[10px] font-mono">${curServer.latency}</span>
-      `;
+    if (curRow) {
+      curRow.classList.remove('text-neutral-400', 'dark:text-neutral-500');
+      curRow.classList.add('srv-row-active');
     }
 
     // Deliberate inspection pause per server
     await new Promise(r => setTimeout(r, 520));
   }
 
-  // Pause on chosen server to register selection before connecting handshake
+  // Pause on chosen server to register selection before connecting
   await new Promise(r => setTimeout(r, 650));
 
-  const targetServer = displayNodes[targetIndex] || { id: 'cst1', ip: '10.11.2.22', latency: '20ms' };
-
-  // 5. Connecting handshake animation with cycling dots
-  if (connStatusEl) {
-    connStatusEl.innerHTML = `
-      <div class="flex items-center gap-2 text-neutral-700 dark:text-neutral-300 animate-seq-fade">
-        <span class="w-1.5 h-1.5 rounded-full bg-black dark:bg-white animate-pulse"></span>
-        <span>connecting to <span class="font-bold text-black dark:text-white">${targetServer.id}</span><span id="conn-dots">.</span></span>
-      </div>
-      <span class="text-neutral-400 text-[10px] font-mono">${targetServer.ip}:11434</span>
-    `;
-  }
+  // 4. Animation that says connecting
+  const activeServer = servers[targetIndex] || { id: 'cst1', ip: '10.11.2.22', latency: '20ms' };
+  const connBox = document.createElement('div');
+  connBox.className = 'mt-2 pt-2 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-[11px] font-mono text-neutral-600 dark:text-neutral-300 animate-seq-fade px-1.5';
+  connBox.innerHTML = `
+    <div class="flex items-center gap-2">
+      <span class="w-1.5 h-1.5 rounded-full bg-black dark:bg-white animate-pulse"></span>
+      <span>connecting to <span class="font-bold text-black dark:text-white">${activeServer.id}</span><span id="conn-dots">.</span></span>
+    </div>
+    <span class="text-neutral-400 dark:text-neutral-500 text-[10px] font-mono">${activeServer.ip}</span>
+  `;
+  seqEl.appendChild(connBox);
 
   const dotsEl = document.getElementById('conn-dots');
   let dotCount = 1;
@@ -377,22 +292,20 @@ async function launchIdeSequence() {
   await new Promise(r => setTimeout(r, 1400));
   clearInterval(dotTimer);
 
-  // 6. Connected successfully confirmation with satisfying pause
-  if (connStatusEl) {
-    connStatusEl.innerHTML = `
-      <div class="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold animate-seq-pop">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
-        <span>Connected to <span class="font-bold text-black dark:text-white">${targetServer.id}</span> • Session Ready</span>
-      </div>
-      <span class="text-emerald-600 dark:text-emerald-400 text-[10px] font-mono font-medium">${targetServer.latency}</span>
-    `;
-  }
+  // 5. Connected successfully! confirmation with satisfying pause
+  connBox.innerHTML = `
+    <div class="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold animate-seq-pop">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+      <span>connected successfully!</span>
+    </div>
+    <span class="text-emerald-600 dark:text-emerald-400 text-[10px] font-mono font-medium">${activeServer.latency}</span>
+  `;
 
   // Pause on connected successfully confirmation so user registers state
   await new Promise(r => setTimeout(r, 1100));
 
-  // 7. Then transition smoothly into the IDE
-  startStandardMode(targetServer);
+  // 6. Then into the IDE
+  startStandardMode(activeServer);
 
   // Reset portal state for when user returns
   setTimeout(() => {
