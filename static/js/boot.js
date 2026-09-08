@@ -1,4 +1,4 @@
-﻿// Courtesy IDE — Boot / Module Loader
+// Courtesy IDE — Boot / Module Loader
 // This is the single entry point for all IDE modules.
 // Loaded as <script type="module" src="js/boot.js"></script> in index.html.
 // app.js (legacy) is still loaded as a plain script for backward compat.
@@ -14,6 +14,11 @@ import { initWorkspace, pickWorkspaceFolder, setWorkspaceFolder, closeWorkspaceF
          createFile, deleteItem, renameItem } from './modules/workspace.js';
 import { initChat, loadChats, saveChats, createNewChat, selectChat, deleteChat,
          renameChat, sendMessage, stopStreaming, getActiveChat, formatChatTime } from './modules/chat.js';
+import { initTelemetry, openTelemetryTray, toggleTelemetryTray, closeTelemetryTray, flushActiveNodeVram } from './modules/telemetry.js';
+import { initAutocomplete, closePopup } from './modules/autocomplete.js';
+import { initSidebar } from './modules/sidebar.js';
+import { enhanceCodeBlocks } from './modules/code-actions.js';
+import { initTerminal, openTerminal, toggleTerminal, closeTerminal } from './modules/terminal.js';
 
 // ── API Base URL ───────────────────────────────────────────────────────────────
 const apiBaseUrl = (window.location.protocol === 'file:' || !window.location.host || window.location.hostname === 'localhost')
@@ -66,6 +71,16 @@ window.stopIdeChatModern   = stopStreaming;
 window.getActiveChatModern = getActiveChat;
 window.formatChatTime      = formatChatTime;
 
+// Telemetry & Terminal
+window.openTelemetryTray   = openTelemetryTray;
+window.toggleTelemetryTray = toggleTelemetryTray;
+window.closeTelemetryTray  = closeTelemetryTray;
+window.flushActiveNodeVram = flushActiveNodeVram;
+window.openTerminal        = openTerminal;
+window.toggleTerminal      = toggleTerminal;
+window.closeTerminal       = closeTerminal;
+window.closePopup          = closePopup;
+
 // ── Keymap action handlers ─────────────────────────────────────────────────────
 on('chat:new', () => {
   if (typeof window.createNewChat === 'function') window.createNewChat();
@@ -79,6 +94,9 @@ on('sidebar:toggle', () => {
 on('files:quickopen', () => {
   // Ctrl+P — open quick-open file palette (renders in DOM)
   _openQuickFilePalette();
+});
+on('terminal:toggle', () => {
+  toggleTerminal();
 });
 on('chat:stop', () => {
   stopStreaming();
@@ -223,6 +241,11 @@ on('chat:token', ({ msgId, fullText, tps }) => {
 on('chat:streaming-done', ({ msgId, fullText }) => {
   const renderer = _activeRenderers[msgId];
   if (renderer) { renderer.flush(); delete _activeRenderers[msgId]; }
+
+  const contentEl = document.getElementById(`${msgId}-content`);
+  if (contentEl) {
+    try { enhanceCodeBlocks(contentEl); } catch(e) {}
+  }
 
   // Add action bar below completed message
   const msgEl = document.getElementById(msgId);
@@ -383,6 +406,12 @@ document.addEventListener('DOMContentLoaded', () => {
   window.currentWorkspaceFolder = s.workspaceFolder;
   window.ideSelectedModel = s.selectedModel;
   window.isIdeSidebarOpen = s.sidebarOpen;
+
+  // Initialize UI interactive modules
+  try { initTelemetry(); } catch(e) { console.warn('[Boot] initTelemetry error:', e); }
+  try { initAutocomplete(); } catch(e) { console.warn('[Boot] initAutocomplete error:', e); }
+  try { initSidebar(); } catch(e) { console.warn('[Boot] initSidebar error:', e); }
+  try { initTerminal(); } catch(e) { console.warn('[Boot] initTerminal error:', e); }
 
   console.log('[Courtesy Boot] Modules loaded. State initialized.', {
     theme: s.theme,

@@ -2868,6 +2868,12 @@ function renderFileTreeUI(files) {
             onclick="openFileInEditor('${escapeJs(fileObj.path)}', '${escapeJs(key)}')">
             <i data-lucide="${icon}" class="w-3.5 h-3.5 shrink-0 ${isActive ? 'text-gold-400' : 'text-[var(--text-dim)]'}"></i>
             <span class="truncate flex-1">${escapeHtml(key)}</span>
+            ${(() => {
+              const gitCode = window._gitStatus ? (window._gitStatus[fullRelative] || window._gitStatus[key]) : null;
+              if (!gitCode) return '';
+              const badgeClass = gitCode === 'M' ? 'text-amber-500 font-bold' : (gitCode === 'A' ? 'text-emerald-500 font-bold' : (gitCode === 'D' ? 'text-rose-500 font-bold' : 'text-blue-400'));
+              return `<span class="text-[9px] font-mono ${badgeClass} mr-1 px-1 rounded bg-neutral-100 dark:bg-neutral-800" title="Git status: ${gitCode}">${gitCode}</span>`;
+            })()}
             <div class="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0">
               <button onclick="event.stopPropagation(); copyWorkspaceItemPath('${escapeJs(fullRelative)}')"
                 class="p-0.5 hover:text-gold-400 transition" title="Copy relative path">
