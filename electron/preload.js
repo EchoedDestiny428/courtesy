@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   applyDiff: (filePath, targetContent, replacementContent) => ipcRenderer.invoke('fs:applyDiff', filePath, targetContent, replacementContent),
   runCommand: (command, cwd) => ipcRenderer.invoke('exec:runCommand', command, cwd),
   openPath: (folderPath) => ipcRenderer.invoke('shell:openPath', folderPath),
+  scanLocalNodes: () => ipcRenderer.invoke('cluster:scanLocalNodes'),
   isElectron: true,
   getPlatform: () => process.platform
 });

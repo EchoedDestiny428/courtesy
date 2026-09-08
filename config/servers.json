@@ -31,14 +31,37 @@
       "name": "cst1 (Node 1)",
       "role": "inference",
       "type": "ollama",
-      "host": "10.11.2.22",
+      "host": "cst1.local",
+      "ip": "10.11.16.36",
       "port": 11434,
       "ssh_host": "cst1.local",
       "ssh_user": "cst1",
       "enabled": true,
       "preferred_model": "qwen2.5-coder:7b",
       "specs": {
-        "cpu": "12 Cores",
+        "cpu": "Intel Core i7-8086K (12 Cores)",
+        "ram": "32 GB",
+        "gpus": [
+          {"index": 0, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120},
+          {"index": 1, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120}
+        ]
+      },
+      "tags": ["compute", "gpu", "dual-p2000", "7b", "14b"]
+    },
+    {
+      "id": "cst5",
+      "name": "cst5 (Node 5)",
+      "role": "inference",
+      "type": "ollama",
+      "host": "cst5.local",
+      "ip": "10.11.2.22",
+      "port": 11434,
+      "ssh_host": "cst5.local",
+      "ssh_user": "cst5",
+      "enabled": true,
+      "preferred_model": "qwen2.5-coder:7b",
+      "specs": {
+        "cpu": "Intel Core i7-8086K (12 Cores)",
         "ram": "32 GB",
         "gpus": [
           {"index": 0, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120},
@@ -52,14 +75,15 @@
       "name": "cst6 (Inference Node 2)",
       "role": "inference",
       "type": "ollama",
-      "host": "10.11.16.29",
+      "host": "cst6.local",
+      "ip": "10.11.16.29",
       "port": 11434,
       "ssh_host": "cst6.local",
       "ssh_user": "cst6",
       "enabled": true,
       "preferred_model": "qwen2.5-coder:7b",
       "specs": {
-        "cpu": "12 Cores",
+        "cpu": "Intel Core i7-8086K (12 Cores)",
         "ram": "32 GB",
         "gpus": [
           {"index": 0, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120},
@@ -73,14 +97,15 @@
       "name": "cst7 (Heavy Node 3)",
       "role": "inference",
       "type": "ollama",
-      "host": "10.11.2.12",
+      "host": "cst7.local",
+      "ip": "10.11.2.12",
       "port": 11434,
       "ssh_host": "cst7.local",
       "ssh_user": "cst7",
       "enabled": true,
       "preferred_model": "qwen2.5-coder:14b",
       "specs": {
-        "cpu": "12 Cores",
+        "cpu": "Intel Core i7-8086K (12 Cores)",
         "ram": "32 GB",
         "gpus": [
           {"index": 0, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120},

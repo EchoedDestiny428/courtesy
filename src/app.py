@@ -16,7 +16,7 @@ from src.config import (
     load_config, get_servers, get_server_by_id, add_server,
     update_server, delete_server, get_routing_settings, get_general_settings
 )
-from src.collector import update_all_metrics, get_cached_metrics, get_cluster_summary
+from src.collector import update_all_metrics, get_cached_metrics, get_cluster_summary, scan_all_servers
 from src.router import (
     resolve_route, track_request_start, track_request_end,
     ensure_vram_headroom, offload_server_models, _active_requests
@@ -128,6 +128,10 @@ async def api_get_servers():
         s_copy["status"] = {
             "online": s_metric.get("online", False),
             "latency_ms": s_metric.get("latency_ms"),
+            "dns": s_metric.get("dns", f"{s['id']}.local"),
+            "resolved_ip": s_metric.get("resolved_ip", s.get("ip", s.get("host"))),
+            "probe_type": s_metric.get("probe_type"),
+            "verified_name": s_metric.get("verified_name", s["id"]),
             "ram_total_gb": s_metric.get("ram_total_gb", 0),
             "ram_used_gb": s_metric.get("ram_used_gb", 0),
             "ram_percent": s_metric.get("ram_percent", 0),
@@ -136,8 +140,17 @@ async def api_get_servers():
             "models": s_metric.get("models", []),
             "running_models": s_metric.get("running_models", [])
         }
+        if s_metric.get("resolved_ip"):
+            s_copy["host"] = s_metric.get("resolved_ip")
         result.append(s_copy)
     return result
+
+
+@app.get("/api/servers/scan")
+async def api_scan_servers():
+    """Actively scans .local DNS and sends packet probes to all cluster nodes, returning fresh statuses."""
+    return await scan_all_servers()
+
 
 
 @app.post("/api/servers")

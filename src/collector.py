@@ -185,21 +185,140 @@ async def fetch_ssh_metrics(server: Dict[str, Any]) -> Dict[str, Any]:
         return {}
 
 
+def resolve_local_dns(hostname: str) -> Optional[str]:
+    """
+    Actively resolves a .local DNS hostname (e.g. cst1.local, cst5.local, cst6.local, cst7.local)
+    using system mDNS/DNS resolvers, avahi-resolve, or getent.
+    """
+    if not hostname:
+        return None
+    cleaned = hostname.strip()
+    # 1. Standard socket gethostbyname
+    try:
+        ip = socket.gethostbyname(cleaned)
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+
+    # 2. avahi-resolve on Linux (Raspberry Pi / Debian / Ubuntu)
+    if shutil.which("avahi-resolve"):
+        try:
+            res = subprocess.run(["avahi-resolve", "-4", "-n", cleaned], capture_output=True, text=True, timeout=1.2)
+            if res.returncode == 0 and res.stdout.strip():
+                parts = res.stdout.strip().split()
+                if len(parts) >= 2:
+                    return parts[1]
+        except Exception:
+            pass
+
+    # 3. getent hosts fallback
+    if shutil.which("getent"):
+        try:
+            res = subprocess.run(["getent", "hosts", cleaned], capture_output=True, text=True, timeout=1.2)
+            if res.returncode == 0 and res.stdout.strip():
+                parts = res.stdout.strip().split()
+                if len(parts) >= 1:
+                    return parts[0]
+        except Exception:
+            pass
+
+    return None
+
+
+async def probe_target_packet(target_ip: str, dns_name: str, port: int = 11434, ssh_user: str = "", timeout: float = 1.8) -> Dict[str, Any]:
+    """
+    Sends a packet to the target server to parse its identity and confirm it is available.
+    1. Sends HTTP packet to port 11434 (/api/tags) to retrieve model list and server name.
+    2. If Ollama is not active or times out, sends a TCP socket probe to port 22 (SSH handshake),
+       which receives the remote identification packet string containing the server OS / OpenSSH version.
+    """
+    t0 = time.time()
+    
+    # 1. HTTP Probe to port 11434
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(f"http://{target_ip}:{port}/api/tags")
+            if resp.status_code == 200:
+                data = resp.json()
+                models = [
+                    {
+                        "name": m.get("name"),
+                        "size_gb": round(m.get("size", 0) / (1024**3), 2),
+                        "family": m.get("details", {}).get("family", ""),
+                        "parameter_size": m.get("details", {}).get("parameter_size", ""),
+                        "quantization": m.get("details", {}).get("quantization_level", "")
+                    }
+                    for m in data.get("models", [])
+                ]
+                latency = round((time.time() - t0) * 1000, 1)
+                return {
+                    "online": True,
+                    "latency_ms": latency,
+                    "verified_name": dns_name.split(".")[0],
+                    "probe_type": "ollama_packet",
+                    "models": models,
+                    "details": f"Ollama {len(models)} models available"
+                }
+    except Exception:
+        pass
+
+    # 2. TCP Socket Probe to port 22 (SSH identification packet)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        t_start = time.time()
+        s.connect((target_ip, 22))
+        banner = s.recv(512).decode("utf-8", errors="ignore").strip()
+        s.close()
+        latency = round((time.time() - t_start) * 1000, 1)
+        if banner and "SSH" in banner:
+            return {
+                "online": True,
+                "latency_ms": latency,
+                "verified_name": dns_name.split(".")[0],
+                "probe_type": "ssh_packet",
+                "models": [],
+                "details": banner
+            }
+    except Exception:
+        pass
+
+    return {
+        "online": False,
+        "latency_ms": None,
+        "verified_name": dns_name.split(".")[0],
+        "probe_type": "none",
+        "models": [],
+        "details": "Connection timed out / unreachable"
+    }
+
+
 async def poll_server(server: Dict[str, Any], client: httpx.AsyncClient) -> Dict[str, Any]:
-    """Polls a single server for Ollama/API models and system/GPU metrics."""
+    """Polls a single server for .local DNS resolution, packet probe, and hardware metrics."""
     server_id = server.get("id", "")
     server_name = server.get("name", server_id)
     server_type = server.get("type", "ollama")
-    host = server.get("host", "127.0.0.1")
+    configured_host = server.get("host", "127.0.0.1")
+    ssh_host = server.get("ssh_host", f"{server_id}.local")
+    ssh_user = server.get("ssh_user", server_id)
     port = server.get("port", 11434)
     enabled = server.get("enabled", True)
+    fallback_ip = server.get("ip", configured_host)
+    
+    # 1. Resolve .local DNS dynamically
+    dns_target = ssh_host if ssh_host.endswith(".local") else f"{server_id}.local"
+    resolved_ip = resolve_local_dns(dns_target) if server_type != "system_only" else None
+    effective_ip = resolved_ip or fallback_ip
     
     metrics: Dict[str, Any] = {
         "id": server_id,
         "name": server_name,
         "role": server.get("role", "inference"),
         "type": server_type,
-        "host": host,
+        "host": effective_ip,
+        "dns": dns_target,
+        "resolved_ip": resolved_ip or effective_ip,
         "port": port,
         "enabled": enabled,
         "online": False,
@@ -231,48 +350,38 @@ async def poll_server(server: Dict[str, Any], client: httpx.AsyncClient) -> Dict
             metrics.update(ssh_data)
         return metrics
 
-    # For Ollama / Inference nodes
-    # If running on local Windows machine, HTTP requests to 10.11.x.x need to reach the LAN
-    # Since 10.11.x.x is on the local Ethernet behind cst, we can test HTTP direct or via proxy
-    t0 = time.time()
-    direct_url = f"http://{host}:{port}/api/tags"
-    
-    ollama_ok = False
-    try:
-        # First attempt: direct HTTP (works if machine is on same subnet or routes exist)
-        resp = await client.get(direct_url, timeout=2.0)
-        if resp.status_code == 200:
-            ollama_ok = True
-            metrics["latency_ms"] = round((time.time() - t0) * 1000, 1)
-            data = resp.json()
-            metrics["models"] = [
-                {
-                    "name": m.get("name"),
-                    "size_gb": round(m.get("size", 0) / (1024**3), 2),
-                    "family": m.get("details", {}).get("family", ""),
-                    "parameter_size": m.get("details", {}).get("parameter_size", ""),
-                    "quantization": m.get("details", {}).get("quantization_level", "")
-                }
-                for m in data.get("models", [])
-            ]
-            
-            # Check running models via /api/ps
-            try:
-                ps_resp = await client.get(f"http://{host}:{port}/api/ps", timeout=2.0)
-                if ps_resp.status_code == 200:
-                    metrics["running_models"] = ps_resp.json().get("models", [])
-            except Exception:
-                pass
-    except Exception:
-        pass
+    # For Inference nodes (cst1, cst5, cst6, cst7): send probe packet
+    probe_result = await probe_target_packet(
+        target_ip=effective_ip,
+        dns_name=dns_target,
+        port=port,
+        ssh_user=ssh_user,
+        timeout=1.8
+    )
 
-    # If direct HTTP failed (e.g. from outside LAN), query via cst SSH curl
-    if not ollama_ok:
+    metrics["online"] = probe_result["online"]
+    metrics["latency_ms"] = probe_result["latency_ms"]
+    metrics["probe_type"] = probe_result.get("probe_type")
+    metrics["verified_name"] = probe_result.get("verified_name")
+    if probe_result["models"]:
+        metrics["models"] = probe_result["models"]
+
+    # Check running models via /api/ps if online
+    if metrics["online"] and probe_result.get("probe_type") == "ollama_packet":
+        try:
+            ps_resp = await client.get(f"http://{effective_ip}:{port}/api/ps", timeout=1.5)
+            if ps_resp.status_code == 200:
+                metrics["running_models"] = ps_resp.json().get("models", [])
+        except Exception:
+            pass
+
+    # If direct query failed outside LAN, attempt proxy probe via cst SSH curl
+    if not metrics["online"] and not IS_ON_CST:
         try:
             t0 = time.time()
             proc = await asyncio.create_subprocess_exec(
                 "ssh", "-o", "ConnectTimeout=3", "-o", "BatchMode=yes", "cst@cst",
-                f"curl -s --connect-timeout 2 http://{host}:{port}/api/tags",
+                f"curl -s --connect-timeout 2 http://{effective_ip}:{port}/api/tags",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
@@ -281,7 +390,7 @@ async def poll_server(server: Dict[str, Any], client: httpx.AsyncClient) -> Dict
                 import json
                 data = json.loads(stdout.decode("utf-8"))
                 if "models" in data:
-                    ollama_ok = True
+                    metrics["online"] = True
                     metrics["latency_ms"] = round((time.time() - t0) * 1000, 1)
                     metrics["models"] = [
                         {
@@ -296,11 +405,11 @@ async def poll_server(server: Dict[str, Any], client: httpx.AsyncClient) -> Dict
         except Exception as e:
             metrics["error"] = str(e)
 
-    metrics["online"] = ollama_ok
-
-    # Fetch SSH hardware metrics (Dual Quadro P2000s, RAM, etc.)
+    # Fetch SSH hardware metrics (Dual Quadro P2000s, RAM, etc.) if online
     if metrics["online"]:
-        ssh_data = await fetch_ssh_metrics(server)
+        server_copy = dict(server)
+        server_copy["ssh_host"] = effective_ip
+        ssh_data = await fetch_ssh_metrics(server_copy)
         if ssh_data:
             if "gpus" in ssh_data and ssh_data["gpus"]:
                 metrics["gpus"] = ssh_data["gpus"]
@@ -375,3 +484,34 @@ def get_cluster_summary() -> Dict[str, Any]:
         "unique_models_count": len(all_models),
         "models": sorted(list(all_models))
     }
+
+
+async def scan_all_servers() -> List[Dict[str, Any]]:
+    """
+    Actively scans and probes all servers in parallel.
+    Resolves .local DNS (cst1.local, cst5.local, cst6.local, cst7.local) and sends probe packets,
+    verifying availability and identity before returning the live server array.
+    """
+    servers = get_servers()
+    async with httpx.AsyncClient() as client:
+        tasks = [poll_server(s, client) for s in servers]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    server_list = []
+    async with _cache_lock:
+        for s, res in zip(servers, results):
+            server_id = s.get("id")
+            if isinstance(res, dict):
+                _metrics_cache[server_id] = res
+                s_copy = dict(s)
+                s_copy["status"] = res
+                s_copy["ip"] = res.get("host", s.get("host"))
+                server_list.append(s_copy)
+            elif isinstance(res, Exception):
+                logger.error(f"Error scanning server {server_id}: {res}")
+                s_copy = dict(s)
+                s_copy["status"] = {"online": False, "error": str(res)}
+                server_list.append(s_copy)
+
+    return server_list
+

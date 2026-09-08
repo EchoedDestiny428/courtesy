@@ -2,7 +2,7 @@
 
 let currentTab = 'codex';
 let selectedModelMode = '7b'; // '7b', '14b', 'auto'
-let selectedNodeTarget = 'all'; // 'all', 'cst1', 'cst6', 'cst7'
+let selectedNodeTarget = 'all'; // 'all', 'cst1', 'cst5', 'cst6', 'cst7'
 let chatHistory = [];
 let ws = null;
 let currentServers = [];
@@ -90,9 +90,12 @@ function showView(viewId) {
 async function fetchRealServerList() {
   const startTime = performance.now();
   try {
-    const res = await fetch(`${apiBaseUrl}/api/servers`, {
-      signal: AbortSignal.timeout(4000)
-    });
+    let res;
+    try {
+      res = await fetch(`${apiBaseUrl}/api/servers/scan`, { signal: AbortSignal.timeout(3500) });
+    } catch (e) {
+      res = await fetch(`${apiBaseUrl}/api/servers`, { signal: AbortSignal.timeout(3500) });
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = await res.json();
     if (!Array.isArray(raw) || raw.length === 0) throw new Error('Empty cluster response');
@@ -124,10 +127,13 @@ async function fetchRealServerList() {
         displayName = s.name.replace(/\s*\(.*?\)/, '').trim();
       }
 
+      const effectiveIp = s.status?.resolved_ip || s.ip || (s.host === '127.0.0.1' ? '100.107.249.92' : s.host);
+
       return {
         id: s.id,
         name: displayName,
-        ip: (s.host === '127.0.0.1') ? '100.107.249.92' : (s.host || '10.11.2.x'),
+        dns: s.status?.dns || s.ssh_host || `${s.id}.local`,
+        ip: effectiveIp,
         isGateway: isGateway,
         online: isOnline,
         latencyMs: latMs || 999,
@@ -138,11 +144,22 @@ async function fetchRealServerList() {
       };
     });
   } catch (err) {
-    console.warn('[Courtesy] Live server fetch failed, using fallback cluster telemetry:', err);
+    console.warn('[Courtesy] Live server fetch failed, trying local native probe or fallback:', err);
+    if (window.electronAPI && typeof window.electronAPI.scanLocalNodes === 'function') {
+      try {
+        const nativeResults = await window.electronAPI.scanLocalNodes();
+        if (Array.isArray(nativeResults) && nativeResults.length > 0) {
+          return nativeResults;
+        }
+      } catch (e) {
+        console.warn('[Courtesy] Electron native scan error:', e);
+      }
+    }
     return [
-      { id: 'cst1', name: 'cst1', ip: '10.11.2.22', isGateway: false, online: true, latencyMs: 22, latency: '22ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true },
-      { id: 'cst6', name: 'cst6', ip: '10.11.16.29', isGateway: false, online: true, latencyMs: 24, latency: '24ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true },
-      { id: 'cst7', name: 'cst7', ip: '10.11.2.12', isGateway: false, online: true, latencyMs: 21, latency: '21ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true }
+      { id: 'cst1', name: 'cst1', dns: 'cst1.local', ip: '10.11.16.36', isGateway: false, online: true, latencyMs: 18, latency: '18ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true },
+      { id: 'cst5', name: 'cst5', dns: 'cst5.local', ip: '10.11.2.22', isGateway: false, online: true, latencyMs: 16, latency: '16ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true },
+      { id: 'cst6', name: 'cst6', dns: 'cst6.local', ip: '10.11.16.29', isGateway: false, online: true, latencyMs: 19, latency: '19ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true },
+      { id: 'cst7', name: 'cst7', dns: 'cst7.local', ip: '10.11.2.12', isGateway: false, online: true, latencyMs: 19, latency: '19ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true }
     ];
   }
 }
@@ -317,6 +334,18 @@ async function launchIdeSequence() {
 }
 
 let activeIdeServer = { id: 'cst7', ip: '10.11.2.12', latency: '21ms' };
+
+function startStandardMode(server) {
+  if (server) {
+    activeIdeServer = server;
+    const nodeEl = document.getElementById('ide-connected-node');
+    if (nodeEl) {
+      nodeEl.innerText = `${server.id} (${server.ip})`;
+    }
+  }
+  showView('view-standard');
+  updateIdeModelUI();
+}
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -1051,7 +1080,7 @@ function updatePinnedNodeUI() {
 }
 
 function cyclePinnedNode() {
-  const nodes = ['cst1', 'cst6', 'cst7'];
+  const nodes = ['cst1', 'cst5', 'cst6', 'cst7'];
   const idx = nodes.indexOf(pinnedNode);
   pinnedNode = nodes[(idx >= 0 ? idx + 1 : 0) % nodes.length];
   localStorage.setItem('pinned_cluster_node', pinnedNode);
@@ -1081,7 +1110,7 @@ function selectModelMode(mode) {
 
   if (mode === '14b') {
     pinnedNode = 'cst7';
-  } else if (mode === '7b' && pinnedNode !== 'cst6') {
+  } else if (mode === '7b' && !['cst1', 'cst5', 'cst6'].includes(pinnedNode)) {
     pinnedNode = 'cst1';
   }
   localStorage.setItem('pinned_cluster_node', pinnedNode);

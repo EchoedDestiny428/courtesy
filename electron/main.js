@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const fsp = require('fs').promises;
 const { exec } = require('child_process');
+const dns = require('dns').promises;
+const net = require('net');
 
 let mainWindow = null;
 
@@ -130,6 +132,109 @@ function createWindow() {
       return true;
     }
     return false;
+  });
+
+  // Cluster .local DNS Scanning & Packet Probing IPC Handler
+  function probeNodeSocket(host, id) {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      let finished = false;
+
+      // 1. Probe Port 11434 (Ollama)
+      const socket = net.createConnection({ host, port: 11434, timeout: 1200 });
+      
+      socket.on('connect', () => {
+        if (finished) return;
+        finished = true;
+        const latency = Date.now() - start;
+        socket.destroy();
+        resolve({ online: true, latencyMs: latency, name: id, probe: 'ollama' });
+      });
+
+      socket.on('timeout', () => {
+        socket.destroy();
+        if (!finished) trySsh();
+      });
+
+      socket.on('error', () => {
+        socket.destroy();
+        if (!finished) trySsh();
+      });
+
+      // 2. Fallback Probe to Port 22 (SSH Handshake packet)
+      function trySsh() {
+        if (finished) return;
+        const sshSocket = net.createConnection({ host, port: 22, timeout: 1200 });
+        
+        sshSocket.on('connect', () => {
+          if (finished) return;
+          finished = true;
+          const latency = Date.now() - start;
+          sshSocket.destroy();
+          resolve({ online: true, latencyMs: latency, name: id, probe: 'ssh' });
+        });
+
+        sshSocket.on('data', () => {
+          if (finished) return;
+          finished = true;
+          const latency = Date.now() - start;
+          sshSocket.destroy();
+          resolve({ online: true, latencyMs: latency, name: id, probe: 'ssh' });
+        });
+
+        sshSocket.on('timeout', () => {
+          sshSocket.destroy();
+          if (!finished) {
+            finished = true;
+            resolve({ online: false, latencyMs: 999, name: id, probe: 'none' });
+          }
+        });
+
+        sshSocket.on('error', () => {
+          sshSocket.destroy();
+          if (!finished) {
+            finished = true;
+            resolve({ online: false, latencyMs: 999, name: id, probe: 'none' });
+          }
+        });
+      }
+    });
+  }
+
+  ipcMain.handle('cluster:scanLocalNodes', async () => {
+    const nodes = [
+      { id: 'cst1', dns: 'cst1.local', defaultIp: '10.11.16.36' },
+      { id: 'cst5', dns: 'cst5.local', defaultIp: '10.11.2.22' },
+      { id: 'cst6', dns: 'cst6.local', defaultIp: '10.11.16.29' },
+      { id: 'cst7', dns: 'cst7.local', defaultIp: '10.11.2.12' }
+    ];
+
+    const results = await Promise.all(nodes.map(async (node) => {
+      let resolvedIp = node.defaultIp;
+      try {
+        const lookup = await dns.lookup(node.dns);
+        if (lookup && lookup.address) {
+          resolvedIp = lookup.address;
+        }
+      } catch (e) {}
+
+      const probe = await probeNodeSocket(resolvedIp, node.id);
+      return {
+        id: node.id,
+        name: node.id,
+        dns: node.dns,
+        ip: resolvedIp,
+        isGateway: false,
+        online: probe.online,
+        latencyMs: probe.latencyMs,
+        latency: probe.online ? `${probe.latencyMs}ms` : 'offline',
+        gpuCount: 2,
+        gpuSummary: '2x Quadro P2000 (10GB)',
+        available: probe.online
+      };
+    }));
+
+    return results;
   });
 
   // Window control IPC handlers
