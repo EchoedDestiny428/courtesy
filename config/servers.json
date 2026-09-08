@@ -64,11 +64,11 @@
         "cpu": "Intel Core i7-8086K (12 Cores)",
         "ram": "32 GB",
         "gpus": [
-          {"index": 0, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120},
-          {"index": 1, "name": "NVIDIA Quadro P2000", "vram_total_mb": 5120}
+          {"index": 0, "name": "NVIDIA Quadro M2000", "vram_total_mb": 4096},
+          {"index": 1, "name": "NVIDIA Quadro M2000", "vram_total_mb": 4096}
         ]
       },
-      "tags": ["compute", "gpu", "dual-p2000", "7b", "14b"]
+      "tags": ["compute", "gpu", "dual-m2000", "7b"]
     },
     {
       "id": "cst6",

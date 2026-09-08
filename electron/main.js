@@ -218,7 +218,7 @@ function createWindow() {
         }
       } catch (e) {}
 
-      const probe = await probeNodeSocket(resolvedIp, node.id);
+      const isM2000 = (node.id === 'cst5');
       return {
         id: node.id,
         name: node.id,
@@ -229,7 +229,7 @@ function createWindow() {
         latencyMs: probe.latencyMs,
         latency: probe.online ? `${probe.latencyMs}ms` : 'offline',
         gpuCount: 2,
-        gpuSummary: '2x Quadro P2000 (10GB)',
+        gpuSummary: isM2000 ? '2x Quadro M2000 (8GB)' : '2x Quadro P2000 (10GB)',
         available: probe.online
       };
     }));

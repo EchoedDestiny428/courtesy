@@ -157,7 +157,7 @@ async function fetchRealServerList() {
     }
     return [
       { id: 'cst1', name: 'cst1', dns: 'cst1.local', ip: '10.11.16.36', isGateway: false, online: true, latencyMs: 18, latency: '18ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true },
-      { id: 'cst5', name: 'cst5', dns: 'cst5.local', ip: '10.11.2.22', isGateway: false, online: true, latencyMs: 16, latency: '16ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true },
+      { id: 'cst5', name: 'cst5', dns: 'cst5.local', ip: '10.11.2.22', isGateway: false, online: true, latencyMs: 16, latency: '16ms', gpuCount: 2, gpuSummary: '2x Quadro M2000 (8GB)', available: true },
       { id: 'cst6', name: 'cst6', dns: 'cst6.local', ip: '10.11.16.29', isGateway: false, online: true, latencyMs: 19, latency: '19ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true },
       { id: 'cst7', name: 'cst7', dns: 'cst7.local', ip: '10.11.2.12', isGateway: false, online: true, latencyMs: 19, latency: '19ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true }
     ];
