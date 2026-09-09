@@ -574,11 +574,63 @@ function launchPureTerminal() {
   openPureTerminal(activeAppSelectorServer);
 }
 
-// --- Pure Terminal Engine ---
+// --- Pure Terminal Engine (Zero-Latency Interactive SSH PTY via xterm.js) ---
+let pureTerminalInstance = null;
+let pureTerminalFitAddon = null;
+let pureTerminalSocket = null;
+
+const PURE_TERMINAL_THEMES = {
+  dark: {
+    background: '#070709',
+    foreground: '#e4e4e7',
+    cursor: '#ffffff',
+    cursorAccent: '#070709',
+    selectionBackground: 'rgba(255, 255, 255, 0.25)',
+    black: '#18181b',
+    red: '#f43f5e',
+    green: '#10b981',
+    yellow: '#f59e0b',
+    blue: '#3b82f6',
+    magenta: '#d946ef',
+    cyan: '#06b6d4',
+    white: '#f4f4f5',
+    brightBlack: '#71717a',
+    brightRed: '#fb7185',
+    brightGreen: '#34d399',
+    brightYellow: '#fbbf24',
+    brightBlue: '#60a5fa',
+    brightMagenta: '#e879f9',
+    brightCyan: '#22d3ee',
+    brightWhite: '#ffffff'
+  },
+  light: {
+    background: '#fdfdfd',
+    foreground: '#18181b',
+    cursor: '#000000',
+    cursorAccent: '#fdfdfd',
+    selectionBackground: 'rgba(0, 0, 0, 0.15)',
+    black: '#000000',
+    red: '#e11d48',
+    green: '#059669',
+    yellow: '#d97706',
+    blue: '#2563eb',
+    magenta: '#c026d3',
+    cyan: '#0891b2',
+    white: '#e4e4e7',
+    brightBlack: '#a1a1aa',
+    brightRed: '#f43f5e',
+    brightGreen: '#10b981',
+    brightYellow: '#f59e0b',
+    brightBlue: '#3b82f6',
+    brightMagenta: '#d946ef',
+    brightCyan: '#06b6d4',
+    brightWhite: '#ffffff'
+  }
+};
+
 function openPureTerminal(serverId) {
   activePureTerminalServer = serverId;
   activeAppSelectorServer = serverId;
-  pureTerminalCwd = '';
 
   const srv = currentServers.find(s => s.id === serverId) || { id: serverId };
   const effectiveIp = srv.status?.resolved_ip || srv.ip || srv.host || `${serverId}.local`;
@@ -590,186 +642,153 @@ function openPureTerminal(serverId) {
   const pillEl = document.getElementById('pure-terminal-status-pill');
   if (pillEl) pillEl.innerText = `${effectiveIp} • ${lat}`;
 
-  const promptEl = document.getElementById('pure-terminal-prompt');
-  const user = courtesyUser.username || 'user';
-  if (promptEl) promptEl.innerText = `${user}@${serverId}:~$`;
-
-  const outputEl = document.getElementById('pure-terminal-output');
-  if (outputEl && !outputEl.innerHTML.trim()) {
-    outputEl.innerHTML = `
-      <div class="text-neutral-500 dark:text-neutral-400 font-mono text-[11px] pb-2 border-b border-neutral-200/60 dark:border-neutral-800/60 leading-relaxed">
-        Connected to <span class="text-black dark:text-white font-semibold">${escapeHtml(serverId)}</span> (${escapeHtml(effectiveIp)})<br>
-        Type commands, <span class="text-neutral-700 dark:text-neutral-300 font-semibold">'clear'</span> to clear, or <span class="text-neutral-700 dark:text-neutral-300 font-semibold">'exit'</span> to return.
-      </div>
-    `;
-  }
-
   showView('view-pure-terminal');
-  setTimeout(focusPureTerminalInput, 80);
+
+  // Launch real interactive PTY session
+  initOrConnectPureTerminal(serverId);
 }
 
-function focusPureTerminalInput() {
-  const input = document.getElementById('pure-terminal-input');
-  if (input) input.focus();
+function initOrConnectPureTerminal(serverId) {
+  if (pureTerminalSocket) {
+    try { pureTerminalSocket.close(); } catch (e) {}
+    pureTerminalSocket = null;
+  }
+
+  const container = document.getElementById('pure-terminal-xterm');
+  if (!container) return;
+
+  const isDark = document.documentElement.classList.contains('dark');
+  const activeTheme = isDark ? PURE_TERMINAL_THEMES.dark : PURE_TERMINAL_THEMES.light;
+
+  if (!pureTerminalInstance && window.Terminal) {
+    pureTerminalInstance = new window.Terminal({
+      cursorBlink: true,
+      cursorStyle: 'block',
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      fontSize: 13,
+      lineHeight: 1.25,
+      theme: activeTheme,
+      allowProposedApi: true
+    });
+
+    if (window.FitAddon && window.FitAddon.FitAddon) {
+      pureTerminalFitAddon = new window.FitAddon.FitAddon();
+      pureTerminalInstance.loadAddon(pureTerminalFitAddon);
+    }
+
+    pureTerminalInstance.open(container);
+
+    pureTerminalInstance.onData((data) => {
+      if (pureTerminalSocket && pureTerminalSocket.readyState === WebSocket.OPEN) {
+        pureTerminalSocket.send(data);
+      }
+    });
+
+    if (pureTerminalInstance.onBinary) {
+      pureTerminalInstance.onBinary((data) => {
+        if (pureTerminalSocket && pureTerminalSocket.readyState === WebSocket.OPEN) {
+          const buffer = new Uint8Array(data.length);
+          for (let i = 0; i < data.length; ++i) {
+            buffer[i] = data.charCodeAt(i) & 255;
+          }
+          pureTerminalSocket.send(buffer);
+        }
+      });
+    }
+  } else if (pureTerminalInstance) {
+    pureTerminalInstance.options.theme = activeTheme;
+    pureTerminalInstance.clear();
+  }
+
+  setTimeout(() => {
+    if (pureTerminalFitAddon) {
+      try { pureTerminalFitAddon.fit(); } catch (e) {}
+    }
+  }, 100);
+
+  // Compute WebSocket URL connecting to Pi Gateway
+  let wsBase = apiBaseUrl.replace(/^http/, 'ws');
+  if (!wsBase.startsWith('ws')) {
+    const loc = window.location;
+    const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+    wsBase = `${proto}//${loc.host}`;
+  }
+  const wsUrl = `${wsBase}/ws/terminal/${serverId}`;
+
+  if (pureTerminalInstance) {
+    pureTerminalInstance.write(`\x1b[38;5;244mConnecting direct SSH PTY to ${serverId}...\x1b[0m\r\n`);
+  }
+
+  const socket = new WebSocket(wsUrl);
+  socket.binaryType = 'arraybuffer';
+  pureTerminalSocket = socket;
+
+  socket.onopen = () => {
+    if (pureTerminalInstance) {
+      pureTerminalInstance.write(`\x1b[32m✓ Direct SSH PTY session active on ${serverId}.\x1b[0m\r\n\r\n`);
+      if (pureTerminalFitAddon) {
+        try {
+          pureTerminalFitAddon.fit();
+          socket.send(JSON.stringify({
+            type: 'resize',
+            cols: pureTerminalInstance.cols,
+            rows: pureTerminalInstance.rows
+          }));
+        } catch (e) {}
+      }
+      pureTerminalInstance.focus();
+    }
+  };
+
+  socket.onmessage = (event) => {
+    if (!pureTerminalInstance) return;
+    if (typeof event.data === 'string') {
+      pureTerminalInstance.write(event.data);
+    } else {
+      const uint8 = new Uint8Array(event.data);
+      pureTerminalInstance.write(uint8);
+    }
+  };
+
+  socket.onerror = () => {
+    if (pureTerminalInstance) {
+      pureTerminalInstance.write(`\r\n\x1b[31m[WebSocket connection error: Could not reach gateway SSH bridge]\x1b[0m\r\n`);
+    }
+  };
+
+  socket.onclose = () => {
+    if (pureTerminalInstance) {
+      pureTerminalInstance.write(`\r\n\x1b[38;5;244m[Session closed. Click Reconnect to restart.]\x1b[0m\r\n`);
+    }
+  };
 }
 
 function clearPureTerminal() {
-  const outputEl = document.getElementById('pure-terminal-output');
-  if (outputEl) outputEl.innerHTML = '';
-  focusPureTerminalInput();
-}
-
-function handlePureTerminalKey(event) {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    submitPureTerminalCommand();
-  } else if (event.key === 'ArrowUp') {
-    event.preventDefault();
-    if (pureTerminalHistory.length > 0) {
-      if (pureTerminalHistoryIndex === -1) {
-        pureTerminalHistoryIndex = pureTerminalHistory.length - 1;
-      } else if (pureTerminalHistoryIndex > 0) {
-        pureTerminalHistoryIndex--;
-      }
-      event.target.value = pureTerminalHistory[pureTerminalHistoryIndex];
-    }
-  } else if (event.key === 'ArrowDown') {
-    event.preventDefault();
-    if (pureTerminalHistoryIndex !== -1) {
-      if (pureTerminalHistoryIndex < pureTerminalHistory.length - 1) {
-        pureTerminalHistoryIndex++;
-        event.target.value = pureTerminalHistory[pureTerminalHistoryIndex];
-      } else {
-        pureTerminalHistoryIndex = -1;
-        event.target.value = '';
-      }
-    }
-  } else if (event.ctrlKey && (event.key === 'l' || event.key === 'L')) {
-    event.preventDefault();
-    clearPureTerminal();
+  if (pureTerminalInstance) {
+    pureTerminalInstance.clear();
+    pureTerminalInstance.focus();
   }
 }
 
-async function submitPureTerminalCommand() {
-  const input = document.getElementById('pure-terminal-input');
-  const log = document.getElementById('pure-terminal-output');
-  const spinner = document.getElementById('pure-terminal-spinner');
-  if (!input || !log) return;
-
-  const rawCmd = input.value;
-  const cmd = rawCmd.trim();
-  input.value = '';
-
-  if (!cmd) {
-    const promptText = document.getElementById('pure-terminal-prompt')?.innerText || '$';
-    const blankRow = document.createElement('div');
-    blankRow.className = "flex items-center gap-2 py-0.5";
-    blankRow.innerHTML = `<span class="text-emerald-600 dark:text-emerald-400 font-semibold select-none">${promptText}</span>`;
-    log.appendChild(blankRow);
-    log.scrollTop = log.scrollHeight;
-    return;
-  }
-
-  pureTerminalHistory.push(cmd);
-  pureTerminalHistoryIndex = -1;
-
-  if (cmd.toLowerCase() === 'clear') {
-    clearPureTerminal();
-    return;
-  }
-
-  if (cmd.toLowerCase() === 'exit') {
-    returnToAppSelector();
-    return;
-  }
-
-  const promptText = document.getElementById('pure-terminal-prompt')?.innerText || '$';
-  const entry = document.createElement('div');
-  entry.className = "space-y-1 my-1.5";
-  entry.innerHTML = `
-    <div class="flex items-center gap-2">
-      <span class="text-emerald-600 dark:text-emerald-400 font-semibold select-none">${promptText}</span>
-      <span class="text-black dark:text-white font-mono font-medium">${escapeHtml(cmd)}</span>
-      <span class="text-[10px] text-neutral-400 ml-auto select-none">${new Date().toLocaleTimeString()}</span>
-    </div>
-    <div class="terminal-cmd-res text-[11px] text-neutral-400 animate-pulse">Running...</div>
-  `;
-  log.appendChild(entry);
-  log.scrollTop = log.scrollHeight;
-
-  const resEl = entry.querySelector('.terminal-cmd-res');
-  if (spinner) spinner.classList.remove('hidden');
-
-  try {
-    const isCd = cmd.startsWith('cd ') || cmd === 'cd';
-    const reqCmd = isCd ? `${cmd} && pwd` : cmd;
-
-    const res = await fetch(`${apiBaseUrl}/api/terminal/exec`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        server_id: activePureTerminalServer || 'cst',
-        command: reqCmd,
-        cwd: pureTerminalCwd,
-        username: courtesyUser.username || ''
-      })
-    });
-
-    const data = await res.json();
-    if (spinner) spinner.classList.add('hidden');
-    resEl.classList.remove('animate-pulse');
-
-    if (!res.ok) {
-      throw new Error(data.detail || 'Execution failed');
-    }
-
-    if (isCd && data.exit_code === 0 && data.stdout) {
-      const newCwd = data.stdout.trim().split('\n').pop().trim();
-      if (newCwd) {
-        pureTerminalCwd = newCwd;
-        const user = courtesyUser.username || 'user';
-        const displayCwd = pureTerminalCwd.replace(/^\/home\/[^\/]+/, '~');
-        const promptEl = document.getElementById('pure-terminal-prompt');
-        if (promptEl) promptEl.innerText = `${user}@${activePureTerminalServer}:${displayCwd}$`;
-      }
-    }
-
-    let badge = '';
-    if (data.exit_code !== 0) {
-      badge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-rose-500/15 text-rose-500 font-medium">exit ${data.exit_code}</span>`;
-    }
-
-    let outHtml = '';
-    if (isCd && data.exit_code === 0) {
-      outHtml = '';
-    } else if (data.stdout) {
-      outHtml = `<pre class="whitespace-pre-wrap font-mono text-neutral-800 dark:text-neutral-200 text-xs">${escapeHtml(data.stdout)}</pre>`;
-    }
-
-    let errHtml = '';
-    if (data.stderr) {
-      errHtml = `<pre class="whitespace-pre-wrap font-mono text-rose-500 text-xs">${escapeHtml(data.stderr)}</pre>`;
-    }
-
-    if (!badge && !outHtml && !errHtml) {
-      resEl.remove();
-    } else {
-      resEl.innerHTML = `
-        ${badge ? `<div class="mb-1">${badge}</div>` : ''}
-        ${outHtml}
-        ${errHtml}
-      `;
-    }
-
-  } catch (e) {
-    if (spinner) spinner.classList.add('hidden');
-    resEl.classList.remove('animate-pulse');
-    resEl.innerHTML = `<div class="text-rose-500 font-mono text-xs">${escapeHtml(e.message)}</div>`;
-  } finally {
-    log.scrollTop = log.scrollHeight;
-    focusPureTerminalInput();
+function reconnectPureTerminal() {
+  if (activePureTerminalServer) {
+    initOrConnectPureTerminal(activePureTerminalServer);
   }
 }
+
+// Global window resize listener to resize remote PTY in real-time
+window.addEventListener('resize', () => {
+  if (pureTerminalFitAddon && pureTerminalInstance && pureTerminalSocket && pureTerminalSocket.readyState === WebSocket.OPEN) {
+    try {
+      pureTerminalFitAddon.fit();
+      pureTerminalSocket.send(JSON.stringify({
+        type: 'resize',
+        cols: pureTerminalInstance.cols,
+        rows: pureTerminalInstance.rows
+      }));
+    } catch (e) {}
+  }
+});
 
 // --- Admin Control Panel Handlers ---
 function checkAdminSession() {
@@ -2732,6 +2751,10 @@ function applyTheme(theme) {
   localStorage.setItem('courtesy_theme', theme);
   localStorage.setItem('courtesy_minimal_theme', theme);
   localStorage.setItem('courtesy-theme', theme);
+
+  if (pureTerminalInstance && typeof PURE_TERMINAL_THEMES !== 'undefined') {
+    pureTerminalInstance.options.theme = isDark ? PURE_TERMINAL_THEMES.dark : PURE_TERMINAL_THEMES.light;
+  }
 
   if (window.lucide) lucide.createIcons();
 }

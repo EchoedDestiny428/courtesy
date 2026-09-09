@@ -3,9 +3,16 @@ import json
 import logging
 import os
 import shutil
+import select
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+
+try:
+    import paramiko
+except ImportError:
+    paramiko = None
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -997,6 +1004,135 @@ async def websocket_metrics_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
     except Exception:
         manager.disconnect(websocket)
+
+
+# --- Interactive SSH Pseudo-Terminal (PTY) WebSocket ---
+
+@app.websocket("/ws/terminal/{server_id}")
+async def websocket_terminal_endpoint(websocket: WebSocket, server_id: str):
+    """
+    High-performance, zero-latency interactive SSH PTY bridge.
+    Allocates a real pseudo-terminal on the target node, supporting interactive CLI apps:
+    nano, vim, htop, top, ollama run, python REPL, etc.
+    """
+    await websocket.accept()
+
+    if paramiko is None:
+        await websocket.send_bytes(b"\r\n\x1b[31m[Courtesy: paramiko library required for interactive PTY terminal]\x1b[0m\r\n")
+        await websocket.close()
+        return
+
+    # 1. Resolve server
+    server = get_server_by_id(server_id)
+    if not server and server_id == "cst":
+        server = {"id": "cst", "ssh_host": "127.0.0.1", "ssh_user": "cst"}
+
+    if not server:
+        await websocket.send_bytes(f"\r\n\x1b[31m[Courtesy: Server '{server_id}' not found]\x1b[0m\r\n".encode("utf-8"))
+        await websocket.close()
+        return
+
+    ssh_host = server.get("ssh_host", f"{server_id}.local")
+    ssh_user = server.get("ssh_user", server_id)
+    if server_id == "cst" and IS_ON_CST:
+        ssh_host = "127.0.0.1"
+
+    touch_activity(server_id)
+
+    # 2. Establish Paramiko SSH Client
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    connected = False
+    try:
+        await asyncio.to_thread(client.connect, ssh_host, username=ssh_user, timeout=5.0)
+        connected = True
+    except Exception as e1:
+        logger.debug(f"SSH key auth failed for {server_id}@{ssh_host}: {e1}, attempting password fallback...")
+        try:
+            await asyncio.to_thread(client.connect, ssh_host, username=ssh_user, password="cst", timeout=5.0)
+            connected = True
+        except Exception as e2:
+            logger.error(f"SSH connection failed to {ssh_user}@{ssh_host}: {e2}")
+            err_msg = f"\r\n\x1b[31m[Courtesy: Failed to connect to {ssh_user}@{ssh_host}: {e2}]\x1b[0m\r\n"
+            await websocket.send_bytes(err_msg.encode("utf-8"))
+            await websocket.close()
+            return
+
+    # 3. Create interactive PTY channel (default 100 cols, 30 rows)
+    chan = await asyncio.to_thread(client.invoke_shell, term="xterm-256color", width=100, height=30)
+    chan.setblocking(False)
+
+    stop_event = threading.Event()
+    loop = asyncio.get_running_loop()
+
+    # 4. Reader task: Remote PTY (SSH) -> Client (WebSocket)
+    async def pty_reader():
+        while not stop_event.is_set():
+            try:
+                def read_chan():
+                    if chan.recv_ready():
+                        return chan.recv(4096)
+                    r, _, _ = select.select([chan], [], [], 0.03)
+                    if r and chan.recv_ready():
+                        return chan.recv(4096)
+                    return b""
+
+                data = await loop.run_in_executor(None, read_chan)
+                if data:
+                    await websocket.send_bytes(data)
+                elif chan.exit_status_ready():
+                    break
+            except Exception:
+                break
+
+    # 5. Writer task: Client (WebSocket) -> Remote PTY (SSH)
+    async def pty_writer():
+        while not stop_event.is_set():
+            try:
+                msg = await websocket.receive()
+                if "bytes" in msg and msg["bytes"]:
+                    chan.send(msg["bytes"])
+                    touch_activity(server_id)
+                elif "text" in msg and msg["text"]:
+                    text = msg["text"]
+                    if text.startswith("{") and text.endswith("}"):
+                        try:
+                            ctrl = json.loads(text)
+                            if ctrl.get("type") == "resize":
+                                cols = int(ctrl.get("cols", 100))
+                                rows = int(ctrl.get("rows", 30))
+                                chan.resize_pty(width=cols, height=rows)
+                                continue
+                        except Exception:
+                            pass
+                    chan.send(text.encode("utf-8"))
+                    touch_activity(server_id)
+                elif msg.get("type") == "websocket.disconnect":
+                    break
+            except (WebSocketDisconnect, Exception):
+                break
+
+    reader_task = asyncio.create_task(pty_reader())
+    writer_task = asyncio.create_task(pty_writer())
+
+    done, pending = await asyncio.wait(
+        [reader_task, writer_task],
+        return_when=asyncio.FIRST_COMPLETED
+    )
+
+    stop_event.set()
+    for t in pending:
+        t.cancel()
+
+    try:
+        chan.close()
+    except Exception:
+        pass
+    try:
+        client.close()
+    except Exception:
+        pass
 
 
 # --- Static Files & SPA Route ---
