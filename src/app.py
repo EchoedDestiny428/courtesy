@@ -21,9 +21,12 @@ from src.router import (
     resolve_route, track_request_start, track_request_end,
     ensure_vram_headroom, offload_server_models, _active_requests
 )
-from src.web_agent import search_web, fetch_webpage, generate_grounded_context
 from src.auth import verify_admin_credentials, create_admin_session, is_valid_admin_token, revoke_admin_session, require_admin_auth
-from src.router import _active_requests
+from src.ownership import (
+    get_server_ownership, get_all_ownership, claim_server,
+    release_server, verify_or_register_user, touch_activity
+)
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -142,6 +145,7 @@ async def api_get_servers():
         }
         if s_metric.get("resolved_ip"):
             s_copy["host"] = s_metric.get("resolved_ip")
+        s_copy["ownership"] = get_server_ownership(s["id"])
         result.append(s_copy)
     return result
 
@@ -254,6 +258,67 @@ async def api_server_offload(server_id: str):
     return {"status": "success", "server_id": server_id, "unloaded": unloaded}
 
 
+# --- Cluster Node Ownership & Reservation Endpoints ---
+
+@app.get("/api/ownership")
+async def api_get_ownership():
+    """Returns cluster-wide node reservation status."""
+    return get_all_ownership()
+
+
+@app.post("/api/ownership/verify")
+async def api_ownership_verify(payload: Dict[str, Any]):
+    """Verifies user's 4-digit PIN or registers new user."""
+    username = payload.get("username", "").strip()
+    pin = str(payload.get("pin", "")).strip()
+    if not username or not pin:
+        raise HTTPException(status_code=400, detail="Username and 4-digit PIN are required.")
+    try:
+        return verify_or_register_user(username, pin)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/ownership/claim")
+async def api_ownership_claim(payload: Dict[str, Any]):
+    """Claims a cluster node for a verified user."""
+    server_id = payload.get("server_id", "").strip()
+    username = payload.get("username", "").strip()
+    pin = str(payload.get("pin", "")).strip()
+    if not server_id or not username or not pin:
+        raise HTTPException(status_code=400, detail="server_id, username, and 4-digit PIN are required.")
+    try:
+        res = claim_server(server_id, username, pin)
+        if not res.get("success"):
+            raise HTTPException(status_code=409, detail=res.get("error", "Node reservation conflict."))
+        return res
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/ownership/release")
+async def api_ownership_release(payload: Dict[str, Any], request: Request):
+    """Releases ownership of a cluster node."""
+    server_id = payload.get("server_id", "").strip()
+    username = payload.get("username", "").strip()
+    pin = str(payload.get("pin", "")).strip() if payload.get("pin") is not None else None
+    force = payload.get("force", False)
+
+    if force:
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header.replace("Bearer ", "").strip() if auth_header else payload.get("admin_token", "")
+        if not is_valid_admin_token(token):
+            raise HTTPException(status_code=403, detail="Admin authorization required to force-release node.")
+
+    try:
+        res = release_server(server_id, username, pin, force=force)
+        if not res.get("success"):
+            raise HTTPException(status_code=400, detail=res.get("error", "Failed to release node."))
+        return res
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # --- Web Access & Live Documentation Tool Endpoints ---
 
 @app.get("/api/tools/search")
@@ -313,10 +378,14 @@ async def api_chat(request: Request):
                 except Exception as e:
                     logger.warning(f"Web grounding failed: {e}")
 
+    pref_server = body.get("server") or body.get("server_id")
     try:
-        target = resolve_route(model_query=model_req)
+        target = resolve_route(model_query=model_req, preferred_server=pref_server)
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+    if body.get("username"):
+        touch_activity(target.server_id, body.get("username"))
 
     logger.info(f"Routing chat for '{model_req}' -> {target.server_id} ({target.server_name}) model '{target.model_name}'")
 

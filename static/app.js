@@ -56,20 +56,108 @@ if (window.marked) {
 }
 
 // ================= High-Level View Controllers =================
-let currentView = 'portal'; // 'portal', 'standard', 'admin'
+let currentView = 'portal'; // 'portal', 'user-cluster', 'standard', 'admin'
 let currentWorkspaceFolder = localStorage.getItem('workspace_folder') || '';
 if (currentWorkspaceFolder === 'courtesy') {
   currentWorkspaceFolder = '';
   localStorage.removeItem('workspace_folder');
 }
-let pinnedNode = localStorage.getItem('pinned_cluster_node') || 'cst1';
+let pinnedNode = localStorage.getItem('pinned_cluster_node') || 'csthink';
 if (pinnedNode === 'kraken') {
-  pinnedNode = 'cst1';
-  localStorage.setItem('pinned_cluster_node', 'cst1');
+  pinnedNode = 'csthink';
+  localStorage.setItem('pinned_cluster_node', 'csthink');
 }
 
+// User & Ownership Authentication State
+let courtesyUser = {
+  username: localStorage.getItem('courtesy_user_name') || '',
+  pin: localStorage.getItem('courtesy_user_pin') || ''
+};
+let adminSessionToken = sessionStorage.getItem('admin_token') || '';
+
+const FALLBACK_SERVERS = [
+  {
+    id: 'csthink',
+    name: 'csthink',
+    role: 'inference',
+    ip: '10.11.16.16',
+    specs: {
+      cpu: 'Intel Xeon w3-2423 (12 Cores)',
+      ram: '32 GB',
+      gpus: [{ name: 'NVIDIA GeForce RTX 4080', vram_total_mb: 16384 }]
+    },
+    status: { online: true, latency_ms: 0.3, resolved_ip: '10.11.16.16' },
+    ownership: { is_claimed: false, owner: null }
+  },
+  {
+    id: 'cst1',
+    name: 'cst1',
+    role: 'inference',
+    ip: '10.11.16.36',
+    specs: {
+      cpu: 'Intel Core i7-8086K (12 Cores)',
+      ram: '32 GB',
+      gpus: [{ name: 'NVIDIA Quadro P2000', vram_total_mb: 5120 }, { name: 'NVIDIA Quadro P2000', vram_total_mb: 5120 }]
+    },
+    status: { online: true, latency_ms: 18, resolved_ip: '10.11.16.36' },
+    ownership: { is_claimed: false, owner: null }
+  },
+  {
+    id: 'cst7',
+    name: 'cst7',
+    role: 'inference',
+    ip: '10.11.2.12',
+    specs: {
+      cpu: 'Intel Core i7-8086K (12 Cores)',
+      ram: '32 GB',
+      gpus: [{ name: 'NVIDIA Quadro P2000', vram_total_mb: 5120 }, { name: 'NVIDIA Quadro P2000', vram_total_mb: 5120 }]
+    },
+    status: { online: true, latency_ms: 19, resolved_ip: '10.11.2.12' },
+    ownership: { is_claimed: false, owner: null }
+  },
+  {
+    id: 'cst6',
+    name: 'cst6',
+    role: 'inference',
+    ip: '10.11.16.29',
+    specs: {
+      cpu: 'Intel Core i7-8086K (12 Cores)',
+      ram: '32 GB',
+      gpus: [{ name: 'NVIDIA Quadro P2000', vram_total_mb: 5120 }, { name: 'NVIDIA Quadro P2000', vram_total_mb: 5120 }]
+    },
+    status: { online: true, latency_ms: 19, resolved_ip: '10.11.16.29' },
+    ownership: { is_claimed: false, owner: null }
+  },
+  {
+    id: 'cst5',
+    name: 'cst5',
+    role: 'inference',
+    ip: '10.11.2.22',
+    specs: {
+      cpu: 'Intel Core i7-8086K (12 Cores)',
+      ram: '32 GB',
+      gpus: [{ name: 'NVIDIA Quadro M2000', vram_total_mb: 4096 }, { name: 'NVIDIA Quadro M2000', vram_total_mb: 4096 }]
+    },
+    status: { online: true, latency_ms: 16, resolved_ip: '10.11.2.22' },
+    ownership: { is_claimed: false, owner: null }
+  },
+  {
+    id: 'cst',
+    name: 'cst',
+    role: 'gateway',
+    ip: '100.107.249.92',
+    specs: {
+      cpu: 'Cortex-A72 (4 Cores)',
+      ram: '8 GB',
+      gpus: []
+    },
+    status: { online: true, latency_ms: 1, resolved_ip: '100.107.249.92' },
+    ownership: { is_claimed: false, owner: null }
+  }
+];
+
 function showView(viewId) {
-  const views = ['view-portal', 'view-standard', 'view-admin'];
+  const views = ['view-portal', 'view-user-cluster', 'view-standard', 'view-admin'];
   const targetView = views.includes(viewId) ? viewId : 'view-portal';
   views.forEach(v => {
     const el = document.getElementById(v);
@@ -86,6 +174,547 @@ function showView(viewId) {
   currentView = targetView.replace('view-', '');
   if (window.lucide) lucide.createIcons();
 }
+
+// --- Portal Button Handlers (Top: User, Bottom: Admin) ---
+function handleUserPortalClick() {
+  if (!courtesyUser.username || !courtesyUser.pin) {
+    openUserAuthModal(false);
+  } else {
+    showView('view-user-cluster');
+    loadUserClusterGrid();
+  }
+}
+
+function handleAdminPortalClick() {
+  showView('view-admin');
+  checkAdminSession();
+}
+
+// --- User Authentication Modal (Username + 4-Digit PIN) ---
+function openUserAuthModal(isSwitching = false) {
+  const modal = document.getElementById('modal-user-auth');
+  if (!modal) return;
+  const title = document.getElementById('modal-auth-title');
+  const uInput = document.getElementById('input-auth-username');
+  const pInput = document.getElementById('input-auth-pin');
+  const err = document.getElementById('auth-error-msg');
+
+  if (title) title.innerText = isSwitching ? 'Switch User' : 'User Sign In';
+  if (err) err.classList.add('hidden');
+  if (uInput) uInput.value = courtesyUser.username || '';
+  if (pInput) pInput.value = '';
+
+  modal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+
+  setTimeout(() => {
+    if (uInput && !uInput.value) {
+      uInput.focus();
+    } else if (pInput) {
+      pInput.focus();
+    }
+  }, 100);
+}
+
+function closeUserAuthModal() {
+  const modal = document.getElementById('modal-user-auth');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function submitUserAuth(event) {
+  if (event) event.preventDefault();
+  const uInput = document.getElementById('input-auth-username');
+  const pInput = document.getElementById('input-auth-pin');
+  const err = document.getElementById('auth-error-msg');
+  const submitBtn = document.getElementById('btn-auth-submit');
+
+  const username = uInput ? uInput.value.trim() : '';
+  const pin = pInput ? pInput.value.trim() : '';
+
+  if (!username || username.length < 2) {
+    if (err) { err.innerText = 'Username must be at least 2 characters.'; err.classList.remove('hidden'); }
+    return;
+  }
+  if (!/^\d{4}$/.test(pin)) {
+    if (err) { err.innerText = 'PIN must be exactly 4 digits.'; err.classList.remove('hidden'); }
+    return;
+  }
+
+  if (submitBtn) submitBtn.disabled = true;
+  if (err) err.classList.add('hidden');
+
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/ownership/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, pin })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Verification failed');
+    }
+
+    courtesyUser.username = data.username || username;
+    courtesyUser.pin = pin;
+    localStorage.setItem('courtesy_user_name', courtesyUser.username);
+    localStorage.setItem('courtesy_user_pin', pin);
+
+    closeUserAuthModal();
+    showToast(`Signed in as ${courtesyUser.username}`, '👤');
+
+    const nameEl = document.getElementById('user-cluster-current-name');
+    if (nameEl) nameEl.innerText = courtesyUser.username;
+
+    if (currentView === 'portal' || currentView === 'user-cluster') {
+      showView('view-user-cluster');
+      loadUserClusterGrid();
+    }
+  } catch (e) {
+    if (err) {
+      err.innerText = e.message || 'Incorrect PIN or server error.';
+      err.classList.remove('hidden');
+    }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+// --- PC Specs Formatter (Strict Requirement: ONLY CPU, GPU, and RAM) ---
+function formatServerSpecs(srv) {
+  // CPU
+  const cpu = srv.specs?.cpu || 'Unknown CPU';
+
+  // GPU
+  const gpus = srv.status?.gpus || srv.specs?.gpus || [];
+  let gpu = 'Integrated / No GPU';
+  if (gpus.length > 0) {
+    const rawName = gpus[0].name || 'GPU';
+    const cleanName = rawName.replace(/^NVIDIA\s+/i, '').trim();
+    const totalVramMb = gpus.reduce((acc, g) => acc + (g.vram_total_mb || 0), 0);
+    const totalVramGb = Math.round(totalVramMb / 1024);
+    gpu = `${gpus.length}x ${cleanName}${totalVramGb ? ` (${totalVramGb}GB)` : ''}`;
+  } else if (srv.role === 'gateway' || srv.id === 'cst') {
+    gpu = 'Gateway Host (No GPU)';
+  }
+
+  // RAM
+  const ram = srv.specs?.ram || (srv.status?.ram_total_gb ? `${srv.status.ram_total_gb} GB` : 'Unknown RAM');
+
+  return { cpu, gpu, ram };
+}
+
+// --- User Cluster Grid View ---
+async function loadUserClusterGrid(isManualRefresh = false) {
+  const nameEl = document.getElementById('user-cluster-current-name');
+  if (nameEl) nameEl.innerText = courtesyUser.username || 'guest';
+
+  const iconEl = document.getElementById('user-cluster-refresh-icon');
+  if (iconEl && isManualRefresh) iconEl.classList.add('animate-spin');
+
+  const grid = document.getElementById('user-cluster-cards-grid');
+  const summaryPill = document.getElementById('user-cluster-summary-pill');
+
+  try {
+    const url = isManualRefresh ? `${apiBaseUrl}/api/servers/scan` : `${apiBaseUrl}/api/servers`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const servers = await res.json();
+    if (Array.isArray(servers) && servers.length > 0) {
+      currentServers = servers;
+    }
+  } catch (e) {
+    console.warn('[Courtesy] Live server fetch failed, using cached/fallback:', e);
+    if (!currentServers || currentServers.length === 0) {
+      currentServers = FALLBACK_SERVERS;
+    }
+  } finally {
+    if (iconEl && isManualRefresh) {
+      setTimeout(() => iconEl.classList.remove('animate-spin'), 400);
+    }
+  }
+
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const total = currentServers.length;
+  const onlineCount = currentServers.filter(s => s.status?.online).length;
+  const claimedCount = currentServers.filter(s => s.ownership?.is_claimed).length;
+
+  if (summaryPill) {
+    summaryPill.innerText = `${total} Nodes • ${onlineCount} Online • ${claimedCount} Reserved`;
+  }
+
+  currentServers.forEach(srv => {
+    const cardHtml = renderUserClusterCard(srv);
+    grid.insertAdjacentHTML('beforeend', cardHtml);
+  });
+
+  if (window.lucide) lucide.createIcons();
+  if (isManualRefresh) showToast('Cluster status refreshed', '✓');
+}
+
+function renderUserClusterCard(srv) {
+  const specs = formatServerSpecs(srv);
+  const isOnline = Boolean(srv.status?.online);
+  const lat = srv.status?.latency_ms != null ? `${Math.round(srv.status.latency_ms)}ms` : (isOnline ? 'online' : 'offline');
+  const isGateway = (srv.role === 'gateway' || srv.id === 'cst');
+
+  const ownership = srv.ownership || { is_claimed: false, owner: null };
+  const currentUName = (courtesyUser.username || '').trim().toLowerCase();
+  const isMine = ownership.is_claimed && (ownership.owner && ownership.owner.toLowerCase() === currentUName);
+  const isOther = ownership.is_claimed && !isMine;
+
+  let badgeHtml = '';
+  let actionsHtml = '';
+
+  if (isGateway) {
+    badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">Gateway Node</span>`;
+    actionsHtml = `<button disabled class="w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 text-neutral-400 dark:text-neutral-600 text-xs font-mono cursor-not-allowed">Orchestrator Host</button>`;
+  } else if (!isOnline) {
+    badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-neutral-100 text-neutral-400 dark:bg-neutral-800 dark:text-neutral-500">Offline</span>`;
+    actionsHtml = `<button disabled class="w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 text-neutral-400 dark:text-neutral-600 text-xs font-medium cursor-not-allowed">Node Unreachable</button>`;
+  } else if (isMine) {
+    badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800">Reserved by You</span>`;
+    actionsHtml = `
+      <div class="flex items-center gap-2">
+        <button onclick="launchIdeForServer('${srv.id}')" class="flex-1 py-2 rounded-xl bg-black dark:bg-white text-white dark:text-black text-xs font-medium hover:bg-neutral-800 dark:hover:bg-neutral-200 transition text-center shadow-xs">
+          Open IDE
+        </button>
+        <button onclick="handleReleaseNode('${srv.id}')" class="px-3.5 py-2 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:border-rose-500 hover:text-rose-600 text-neutral-600 dark:text-neutral-400 text-xs font-medium transition" title="Release node reservation">
+          Release
+        </button>
+      </div>
+    `;
+  } else if (isOther) {
+    badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">Claimed: ${escapeHtml(ownership.owner)}</span>`;
+    actionsHtml = `
+      <button disabled class="w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-neutral-400 dark:text-neutral-600 text-xs font-mono cursor-not-allowed text-center">
+        In Use by ${escapeHtml(ownership.owner)}
+      </button>
+    `;
+  } else {
+    // Available
+    badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">Available</span>`;
+    actionsHtml = `
+      <button onclick="handleClaimAndLaunch('${srv.id}')" class="w-full py-2 rounded-xl bg-black dark:bg-white text-white dark:text-black text-xs font-medium hover:bg-neutral-800 dark:hover:bg-neutral-200 transition text-center shadow-xs">
+        Claim &amp; Launch IDE
+      </button>
+    `;
+  }
+
+  const effectiveIp = srv.status?.resolved_ip || srv.ip || srv.host || '';
+
+  return `
+    <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/90 p-4 shadow-xs flex flex-col justify-between space-y-3.5 transition hover:border-neutral-300 dark:hover:border-neutral-700">
+      
+      <!-- Header: Node ID, IP, Live Status Dot, Ownership Status -->
+      <div>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-neutral-400'}"></span>
+            <span class="font-mono font-semibold text-sm text-black dark:text-white">${srv.id}</span>
+            <span class="text-[11px] font-mono text-neutral-400 dark:text-neutral-500">(${effectiveIp})</span>
+          </div>
+          <div class="text-[11px] font-mono ${isOnline ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-neutral-400'}">
+            ${lat}
+          </div>
+        </div>
+
+        <div class="mt-2.5 flex items-center justify-between">
+          <span class="text-[11px] font-mono text-neutral-400 dark:text-neutral-500">Status</span>
+          ${badgeHtml}
+        </div>
+      </div>
+
+      <!-- Specs: ONLY CPU, GPU, and RAM -->
+      <div class="rounded-xl bg-neutral-50 dark:bg-neutral-950/70 border border-neutral-100 dark:border-neutral-800/80 p-3 space-y-2 font-mono text-xs select-text">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-neutral-400 text-[11px]">CPU</span>
+          <span class="text-neutral-800 dark:text-neutral-200 text-right truncate text-xs" title="${escapeHtml(specs.cpu)}">${escapeHtml(specs.cpu)}</span>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-neutral-400 text-[11px]">GPU</span>
+          <span class="text-neutral-800 dark:text-neutral-200 text-right truncate text-xs font-semibold" title="${escapeHtml(specs.gpu)}">${escapeHtml(specs.gpu)}</span>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-neutral-400 text-[11px]">RAM</span>
+          <span class="text-neutral-800 dark:text-neutral-200 text-right text-xs">${escapeHtml(specs.ram)}</span>
+        </div>
+      </div>
+
+      <!-- Action Button(s) -->
+      <div>
+        ${actionsHtml}
+      </div>
+
+    </div>
+  `;
+}
+
+// --- Claim, Release, & Node Launch Actions ---
+async function handleClaimAndLaunch(serverId) {
+  if (!courtesyUser.username || !courtesyUser.pin) {
+    openUserAuthModal(false);
+    return;
+  }
+
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/ownership/claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        server_id: serverId,
+        username: courtesyUser.username,
+        pin: courtesyUser.pin
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Reservation conflict or invalid PIN');
+    }
+
+    showToast(`Reserved ${serverId} for ${courtesyUser.username}`, '✓');
+    launchIdeForServer(serverId);
+  } catch (e) {
+    showToast(e.message || 'Failed to claim node', '⚠');
+    loadUserClusterGrid();
+  }
+}
+
+async function handleReleaseNode(serverId) {
+  if (!courtesyUser.username || !courtesyUser.pin) {
+    openUserAuthModal(false);
+    return;
+  }
+
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/ownership/release`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        server_id: serverId,
+        username: courtesyUser.username,
+        pin: courtesyUser.pin
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to release node');
+    }
+
+    showToast(`Node ${serverId} is now available`, '✓');
+    loadUserClusterGrid();
+  } catch (e) {
+    showToast(e.message || 'Release error', '⚠');
+  }
+}
+
+function launchIdeForServer(serverId) {
+  const srv = currentServers.find(s => s.id === serverId) || { id: serverId, ip: `${serverId}.local`, latency: 'online' };
+  const effectiveIp = srv.status?.resolved_ip || srv.ip || srv.host || `${srv.id}.local`;
+  const lat = srv.status?.latency_ms ? `${Math.round(srv.status.latency_ms)}ms` : 'online';
+  startStandardMode({
+    id: srv.id,
+    ip: effectiveIp,
+    latency: lat
+  });
+}
+
+// --- Admin Control Panel Handlers ---
+function checkAdminSession() {
+  const token = sessionStorage.getItem('admin_token') || adminSessionToken;
+  const loginCard = document.getElementById('admin-login-card');
+  const panel = document.getElementById('admin-panel-content');
+  const pill = document.getElementById('admin-auth-pill');
+
+  if (token) {
+    if (loginCard) loginCard.classList.add('hidden');
+    if (panel) panel.classList.remove('hidden');
+    if (pill) { pill.classList.remove('hidden'); pill.classList.add('flex'); }
+    loadAdminClusterData();
+  } else {
+    if (loginCard) loginCard.classList.remove('hidden');
+    if (panel) panel.classList.add('hidden');
+    if (pill) { pill.classList.add('hidden'); pill.classList.remove('flex'); }
+    const err = document.getElementById('admin-login-error');
+    if (err) err.classList.add('hidden');
+    const passIn = document.getElementById('admin-login-pass');
+    if (passIn) { passIn.value = ''; setTimeout(() => passIn.focus(), 100); }
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+async function submitAdminLogin(event) {
+  if (event) event.preventDefault();
+  const passIn = document.getElementById('admin-login-pass');
+  const err = document.getElementById('admin-login-error');
+  const password = passIn ? passIn.value.trim() : '';
+
+  if (!password) return;
+  if (err) err.classList.add('hidden');
+
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'cst', password })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.token) {
+      throw new Error(data.detail || 'Invalid admin credentials');
+    }
+
+    adminSessionToken = data.token;
+    sessionStorage.setItem('admin_token', adminSessionToken);
+
+    checkAdminSession();
+    showToast('Admin Session Activated', '👑');
+  } catch (e) {
+    if (err) {
+      err.innerText = e.message || 'Incorrect password.';
+      err.classList.remove('hidden');
+    }
+  }
+}
+
+async function handleAdminLogout() {
+  const token = sessionStorage.getItem('admin_token') || adminSessionToken;
+  if (token) {
+    try {
+      await fetch(`${apiBaseUrl}/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+    } catch (e) {}
+  }
+  sessionStorage.removeItem('admin_token');
+  adminSessionToken = '';
+  checkAdminSession();
+  showToast('Logged out from Admin Console');
+}
+
+async function loadAdminClusterData() {
+  const grid = document.getElementById('admin-servers-grid');
+  if (!grid) return;
+
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/servers`);
+    if (res.ok) {
+      const servers = await res.json();
+      currentServers = servers;
+    }
+  } catch (e) {}
+
+  grid.innerHTML = '';
+  currentServers.forEach(srv => {
+    const specs = formatServerSpecs(srv);
+    const isOnline = Boolean(srv.status?.online);
+    const ownership = srv.ownership || { is_claimed: false, owner: null };
+    const effectiveIp = srv.status?.resolved_ip || srv.ip || srv.host || '';
+
+    const card = document.createElement('div');
+    card.className = 'p-4 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-xs flex flex-col justify-between space-y-3';
+    card.innerHTML = `
+      <div>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-neutral-400'}"></span>
+            <span class="font-mono font-semibold text-sm text-black dark:text-white">${srv.id}</span>
+            <span class="text-xs font-mono text-neutral-400">(${effectiveIp})</span>
+          </div>
+          <span class="text-xs font-mono ${isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-neutral-400'}">
+            ${srv.status?.latency_ms ? Math.round(srv.status.latency_ms) + 'ms' : (isOnline ? 'online' : 'offline')}
+          </span>
+        </div>
+
+        <!-- Reservation Info -->
+        <div class="mt-2 text-xs font-mono flex items-center justify-between">
+          <span class="text-neutral-400">Reservation:</span>
+          ${ownership.is_claimed 
+            ? `<span class="font-semibold text-amber-600 dark:text-amber-400">Reserved by ${escapeHtml(ownership.owner)} ${ownership.active_mins_ago != null ? `(${ownership.active_mins_ago}m ago)` : ''}</span>`
+            : `<span class="text-emerald-600 dark:text-emerald-400 font-medium">Unreserved / Available</span>`
+          }
+        </div>
+      </div>
+
+      <!-- Specs (Only CPU, GPU, RAM) -->
+      <div class="rounded-xl bg-neutral-50 dark:bg-neutral-950/70 border border-neutral-100 dark:border-neutral-800/80 p-2.5 space-y-1 font-mono text-xs">
+        <div class="flex justify-between text-neutral-600 dark:text-neutral-300"><span>CPU:</span><span class="truncate max-w-[220px]">${escapeHtml(specs.cpu)}</span></div>
+        <div class="flex justify-between text-neutral-600 dark:text-neutral-300"><span>GPU:</span><span class="truncate max-w-[220px] font-semibold">${escapeHtml(specs.gpu)}</span></div>
+        <div class="flex justify-between text-neutral-600 dark:text-neutral-300"><span>RAM:</span><span>${escapeHtml(specs.ram)}</span></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center gap-2 pt-1">
+        ${ownership.is_claimed 
+          ? `<button onclick="handleAdminForceRelease('${srv.id}')" class="flex-1 py-1.5 rounded-xl border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 text-xs font-medium transition">Force Release</button>`
+          : `<button disabled class="flex-1 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-900 text-neutral-400 dark:text-neutral-600 text-xs font-mono cursor-not-allowed">Node Free</button>`
+        }
+        <button onclick="offloadSingleNode('${srv.id}')" class="px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:border-black dark:hover:border-white text-xs font-medium transition" title="Offload VRAM on this node">
+          Flush VRAM
+        </button>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+
+  if (window.lucide) lucide.createIcons();
+}
+
+async function handleAdminForceRelease(serverId) {
+  const token = sessionStorage.getItem('admin_token') || adminSessionToken;
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/ownership/release`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ server_id: serverId, force: true, admin_token: token })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Force release failed');
+    showToast(`Force-released reservation on ${serverId}`, '✓');
+    loadAdminClusterData();
+  } catch (e) {
+    showToast(e.message || 'Force release error', '⚠');
+  }
+}
+
+async function adminFlushVram() {
+  const token = sessionStorage.getItem('admin_token') || adminSessionToken;
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/admin/terminate_sessions`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      showToast('Cluster VRAM Flushed', '⏹');
+      loadAdminClusterData();
+    }
+  } catch (e) {
+    showToast('VRAM flush failed', '⚠');
+  }
+}
+
+async function adminRestartGateway() {
+  const token = sessionStorage.getItem('admin_token') || adminSessionToken;
+  try {
+    await fetch(`${apiBaseUrl}/api/admin/restart`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    showToast('Gateway restart initiated', '🔄');
+    setTimeout(loadAdminClusterData, 3000);
+  } catch (e) {
+    showToast('Restart signal sent');
+  }
+}
+
 
 async function fetchRealServerList() {
   const startTime = performance.now();
@@ -333,19 +962,8 @@ async function launchIdeSequence() {
   }, 400);
 }
 
-let activeIdeServer = { id: 'cst7', ip: '10.11.2.12', latency: '21ms' };
+let activeIdeServer = { id: 'csthink', ip: '10.11.16.16', latency: 'online' };
 
-function startStandardMode(server) {
-  if (server) {
-    activeIdeServer = server;
-    const nodeEl = document.getElementById('ide-connected-node');
-    if (nodeEl) {
-      nodeEl.innerText = `${server.id} (${server.ip})`;
-    }
-  }
-  showView('view-standard');
-  updateIdeModelUI();
-}
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -392,7 +1010,7 @@ function updateIdeModelUI() {
   // 2. Update Bottom Input Toolbar Badge
   const inputModelText = document.getElementById('ide-input-model-name');
   if (inputModelText) {
-    const srv = activeIdeServer?.id || 'cst7';
+    const srv = activeIdeServer?.id || 'csthink';
     inputModelText.innerText = `${srv} • ${is14b ? '14B' : '7B'}`;
   }
 }
@@ -971,6 +1589,8 @@ async function sendIdeChat() {
       },
       body: JSON.stringify({
         model: modelName,
+        server: activeIdeServer?.id,
+        username: courtesyUser?.username,
         messages: [
           { role: 'system', content: systemPrompt },
           ...ideChatHistory
@@ -4686,27 +5306,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // Route to saved admin session or landing launch portal
   const savedToken = sessionStorage.getItem('admin_token');
   if (savedToken) {
-    if (savedToken.startsWith('admin_session_')) {
-      showView('view-admin');
-    } else {
-      fetch(`${apiBaseUrl}/api/auth/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: savedToken })
-      }).then(r => r.json()).then(d => {
-        if (d.valid) {
-          showView('view-admin');
-        } else {
-          sessionStorage.removeItem('admin_token');
-          if (currentView === 'admin') showView('view-portal');
-        }
-      }).catch(() => {
-        sessionStorage.removeItem('admin_token');
-        if (currentView === 'admin') showView('view-portal');
-      });
-    }
+    showView('view-admin');
+    checkAdminSession();
   } else {
     showView('view-portal');
+  }
+
+  const userEl = document.getElementById('user-cluster-current-name');
+  if (userEl && courtesyUser.username) {
+    userEl.innerText = courtesyUser.username;
   }
 
   if (window.lucide) lucide.createIcons();

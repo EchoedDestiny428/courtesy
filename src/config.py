@@ -38,6 +38,27 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "tags": ["gateway", "tailscale", "arm64"]
         },
         {
+            "id": "csthink",
+            "name": "csthink (ThinkStation RTX 4080)",
+            "role": "inference",
+            "type": "ollama",
+            "host": "csthink.local",
+            "ip": "10.11.16.16",
+            "port": 11434,
+            "ssh_host": "csthink.local",
+            "ssh_user": "csthink",
+            "enabled": True,
+            "preferred_model": "qwen2.5-coder:14b",
+            "specs": {
+                "cpu": "Intel Xeon w3-2423 (12 Cores)",
+                "ram": "32 GB",
+                "gpus": [
+                    {"index": 0, "name": "NVIDIA GeForce RTX 4080", "vram_total_mb": 16384}
+                ]
+            },
+            "tags": ["compute", "gpu", "rtx4080", "thinkstation", "heavy-reasoning", "7b", "14b"]
+        },
+        {
             "id": "cst1",
             "name": "cst1 (Node 1)",
             "role": "inference",
