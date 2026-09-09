@@ -1053,7 +1053,8 @@ async def websocket_terminal_endpoint(websocket: WebSocket, server_id: str):
     except Exception as e1:
         logger.debug(f"SSH key auth failed for {server_id}@{ssh_host}: {e1}, attempting password fallback...")
         try:
-            await asyncio.to_thread(client.connect, ssh_host, username=ssh_user, password="cst", timeout=5.0)
+            ssh_pass = os.environ.get("COURTESY_SSH_PASS", "cst")
+            await asyncio.to_thread(client.connect, ssh_host, username=ssh_user, password=ssh_pass, timeout=5.0)
             connected = True
         except Exception as e2:
             logger.error(f"SSH connection failed to {ssh_user}@{ssh_host}: {e2}")

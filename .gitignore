@@ -10,6 +10,8 @@
 *.local.json
 secrets.json
 credentials.json
+ownership.json
+config/ownership.json
 *.pem
 *.key
 *.pfx
@@ -62,14 +64,23 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 .electron-cache/
+dist/
+dist-electron/
 out/
 build/
+release/
+release-builds/
 *.exe
+*.msi
 *.dmg
 *.AppImage
 *.deb
 *.rpm
 *.snap
+*.pkg
+*.asar
+*.blockmap
+*.bin
 
 # --- Logs & Runtime Output ---
 *.log

@@ -2626,19 +2626,6 @@ async function handleAdminLogin(event) {
   if (errBox) errBox.classList.add('hidden');
   if (btn) btn.disabled = true;
 
-  // 1. Direct offline & local verification for admin / alarm (ALWAYS WORKS!)
-  if (username === 'admin' && password === 'alarm') {
-    const token = 'admin_session_' + Date.now();
-    sessionStorage.setItem('admin_token', token);
-    closeAdminLoginModal();
-    showView('view-admin');
-    showToast("Admin Authenticated", "👑");
-    if (btn) btn.disabled = false;
-    fetchServersRest();
-    return;
-  }
-
-  // 2. Also try remote backend if available
   try {
     const res = await fetch(`${apiBaseUrl}/api/auth/login`, {
       method: 'POST',
@@ -2656,11 +2643,11 @@ async function handleAdminLogin(event) {
       return;
     } else {
       if (errBox) errBox.classList.remove('hidden');
-      if (errMsg) errMsg.innerText = data.detail || 'Invalid username or password (use admin / alarm)';
+      if (errMsg) errMsg.innerText = data.detail || 'Invalid username or password.';
     }
   } catch (e) {
     if (errBox) errBox.classList.remove('hidden');
-    if (errMsg) errMsg.innerText = 'Invalid username or password (use admin / alarm)';
+    if (errMsg) errMsg.innerText = 'Unable to reach authentication service. Please check cluster connection.';
   } finally {
     if (btn) btn.disabled = false;
   }
