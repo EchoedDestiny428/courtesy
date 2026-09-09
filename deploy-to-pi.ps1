@@ -23,7 +23,7 @@ if (Test-Path ".env") {
 
 Write-Host ">>> Extracting and setting up on $GatewayHost..." -ForegroundColor Cyan
 $PiSudoPass = if ($env:PI_PASSWORD) { $env:PI_PASSWORD } else { "cst" }
-$EnvMoveCmd = if (Test-Path ".env") { "&& [ -f /tmp/.env ] && echo $PiSudoPass | sudo -S mv /tmp/.env /opt/courtesy/.env && echo $PiSudoPass | sudo -S chown cst:cst /opt/courtesy/.env" } else { "" }
+$EnvMoveCmd = if (Test-Path ".env") { "&& [ -f /tmp/.env ] && echo $PiSudoPass | sudo -S mv /tmp/.env /opt/courtesy/.env && echo $PiSudoPass | sudo -S chown cst:cst /opt/courtesy/.env && echo $PiSudoPass | sudo -S chmod 600 /opt/courtesy/.env" } else { "" }
 ssh "cst@$GatewayHost" "echo $PiSudoPass | sudo -S mkdir -p /opt/courtesy && echo $PiSudoPass | sudo -S chmod -R 775 /opt/courtesy && echo $PiSudoPass | sudo -S rm -f /opt/courtesy/config/mining.json /opt/courtesy/src/miner_manager.py /opt/courtesy/src/openai_proxy.py /opt/courtesy/src/swarm.py /opt/courtesy/scripts/test_swarm.py && echo $PiSudoPass | sudo -S tar -xzf /tmp/$Archive -C /opt/courtesy && echo $PiSudoPass | sudo -S chown -R cst:cst /opt/courtesy && echo $PiSudoPass | sudo -S chmod -R 775 /opt/courtesy $EnvMoveCmd && rm -f /tmp/$Archive && cd /opt/courtesy && bash deploy/setup-pi.sh"
 
 Remove-Item $Archive -Force -ErrorAction SilentlyContinue

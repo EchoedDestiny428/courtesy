@@ -9,6 +9,10 @@ echo ">>> [1/5] Checking environment on cst..."
 APP_DIR="/opt/courtesy"
 sudo mkdir -p "${APP_DIR}"
 sudo chown -R cst:cst "${APP_DIR}"
+if [ -f "${APP_DIR}/.env" ]; then
+    sudo chmod 600 "${APP_DIR}/.env"
+    sudo chown cst:cst "${APP_DIR}/.env"
+fi
 
 echo ">>> [2/5] Installing system packages..."
 sudo apt-get update -y
