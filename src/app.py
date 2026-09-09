@@ -161,7 +161,10 @@ async def api_get_servers():
 @app.get("/api/servers/scan")
 async def api_scan_servers():
     """Actively scans .local DNS and sends packet probes to all cluster nodes, returning fresh statuses."""
-    return await scan_all_servers()
+    servers = await scan_all_servers()
+    for s in servers:
+        s["ownership"] = get_server_ownership(s["id"])
+    return servers
 
 
 

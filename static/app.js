@@ -284,8 +284,11 @@ function formatServerSpecs(srv) {
   // CPU
   const cpu = srv.specs?.cpu || 'Unknown CPU';
 
-  // GPU
-  const gpus = srv.status?.gpus || srv.specs?.gpus || [];
+  // GPU: Prefer live status GPUs if detected; otherwise fallback to configured specs
+  const statusGpus = Array.isArray(srv.status?.gpus) && srv.status.gpus.length > 0 ? srv.status.gpus : null;
+  const specGpus = Array.isArray(srv.specs?.gpus) && srv.specs.gpus.length > 0 ? srv.specs.gpus : [];
+  const gpus = statusGpus || specGpus;
+
   let gpu = 'Integrated / No GPU';
   if (gpus.length > 0) {
     const rawName = gpus[0].name || 'GPU';
@@ -304,6 +307,32 @@ function formatServerSpecs(srv) {
 }
 
 // --- User Cluster Grid View ---
+let isScanningNodes = false;
+let hasLoadedUserClusterBefore = false;
+
+function renderUserClusterGridDom() {
+  const grid = document.getElementById('user-cluster-cards-grid');
+  const summaryPill = document.getElementById('user-cluster-summary-pill');
+  if (!grid) return;
+
+  const servers = (currentServers && currentServers.length > 0) ? currentServers : FALLBACK_SERVERS;
+  const total = servers.length;
+  const onlineCount = servers.filter(s => s.status?.online).length;
+  const claimedCount = servers.filter(s => s.ownership?.is_claimed).length;
+
+  if (summaryPill) {
+    summaryPill.innerText = `${onlineCount}/${total} Online • ${claimedCount} In Use`;
+  }
+
+  grid.innerHTML = '';
+  servers.forEach(srv => {
+    const cardHtml = renderUserClusterCard(srv);
+    grid.insertAdjacentHTML('beforeend', cardHtml);
+  });
+
+  if (window.lucide) lucide.createIcons();
+}
+
 async function loadUserClusterGrid(isManualRefresh = false) {
   const nameEl = document.getElementById('user-cluster-current-name');
   if (nameEl) nameEl.innerText = courtesyUser.username || 'guest';
@@ -311,45 +340,45 @@ async function loadUserClusterGrid(isManualRefresh = false) {
   const iconEl = document.getElementById('user-cluster-refresh-icon');
   if (iconEl && isManualRefresh) iconEl.classList.add('animate-spin');
 
-  const grid = document.getElementById('user-cluster-cards-grid');
-  const summaryPill = document.getElementById('user-cluster-summary-pill');
+  // Instant display from cache if previously opened or already loaded (zero reload delay)
+  if (currentServers && currentServers.length > 0) {
+    renderUserClusterGridDom();
+    if (isScanningNodes && !isManualRefresh) return;
+  } else {
+    currentServers = FALLBACK_SERVERS;
+    renderUserClusterGridDom();
+  }
 
+  isScanningNodes = true;
   try {
-    const url = isManualRefresh ? `${apiBaseUrl}/api/servers/scan` : `${apiBaseUrl}/api/servers`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    // Actively send request to parse and probe available cluster devices
+    const res = await fetch(`${apiBaseUrl}/api/servers/scan`, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const servers = await res.json();
     if (Array.isArray(servers) && servers.length > 0) {
       currentServers = servers;
     }
   } catch (e) {
-    console.warn('[Courtesy] Live server fetch failed, using cached/fallback:', e);
-    if (!currentServers || currentServers.length === 0) {
-      currentServers = FALLBACK_SERVERS;
-    }
+    console.warn('[Courtesy] Active device scan failed, falling back to /api/servers or cache:', e);
+    try {
+      const fbRes = await fetch(`${apiBaseUrl}/api/servers`, { signal: AbortSignal.timeout(3000) });
+      if (fbRes.ok) {
+        const fbServers = await fbRes.json();
+        if (Array.isArray(fbServers) && fbServers.length > 0) {
+          currentServers = fbServers;
+        }
+      }
+    } catch (e2) {}
   } finally {
+    isScanningNodes = false;
+    hasLoadedUserClusterBefore = true;
     if (iconEl && isManualRefresh) {
       setTimeout(() => iconEl.classList.remove('animate-spin'), 400);
     }
   }
 
-  if (!grid) return;
-  grid.innerHTML = '';
-
-  const total = currentServers.length;
-  const onlineCount = currentServers.filter(s => s.status?.online).length;
-  const claimedCount = currentServers.filter(s => s.ownership?.is_claimed).length;
-
-  if (summaryPill) {
-    summaryPill.innerText = `${onlineCount}/${total} Online • ${claimedCount} In Use`;
-  }
-
-  currentServers.forEach(srv => {
-    const cardHtml = renderUserClusterCard(srv);
-    grid.insertAdjacentHTML('beforeend', cardHtml);
-  });
-
-  if (window.lucide) lucide.createIcons();
+  // Smoothly update grid with freshly parsed/probed devices
+  renderUserClusterGridDom();
   if (isManualRefresh) showToast('Cluster status refreshed', '✓');
 }
 
@@ -474,6 +503,16 @@ async function handleClaimAndLaunch(serverId) {
       throw new Error(data.detail || 'Reservation conflict or invalid PIN');
     }
 
+    // Update local cache immediately
+    const claimedSrv = currentServers.find(s => s.id === serverId);
+    if (claimedSrv) {
+      claimedSrv.ownership = {
+        is_claimed: true,
+        owner: courtesyUser.username,
+        claimed_at: Date.now() / 1000
+      };
+    }
+
     showToast(`Reserved ${serverId} for ${courtesyUser.username}`, '✓');
     openAppSelector(serverId);
   } catch (e) {
@@ -502,6 +541,15 @@ async function handleReleaseNode(serverId) {
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Failed to release node');
+    }
+
+    // Update local cache immediately
+    const releasedSrv = currentServers.find(s => s.id === serverId);
+    if (releasedSrv) {
+      releasedSrv.ownership = {
+        is_claimed: false,
+        owner: null
+      };
     }
 
     showToast(`Node ${serverId} is now available`, '✓');
@@ -865,20 +913,46 @@ async function handleAdminLogout() {
   showToast('Logged out from Admin Console');
 }
 
-async function loadAdminClusterData() {
+async function loadAdminClusterData(isManualRefresh = false) {
   const grid = document.getElementById('admin-servers-grid');
   if (!grid) return;
 
+  const iconEl = document.getElementById('admin-cluster-refresh-icon');
+  if (iconEl && isManualRefresh) iconEl.classList.add('animate-spin');
+
+  // If already loaded and not manual refresh, render immediately from cache
+  if (currentServers && currentServers.length > 0 && !isManualRefresh) {
+    renderAdminClusterCards();
+  }
+
   try {
-    const res = await fetch(`${apiBaseUrl}/api/servers`);
+    const url = isManualRefresh ? `${apiBaseUrl}/api/servers/scan` : `${apiBaseUrl}/api/servers`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (res.ok) {
       const servers = await res.json();
-      currentServers = servers;
+      if (Array.isArray(servers) && servers.length > 0) {
+        currentServers = servers;
+      }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('[Courtesy] Admin server fetch failed:', e);
+  } finally {
+    if (iconEl && isManualRefresh) {
+      setTimeout(() => iconEl.classList.remove('animate-spin'), 400);
+    }
+  }
+
+  renderAdminClusterCards();
+  if (isManualRefresh) showToast('Admin cluster status refreshed', '✓');
+}
+
+function renderAdminClusterCards() {
+  const grid = document.getElementById('admin-servers-grid');
+  if (!grid) return;
 
   grid.innerHTML = '';
-  currentServers.forEach(srv => {
+  const servers = (currentServers && currentServers.length > 0) ? currentServers : FALLBACK_SERVERS;
+  servers.forEach(srv => {
     const specs = formatServerSpecs(srv);
     const isOnline = Boolean(srv.status?.online);
     const ownership = srv.ownership || { is_claimed: false, owner: null };
@@ -947,6 +1021,10 @@ async function handleAdminForceRelease(serverId) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Force release failed');
     showToast(`Force-released reservation on ${serverId}`, '✓');
+    const releasedSrv = currentServers.find(s => s.id === serverId);
+    if (releasedSrv) {
+      releasedSrv.ownership = { is_claimed: false, owner: null };
+    }
     loadAdminClusterData();
   } catch (e) {
     showToast(e.message || 'Force release error', '⚠');
@@ -1006,11 +1084,13 @@ async function fetchRealServerList() {
       const latencyStr = isOnline ? (latMs != null ? `${latMs}ms` : 'online') : 'offline';
 
       // Live GPU metrics: only GPU info (count, model, total VRAM)
-      const gpus = s.status?.gpus || s.specs?.gpus || [];
+      const statusGpus = Array.isArray(s.status?.gpus) && s.status.gpus.length > 0 ? s.status.gpus : null;
+      const specGpus = Array.isArray(s.specs?.gpus) && s.specs.gpus.length > 0 ? s.specs.gpus : [];
+      const gpus = statusGpus || specGpus;
       const gpuCount = gpus.length;
       let gpuSummary = 'No GPU';
       if (gpuCount > 0) {
-        const rawName = gpus[0].name || 'Quadro P2000';
+        const rawName = gpus[0].name || 'GPU';
         const cleanName = rawName.replace(/^NVIDIA\s+/i, '').trim();
         const totalVramMb = gpus.reduce((acc, g) => acc + (g.vram_total_mb || 5120), 0);
         const totalVramGb = Math.round(totalVramMb / 1024);
@@ -1053,6 +1133,7 @@ async function fetchRealServerList() {
       }
     }
     return [
+      { id: 'csthink', name: 'csthink', dns: 'csthink.local', ip: '10.11.16.16', isGateway: false, online: true, latencyMs: 14, latency: '14ms', gpuCount: 1, gpuSummary: '1x GeForce RTX 4080 (16GB)', available: true },
       { id: 'cst1', name: 'cst1', dns: 'cst1.local', ip: '10.11.16.36', isGateway: false, online: true, latencyMs: 18, latency: '18ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true },
       { id: 'cst5', name: 'cst5', dns: 'cst5.local', ip: '10.11.2.22', isGateway: false, online: true, latencyMs: 16, latency: '16ms', gpuCount: 2, gpuSummary: '2x Quadro M2000 (8GB)', available: true },
       { id: 'cst6', name: 'cst6', dns: 'cst6.local', ip: '10.11.16.29', isGateway: false, online: true, latencyMs: 19, latency: '19ms', gpuCount: 2, gpuSummary: '2x Quadro P2000 (10GB)', available: true },
@@ -2959,131 +3040,57 @@ function renderGpuActivityStrip(metricsMap) {
 }
 
 function renderServers(metricsMap) {
+  updateServersFromMetrics(metricsMap);
+}
+
+function updateServersFromMetrics(metricsMap) {
   lastMetricsMap = metricsMap;
-  const container = document.getElementById('admin-servers-grid');
-  if (!container) return;
+  if (!Array.isArray(currentServers) || currentServers.length === 0) return;
 
-  const serverIds = Object.keys(metricsMap);
-  if (serverIds.length === 0) {
-    container.innerHTML = `<div class="col-span-full py-8 text-center text-[var(--text-muted)] text-xs">No servers configured.</div>`;
-    return;
-  }
-
-  container.innerHTML = serverIds.map(sId => {
-    const s = metricsMap[sId];
-    return createMinimalServerCardHtml(s);
-  }).join('');
-
-  if (window.lucide) lucide.createIcons();
+  currentServers.forEach(srv => {
+    const m = metricsMap[srv.id];
+    if (m) {
+      srv.status = Object.assign({}, srv.status, m);
+      if (m.host) srv.ip = m.host;
+    }
+  });
 
   // If node detail modal is open for a node, refresh it live
   if (currentNodeDetailId && metricsMap[currentNodeDetailId]) {
     populateNodeDetailModal(metricsMap[currentNodeDetailId]);
   }
+
+  // Live update admin cards if admin view is currently open
+  const adminView = document.getElementById('view-admin');
+  if (adminView && !adminView.classList.contains('hidden')) {
+    const adminContent = document.getElementById('admin-panel-content');
+    if (adminContent && !adminContent.classList.contains('hidden')) {
+      renderAdminClusterCards();
+    }
+  }
+
+  // Live update user cluster cards if user view is currently open
+  const userView = document.getElementById('view-user-cluster');
+  if (userView && !userView.classList.contains('hidden')) {
+    renderUserClusterGridDom();
+  }
 }
 
 function renderServersFromRest(serversList) {
-  const container = document.getElementById('admin-servers-grid');
-  if (!container) return;
-
-  const metricsMap = {};
-  serversList.forEach(s => {
-    metricsMap[s.id] = {
-      id: s.id,
-      name: s.name,
-      role: s.role,
-      type: s.type,
-      host: s.host,
-      port: s.port,
-      enabled: s.enabled,
-      online: s.status?.online || false,
-      latency_ms: s.status?.latency_ms,
-      ram_total_gb: s.status?.ram_total_gb || 0,
-      ram_used_gb: s.status?.ram_used_gb || 0,
-      ram_percent: s.status?.ram_percent || 0,
-      cpu_percent: s.status?.cpu_percent || 0,
-      gpus: s.status?.gpus || [],
-      models: s.status?.models || [],
-      running_models: s.status?.running_models || [],
-      top_processes: s.status?.top_processes || [],
-      tags: s.tags || []
-    };
-  });
-  lastMetricsMap = metricsMap;
-
-  container.innerHTML = Object.values(metricsMap).map(s => {
-    return createMinimalServerCardHtml(s);
-  }).join('');
-
-  if (window.lucide) lucide.createIcons();
-
-  if (currentNodeDetailId && metricsMap[currentNodeDetailId]) {
-    populateNodeDetailModal(metricsMap[currentNodeDetailId]);
+  if (Array.isArray(serversList) && serversList.length > 0) {
+    currentServers = serversList;
   }
-}
-
-function createMinimalServerCardHtml(s) {
-  const isOnline = s.online;
-  const isGateway = s.role === 'gateway' || s.type === 'system_only';
-  
-  // Hardware summary
-  const hardwareSummary = isGateway 
-    ? '4 Cores • 8 GB RAM • Gateway Proxy' 
-    : '12 Cores • 32 GB RAM • 2x Quadro P2000 (10GB)';
-
-  const roleLabel = isGateway 
-    ? 'Cluster Orchestrator' 
-    : (s.id === 'cst7' ? '14B Heavy Coder' : '7B Fast Coder');
-
-  // Live in-use status
-  let inUseBadge = '';
-  if (!isOnline) {
-    inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-rose-950/40 text-rose-400 border border-rose-800/40">Offline</span>`;
-  } else if (s.running_models && s.running_models.length > 0) {
-    inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> AI Active</span>`;
-  } else {
-    inUseBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono bg-[var(--bg-muted)] text-[var(--text-dim)] border border-[var(--border-app)]">Idle (Ready)</span>`;
+  const adminView = document.getElementById('view-admin');
+  if (adminView && !adminView.classList.contains('hidden')) {
+    const adminContent = document.getElementById('admin-panel-content');
+    if (adminContent && !adminContent.classList.contains('hidden')) {
+      renderAdminClusterCards();
+    }
   }
-
-  return `
-    <div onclick="openNodeDetailModal('${s.id}')"
-         class="group luxury-card rounded-2xl p-4 flex flex-col justify-between gap-3 text-xs cursor-pointer hover:border-gold hover:-translate-y-0.5 transition duration-200">
-      
-      <!-- Card Header -->
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-2">
-          <span class="h-2.5 w-2.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-ping' : 'bg-rose-500'}"></span>
-          <span class="font-bold text-white text-sm">${s.name || s.id}</span>
-        </div>
-        <div class="flex items-center gap-1.5" onclick="event.stopPropagation()">
-          ${isOnline && s.latency_ms ? `<span class="text-[10px] font-mono text-gold-500 px-1.5 py-0.5 rounded bg-[var(--gold-subtle)]">${s.latency_ms}ms</span>` : ''}
-          <button onclick="toggleServer('${s.id}')" title="Toggle Node" class="p-1 rounded hover:bg-[var(--bg-muted)] text-[var(--text-dim)] hover:text-white transition">
-            <i data-lucide="${s.enabled ? 'power' : 'power-off'}" class="w-3.5 h-3.5 ${s.enabled ? 'text-emerald-400' : 'text-slate-500'}"></i>
-          </button>
-        </div>
-      </div>
-
-      <!-- General Information (Static specs) -->
-      <div class="space-y-1.5 text-[11px] font-mono">
-        <div class="text-[var(--text-secondary)] font-medium">${hardwareSummary}</div>
-        <div class="text-[var(--text-dim)] flex items-center gap-1">
-          <span class="text-gold-400 font-bold">${roleLabel}</span>
-          <span>•</span>
-          <span>${isGateway ? '100.107.249.92' : `${s.host}:${s.port || 11434}`}</span>
-        </div>
-      </div>
-
-      <!-- Live Activity State Strip & Inspect CTA -->
-      <div class="pt-2 border-t border-[var(--border-app)] flex items-center justify-between text-[10px]">
-        <div>${inUseBadge}</div>
-        <div class="text-gold-500 font-mono flex items-center gap-1 group-hover:translate-x-1 transition">
-          <span>Inspect</span>
-          <i data-lucide="arrow-right" class="w-3 h-3"></i>
-        </div>
-      </div>
-
-    </div>
-  `;
+  const userView = document.getElementById('view-user-cluster');
+  if (userView && !userView.classList.contains('hidden')) {
+    renderUserClusterGridDom();
+  }
 }
 
 // ================= Detailed Node Inspection Dashboard Modal =================
