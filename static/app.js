@@ -761,7 +761,15 @@ function initOrConnectPureTerminal(serverId) {
     const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
     wsBase = `${proto}//${loc.host}`;
   }
-  const wsUrl = `${wsBase}/ws/terminal/${serverId}`;
+  const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
+  const u = courtesyUser?.username || '';
+  const p = courtesyUser?.pin || '';
+  const params = new URLSearchParams();
+  if (token) params.set('token', token);
+  if (u) params.set('username', u);
+  if (p) params.set('pin', p);
+  const qStr = params.toString() ? `?${params.toString()}` : '';
+  const wsUrl = `${wsBase}/ws/terminal/${serverId}${qStr}`;
 
   if (pureTerminalInstance) {
     pureTerminalInstance.write(`\x1b[38;5;244mConnecting direct SSH PTY to ${serverId}...\x1b[0m\r\n`);
@@ -2550,10 +2558,21 @@ async function runWorkspaceCommand(command) {
     }
   }
   try {
+    const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (courtesyUser?.username) headers['X-Courtesy-User'] = courtesyUser.username;
+    if (courtesyUser?.pin) headers['X-Courtesy-Pin'] = courtesyUser.pin;
+
     const res = await fetch(`${apiBaseUrl}/api/workspace/exec`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command, cwd: currentWorkspaceFolder })
+      headers,
+      body: JSON.stringify({
+        command,
+        cwd: currentWorkspaceFolder,
+        username: courtesyUser?.username,
+        pin: courtesyUser?.pin
+      })
     });
     return await res.json();
   } catch (e) {
@@ -2727,8 +2746,12 @@ function getEffectiveModelTarget() {
 // ================= Proactive VRAM Flush =================
 async function triggerVramFlush() {
   showToast("Flushing cluster VRAM across dual GPUs...", "⏳");
+  const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
   try {
-    const res = await fetch(`${apiBaseUrl}/api/cluster/offload`, { method: 'POST' });
+    const res = await fetch(`${apiBaseUrl}/api/cluster/offload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
     if (res.ok) {
       showToast("Cluster VRAM cleared: 30GB Available", "✓");
       fetchServersRest();
@@ -2742,7 +2765,16 @@ async function triggerVramFlush() {
 
 async function offloadSingleNode(nodeId) {
   try {
-    const res = await fetch(`${apiBaseUrl}/api/servers/${nodeId}/offload`, { method: 'POST' });
+    const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (courtesyUser?.username) headers['X-Courtesy-User'] = courtesyUser.username;
+    if (courtesyUser?.pin) headers['X-Courtesy-Pin'] = courtesyUser.pin;
+
+    const res = await fetch(`${apiBaseUrl}/api/servers/${nodeId}/offload`, {
+      method: 'POST',
+      headers
+    });
     if (res.ok) {
       showToast(`Flushed VRAM on ${nodeId}`, "✓");
       fetchServersRest();
@@ -3269,10 +3301,14 @@ async function handleAddServerSubmit(event) {
     return;
   }
 
+  const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
   try {
     const res = await fetch(`${apiBaseUrl}/api/servers`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify(newServer)
     });
     if (res.ok) {
@@ -3293,8 +3329,12 @@ async function deleteServer(serverId) {
   if (!confirm(`Are you sure you want to remove node '${serverId}' from the cluster?`)) {
     return;
   }
+  const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
   try {
-    const res = await fetch(`${apiBaseUrl}/api/servers/${serverId}`, { method: 'DELETE' });
+    const res = await fetch(`${apiBaseUrl}/api/servers/${serverId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
     if (res.ok) {
       showToast(`Node '${serverId}' removed`, "✓");
       triggerManualRefresh();
@@ -3307,8 +3347,12 @@ async function deleteServer(serverId) {
 }
 
 async function toggleServer(serverId) {
+  const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
   try {
-    await fetch(`${apiBaseUrl}/api/servers/${serverId}/toggle`, { method: 'POST' });
+    await fetch(`${apiBaseUrl}/api/servers/${serverId}/toggle`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
     triggerManualRefresh();
   } catch (e) {}
 }
@@ -4446,12 +4490,20 @@ async function submitTerminalCommand() {
   const outputEl = cmdEntry.querySelector('.terminal-cmd-output');
 
   try {
+    const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (courtesyUser?.username) headers['X-Courtesy-User'] = courtesyUser.username;
+    if (courtesyUser?.pin) headers['X-Courtesy-Pin'] = courtesyUser.pin;
+
     const resp = await fetch(`${apiBaseUrl}/api/workspace/exec`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         command: cmd,
-        cwd: currentWorkspaceFolder
+        cwd: currentWorkspaceFolder,
+        username: courtesyUser?.username,
+        pin: courtesyUser?.pin
       })
     });
     const data = await resp.json();

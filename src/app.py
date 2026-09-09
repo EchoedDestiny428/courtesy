@@ -29,7 +29,13 @@ from src.router import (
     resolve_route, track_request_start, track_request_end,
     ensure_vram_headroom, offload_server_models, _active_requests
 )
-from src.auth import verify_admin_credentials, create_admin_session, is_valid_admin_token, revoke_admin_session, require_admin_auth
+from src.auth import (
+    verify_admin_credentials, create_admin_session, is_valid_admin_token,
+    revoke_admin_session, require_admin_auth, get_client_ip,
+    check_admin_brute_force, record_admin_login_failure, reset_admin_login_failures,
+    rate_limiter
+)
+from src.security import get_safe_workspace_path, SecurityHeadersMiddleware
 from src.ownership import (
     get_server_ownership, get_all_ownership, claim_server,
     release_server, verify_or_register_user, touch_activity
@@ -110,13 +116,42 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# CORS configuration - configurable via COURTESY_ALLOWED_ORIGINS
+_raw_origins = os.environ.get("COURTESY_ALLOWED_ORIGINS", "*").strip()
+allowed_origins = ["*"] if _raw_origins == "*" else [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SecurityHeadersMiddleware)
+
+# API Rate Limiter Middleware
+RATE_LIMIT_RPM = int(os.environ.get("COURTESY_RATE_LIMIT_RPM", "180"))
+
+@app.middleware("http")
+async def api_rate_limiter_middleware(request: Request, call_next):
+    path = request.url.path
+    # Exempt static files, root page, and favicon from rate limiting
+    if path.startswith("/static") or path == "/" or path == "/favicon.ico":
+        return await call_next(request)
+
+    client_ip = get_client_ip(request)
+    is_limited, retry_after = rate_limiter.check_rate_limit(
+        f"api_ip:{client_ip}",
+        max_requests=RATE_LIMIT_RPM,
+        window_seconds=60
+    )
+    if is_limited:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many requests. Please slow down."},
+            headers={"Retry-After": str(retry_after)}
+        )
+    return await call_next(request)
 
 
 # --- REST API Endpoints ---
@@ -169,8 +204,8 @@ async def api_scan_servers():
 
 
 @app.post("/api/servers")
-async def api_add_server(server_data: Dict[str, Any] = Body(...)):
-    """Modular endpoint: Dynamically add a new server to the cluster."""
+async def api_add_server(server_data: Dict[str, Any] = Body(...), admin_token: str = Depends(require_admin_auth)):
+    """Modular endpoint: Dynamically add a new server to the cluster (Admin only)."""
     if not server_data.get("id") or not server_data.get("name"):
         raise HTTPException(status_code=400, detail="Server 'id' and 'name' are required.")
     
@@ -189,8 +224,8 @@ async def api_add_server(server_data: Dict[str, Any] = Body(...)):
 
 
 @app.put("/api/servers/{server_id}")
-async def api_update_server(server_id: str, updates: Dict[str, Any] = Body(...)):
-    """Update fields of an existing server."""
+async def api_update_server(server_id: str, updates: Dict[str, Any] = Body(...), admin_token: str = Depends(require_admin_auth)):
+    """Update fields of an existing server (Admin only)."""
     updated = update_server(server_id, updates)
     if not updated:
         raise HTTPException(status_code=404, detail=f"Server '{server_id}' not found.")
@@ -199,8 +234,8 @@ async def api_update_server(server_id: str, updates: Dict[str, Any] = Body(...))
 
 
 @app.post("/api/servers/{server_id}/toggle")
-async def api_toggle_server(server_id: str):
-    """Enable or disable a server from participating in inference or routing."""
+async def api_toggle_server(server_id: str, admin_token: str = Depends(require_admin_auth)):
+    """Enable or disable a server from participating in inference or routing (Admin only)."""
     srv = get_server_by_id(server_id)
     if not srv:
         raise HTTPException(status_code=404, detail=f"Server '{server_id}' not found.")
@@ -211,8 +246,8 @@ async def api_toggle_server(server_id: str):
 
 
 @app.delete("/api/servers/{server_id}")
-async def api_delete_server(server_id: str):
-    """Remove a server from the modular registry."""
+async def api_delete_server(server_id: str, admin_token: str = Depends(require_admin_auth)):
+    """Remove a server from the modular registry (Admin only)."""
     success = delete_server(server_id)
     if not success:
         raise HTTPException(status_code=404, detail=f"Server '{server_id}' not found.")
@@ -249,8 +284,8 @@ async def api_get_models():
 
 
 @app.post("/api/cluster/offload")
-async def api_cluster_offload():
-    """Unloads all resident models across all GPU servers to free 100% of cluster VRAM."""
+async def api_cluster_offload(admin_token: str = Depends(require_admin_auth)):
+    """Unloads all resident models across all GPU servers to free 100% of cluster VRAM (Admin only)."""
     servers = [s for s in get_servers() if s.get("enabled") and s.get("type") == "ollama"]
     tasks = [offload_server_models(s) for s in servers]
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -259,11 +294,22 @@ async def api_cluster_offload():
 
 
 @app.post("/api/servers/{server_id}/offload")
-async def api_server_offload(server_id: str):
+async def api_server_offload(server_id: str, request: Request, payload: Optional[Dict[str, Any]] = Body(None)):
     """Unloads resident models on a specific node to free its VRAM."""
     srv = get_server_by_id(server_id)
     if not srv:
         raise HTTPException(status_code=404, detail=f"Server '{server_id}' not found.")
+
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "").strip() if auth_header else (payload.get("admin_token", "") if payload else "")
+    is_admin = is_valid_admin_token(token)
+
+    if not is_admin:
+        owner_info = get_server_ownership(server_id)
+        client_user = request.headers.get("X-Courtesy-User") or (payload.get("username") if payload else "")
+        if owner_info.get("is_claimed") and (not client_user or owner_info.get("owner", "").lower() != client_user.lower()):
+            raise HTTPException(status_code=403, detail="Only the reserving user or admin can offload this node.")
+
     unloaded = await offload_server_models(srv)
     asyncio.create_task(update_all_metrics())
     return {"status": "success", "server_id": server_id, "unloaded": unloaded}
@@ -278,28 +324,30 @@ async def api_get_ownership():
 
 
 @app.post("/api/ownership/verify")
-async def api_ownership_verify(payload: Dict[str, Any]):
-    """Verifies user's 4-digit PIN or registers new user."""
+async def api_ownership_verify(request: Request, payload: Dict[str, Any]):
+    """Verifies user's 4-digit PIN or registers new user with brute-force defense."""
     username = payload.get("username", "").strip()
     pin = str(payload.get("pin", "")).strip()
     if not username or not pin:
         raise HTTPException(status_code=400, detail="Username and 4-digit PIN are required.")
+    client_ip = get_client_ip(request)
     try:
-        return verify_or_register_user(username, pin)
+        return verify_or_register_user(username, pin, client_ip=client_ip)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/api/ownership/claim")
-async def api_ownership_claim(payload: Dict[str, Any]):
-    """Claims a cluster node for a verified user."""
+async def api_ownership_claim(request: Request, payload: Dict[str, Any]):
+    """Claims a cluster node for a verified user with brute-force defense."""
     server_id = payload.get("server_id", "").strip()
     username = payload.get("username", "").strip()
     pin = str(payload.get("pin", "")).strip()
     if not server_id or not username or not pin:
         raise HTTPException(status_code=400, detail="server_id, username, and 4-digit PIN are required.")
+    client_ip = get_client_ip(request)
     try:
-        res = claim_server(server_id, username, pin)
+        res = claim_server(server_id, username, pin, client_ip=client_ip)
         if not res.get("success"):
             raise HTTPException(status_code=409, detail=res.get("error", "Node reservation conflict."))
         return res
@@ -308,7 +356,7 @@ async def api_ownership_claim(payload: Dict[str, Any]):
 
 
 @app.post("/api/ownership/release")
-async def api_ownership_release(payload: Dict[str, Any], request: Request):
+async def api_ownership_release(request: Request, payload: Dict[str, Any]):
     """Releases ownership of a cluster node."""
     server_id = payload.get("server_id", "").strip()
     username = payload.get("username", "").strip()
@@ -321,8 +369,9 @@ async def api_ownership_release(payload: Dict[str, Any], request: Request):
         if not is_valid_admin_token(token):
             raise HTTPException(status_code=403, detail="Admin authorization required to force-release node.")
 
+    client_ip = get_client_ip(request)
     try:
-        res = release_server(server_id, username, pin, force=force)
+        res = release_server(server_id, username, pin, force=force, client_ip=client_ip)
         if not res.get("success"):
             raise HTTPException(status_code=400, detail=res.get("error", "Failed to release node."))
         return res
@@ -528,13 +577,16 @@ async def api_chat(request: Request):
 
 # --- Local & Remote Workspace Filespace Endpoints ---
 
+COURTESY_ALLOW_WORKSPACE_EXEC = os.environ.get("COURTESY_ALLOW_WORKSPACE_EXEC", "true").lower() in ("1", "true", "yes")
+
+
 @app.api_route("/api/workspace/files", methods=["GET", "POST"])
 async def api_workspace_files(
     payload: Optional[Dict[str, Any]] = Body(None),
     path: Optional[str] = Query(None),
     folder: Optional[str] = Query(None)
 ):
-    """Returns directory structure of a workspace folder."""
+    """Returns directory structure of a workspace folder within sandbox boundaries."""
     dir_path = ""
     if payload:
         dir_path = payload.get("path") or payload.get("folder") or ""
@@ -543,9 +595,11 @@ async def api_workspace_files(
     if not dir_path:
         dir_path = os.getcwd()
 
-    if not os.path.isdir(dir_path):
+    safe_dir = get_safe_workspace_path(dir_path)
+    if not safe_dir.is_dir():
         return {"files": []}
 
+    dir_path = str(safe_dir)
     ignored = {'.git', 'node_modules', '__pycache__', '.venv', 'dist', 'build', '.vscode', '.idea'}
     file_list = []
 
@@ -590,7 +644,7 @@ async def api_workspace_read(
     path: Optional[str] = Query(None),
     folder: Optional[str] = Query(None)
 ):
-    """Reads content of a workspace file."""
+    """Reads content of a workspace file within sandbox boundaries."""
     file_path = ""
     base_folder = ""
     if payload:
@@ -601,13 +655,12 @@ async def api_workspace_read(
     if not base_folder:
         base_folder = folder or ""
 
-    if not os.path.isabs(file_path) and base_folder:
-        file_path = os.path.join(base_folder, file_path)
+    safe_file = get_safe_workspace_path(file_path, base_folder)
 
-    if not file_path or not os.path.isfile(file_path):
+    if not safe_file.is_file():
         raise HTTPException(status_code=404, detail="File not found")
     try:
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+        with open(safe_file, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
             return {"success": True, "content": content}
     except Exception as e:
@@ -616,21 +669,21 @@ async def api_workspace_read(
 
 @app.post("/api/workspace/write")
 async def api_workspace_write(payload: Dict[str, Any]):
-    """Writes or overwrites content to a workspace file."""
+    """Writes or overwrites content to a workspace file within sandbox boundaries."""
     file_path = payload.get("path", "").strip()
     base_folder = payload.get("folder", "").strip()
     content = payload.get("content", "")
 
-    if not os.path.isabs(file_path) and base_folder:
-        file_path = os.path.join(base_folder, file_path)
-
     if not file_path:
         raise HTTPException(status_code=400, detail="Path is required")
+
+    safe_file = get_safe_workspace_path(file_path, base_folder)
+
     try:
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, "w", encoding="utf-8") as f:
+        safe_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(safe_file, "w", encoding="utf-8") as f:
             f.write(content)
-        return {"success": True, "status": "success", "path": file_path.replace('\\', '/')}
+        return {"success": True, "status": "success", "path": str(safe_file).replace('\\', '/')}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -641,17 +694,19 @@ async def api_workspace_apply_diff(payload: Dict[str, Any]):
     file_path = payload.get("path", "")
     target = payload.get("target", "")
     replacement = payload.get("replacement", "")
-    if not os.path.isfile(file_path):
+
+    safe_file = get_safe_workspace_path(file_path)
+    if not safe_file.is_file():
         raise HTTPException(status_code=404, detail="File not found")
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(safe_file, "r", encoding="utf-8") as f:
             content = f.read()
         if target not in content:
             raise HTTPException(status_code=400, detail="Target snippet not found in file")
         content = content.replace(target, replacement, 1)
-        with open(file_path, "w", encoding="utf-8") as f:
+        with open(safe_file, "w", encoding="utf-8") as f:
             f.write(content)
-        return {"status": "success", "path": file_path}
+        return {"status": "success", "path": str(safe_file).replace('\\', '/')}
     except HTTPException:
         raise
     except Exception as e:
@@ -659,16 +714,47 @@ async def api_workspace_apply_diff(payload: Dict[str, Any]):
 
 
 @app.post("/api/workspace/exec")
-async def api_workspace_exec(payload: Dict[str, Any]):
-    """Executes a terminal command within the workspace directory."""
+async def api_workspace_exec(request: Request, payload: Dict[str, Any]):
+    """Executes a terminal command within workspace directory with authorization."""
+    if not COURTESY_ALLOW_WORKSPACE_EXEC:
+        raise HTTPException(status_code=403, detail="Workspace command execution disabled by administrator.")
+
+    # Check caller credentials (admin token or valid user PIN)
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "").strip() if auth_header else payload.get("admin_token", "")
+    is_admin = is_valid_admin_token(token)
+
+    username = request.headers.get("X-Courtesy-User") or payload.get("username", "")
+    pin = request.headers.get("X-Courtesy-Pin") or payload.get("pin", "")
+
+    client_ip = get_client_ip(request)
+    is_user = False
+    if username and pin:
+        try:
+            verify_or_register_user(username, pin, client_ip=client_ip)
+            is_user = True
+        except Exception:
+            pass
+
+    if not is_admin and not is_user:
+        raise HTTPException(status_code=401, detail="Authentication required: Valid admin token or user PIN required to execute commands.")
+
     cmd = payload.get("command", "")
     cwd = payload.get("cwd", "")
     if not cmd:
         raise HTTPException(status_code=400, detail="Command is required")
+
+    safe_cwd = None
+    if cwd:
+        try:
+            safe_cwd = str(get_safe_workspace_path(cwd))
+        except Exception:
+            safe_cwd = None
+
     try:
         proc = await asyncio.create_subprocess_shell(
             cmd,
-            cwd=cwd if cwd and os.path.isdir(cwd) else None,
+            cwd=safe_cwd if safe_cwd and os.path.isdir(safe_cwd) else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
@@ -685,9 +771,30 @@ async def api_workspace_exec(payload: Dict[str, Any]):
 
 
 @app.post("/api/terminal/exec")
-async def api_terminal_exec(payload: Dict[str, Any]):
-    """Executes a terminal command directly on a specified cluster node (or gateway) over SSH."""
+async def api_terminal_exec(request: Request, payload: Dict[str, Any]):
+    """Executes a terminal command directly on a specified cluster node (or gateway) over SSH with authorization checks."""
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "").strip() if auth_header else payload.get("admin_token", "")
+    is_admin = is_valid_admin_token(token)
+
     server_id = (payload.get("server_id") or "cst").strip()
+    username = request.headers.get("X-Courtesy-User") or payload.get("username", "")
+    pin = request.headers.get("X-Courtesy-Pin") or payload.get("pin", "")
+
+    client_ip = get_client_ip(request)
+    is_authorized_user = False
+    if username and pin:
+        try:
+            verify_or_register_user(username, pin, client_ip=client_ip)
+            owner_info = get_server_ownership(server_id)
+            if not owner_info.get("is_claimed") or owner_info.get("owner", "").lower() == username.strip().lower():
+                is_authorized_user = True
+        except Exception:
+            pass
+
+    if not is_admin and not is_authorized_user:
+        raise HTTPException(status_code=401, detail="Authentication required: Valid admin token or node owner credentials required.")
+
     cmd = payload.get("command", "").strip()
     cwd = payload.get("cwd", "").strip()
 
@@ -769,89 +876,93 @@ async def api_terminal_exec(payload: Dict[str, Any]):
 
 @app.post("/api/workspace/create")
 async def api_workspace_create(payload: Dict[str, Any]):
-    """Creates a new file or directory within workspace."""
+    """Creates a new file or directory within workspace sandbox."""
     target_path = payload.get("path", "").strip()
     base_folder = payload.get("folder", "").strip()
     is_dir = payload.get("is_dir", False)
     content = payload.get("content", "")
 
-    if not os.path.isabs(target_path) and base_folder:
-        target_path = os.path.join(base_folder, target_path)
-
     if not target_path:
         raise HTTPException(status_code=400, detail="Path is required")
+
+    safe_target = get_safe_workspace_path(target_path, base_folder)
+
     try:
         if is_dir:
-            os.makedirs(target_path, exist_ok=True)
+            safe_target.mkdir(parents=True, exist_ok=True)
         else:
-            parent = os.path.dirname(target_path)
-            if parent:
-                os.makedirs(parent, exist_ok=True)
-            with open(target_path, "w", encoding="utf-8") as f:
+            safe_target.parent.mkdir(parents=True, exist_ok=True)
+            with open(safe_target, "w", encoding="utf-8") as f:
                 f.write(content)
-        name = os.path.basename(target_path)
-        return {"success": True, "status": "success", "full_path": target_path.replace('\\', '/'), "name": name}
+        name = safe_target.name
+        return {"success": True, "status": "success", "full_path": str(safe_target).replace('\\', '/'), "name": name}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/workspace/delete")
 async def api_workspace_delete(payload: Dict[str, Any]):
-    """Deletes a file or directory within workspace."""
+    """Deletes a file or directory within workspace sandbox."""
     target_path = payload.get("path", "").strip()
     base_folder = payload.get("folder", "").strip()
-    if not os.path.isabs(target_path) and base_folder:
-        target_path = os.path.join(base_folder, target_path)
 
-    if not target_path or not os.path.exists(target_path):
+    safe_target = get_safe_workspace_path(target_path, base_folder)
+
+    if not safe_target.exists():
         raise HTTPException(status_code=404, detail="File or directory not found")
     try:
         import shutil
-        if os.path.isdir(target_path):
-            shutil.rmtree(target_path)
+        if safe_target.is_dir():
+            shutil.rmtree(safe_target)
         else:
-            os.remove(target_path)
-        return {"success": True, "status": "success", "path": target_path}
+            safe_target.unlink()
+        return {"success": True, "status": "success", "path": str(safe_target).replace('\\', '/')}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/workspace/rename")
 async def api_workspace_rename(payload: Dict[str, Any]):
-    """Renames or moves a file or directory within workspace."""
+    """Renames or moves a file or directory within workspace sandbox."""
     old_path = payload.get("old_path", "").strip()
     new_path = payload.get("new_path", "").strip()
     base_folder = payload.get("folder", "").strip()
 
-    if not os.path.isabs(old_path) and base_folder:
-        old_path = os.path.join(base_folder, old_path)
-    if not os.path.isabs(new_path) and base_folder:
-        new_path = os.path.join(base_folder, new_path)
-
-    if not old_path or not os.path.exists(old_path):
-        raise HTTPException(status_code=404, detail="Source path not found")
+    if not old_path:
+        raise HTTPException(status_code=400, detail="Source path is required")
     if not new_path:
         raise HTTPException(status_code=400, detail="New path is required")
+
+    safe_old = get_safe_workspace_path(old_path, base_folder)
+    safe_new = get_safe_workspace_path(new_path, base_folder)
+
+    if not safe_old.exists():
+        raise HTTPException(status_code=404, detail="Source path not found")
     try:
-        os.makedirs(os.path.dirname(new_path), exist_ok=True)
+        safe_new.parent.mkdir(parents=True, exist_ok=True)
         import shutil
-        shutil.move(old_path, new_path)
-        return {"success": True, "status": "success", "old_path": old_path, "new_path": new_path}
+        shutil.move(str(safe_old), str(safe_new))
+        return {"success": True, "status": "success", "old_path": str(safe_old).replace('\\', '/'), "new_path": str(safe_new).replace('\\', '/')}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/workspace/search")
 async def api_workspace_search(payload: Dict[str, Any]):
-    """Searches across files in workspace for a specific text pattern."""
+    """Searches across files in workspace within sandbox for a specific text pattern."""
     dir_path = payload.get("path") or payload.get("folder") or ""
     query = payload.get("query", "").strip()
     case_sensitive = payload.get("case_sensitive", False)
     max_results = int(payload.get("max_results", 50))
 
-    if not dir_path or not os.path.isdir(dir_path) or not query:
+    if not query:
         return {"success": True, "results": [], "matches": []}
 
+    safe_dir = get_safe_workspace_path(dir_path or os.getcwd())
+    if not safe_dir.is_dir():
+        return {"success": True, "results": [], "matches": []}
+
+    dir_path = str(safe_dir)
     ignored = {'.git', 'node_modules', '__pycache__', '.venv', 'dist', 'build', '.vscode', '.idea'}
     matches = []
     q = query if case_sensitive else query.lower()
@@ -889,10 +1000,13 @@ async def api_workspace_search(payload: Dict[str, Any]):
 
 @app.post("/api/workspace/git")
 async def api_workspace_git(payload: Dict[str, Any]):
-    """Checks git status of workspace directory."""
+    """Checks git status of workspace directory within sandbox."""
     dir_path = payload.get("path") or payload.get("folder") or ""
-    if not dir_path or not os.path.isdir(dir_path):
+    safe_dir = get_safe_workspace_path(dir_path or os.getcwd())
+    if not safe_dir.is_dir():
         return {"success": False, "is_git": False, "branch": "", "status": "", "dirty_count": 0}
+
+    dir_path = str(safe_dir)
 
     try:
         proc_branch = await asyncio.create_subprocess_shell(
@@ -941,13 +1055,22 @@ async def api_workspace_git(payload: Dict[str, Any]):
 # --- Authentication & Administrative Control Endpoints ---
 
 @app.post("/api/auth/login")
-async def api_auth_login(payload: Dict[str, Any]):
-    """Securely authenticates admin user against server-side salted hash."""
+async def api_auth_login(request: Request, payload: Dict[str, Any]):
+    """Securely authenticates admin user against server-side salted hash with brute-force lockout defense."""
     username = payload.get("username", "").strip()
     password = payload.get("password", "")
+    client_ip = get_client_ip(request)
+
+    # Check brute-force lockout
+    check_admin_brute_force(client_ip, username)
+
     if verify_admin_credentials(username, password):
+        reset_admin_login_failures(client_ip, username)
         token = create_admin_session()
         return {"status": "success", "token": token, "username": username}
+
+    # Record failure and trigger lockout if threshold exceeded
+    record_admin_login_failure(client_ip, username)
     raise HTTPException(status_code=401, detail="Invalid username or password.")
 
 
@@ -1012,13 +1135,43 @@ async def websocket_metrics_endpoint(websocket: WebSocket):
 # --- Interactive SSH Pseudo-Terminal (PTY) WebSocket ---
 
 @app.websocket("/ws/terminal/{server_id}")
-async def websocket_terminal_endpoint(websocket: WebSocket, server_id: str):
+async def websocket_terminal_endpoint(
+    websocket: WebSocket,
+    server_id: str,
+    token: Optional[str] = Query(None),
+    username: Optional[str] = Query(None),
+    pin: Optional[str] = Query(None)
+):
     """
     High-performance, zero-latency interactive SSH PTY bridge.
     Allocates a real pseudo-terminal on the target node, supporting interactive CLI apps:
     nano, vim, htop, top, ollama run, python REPL, etc.
+    Strictly authenticates caller via admin session token or verified node reservation.
     """
     await websocket.accept()
+
+    # Security Check: Must be valid admin OR verified reservation owner
+    is_admin = is_valid_admin_token(token)
+    is_authorized_user = False
+    client_ip = websocket.client.host if websocket.client else "127.0.0.1"
+
+    if not is_admin and username and pin:
+        try:
+            auth_res = verify_or_register_user(username, pin, client_ip=client_ip)
+            owner_info = get_server_ownership(server_id)
+            if not owner_info.get("is_claimed"):
+                claim_res = claim_server(server_id, username, pin, client_ip=client_ip)
+                if claim_res.get("success"):
+                    is_authorized_user = True
+            elif owner_info.get("owner", "").lower() == username.strip().lower():
+                is_authorized_user = True
+        except Exception:
+            pass
+
+    if not is_admin and not is_authorized_user:
+        await websocket.send_bytes(b"\r\n\x1b[31m[Courtesy Security: Terminal access denied. Node reservation or admin session required.]\x1b[0m\r\n")
+        await websocket.close(code=4003)
+        return
 
     if paramiko is None:
         await websocket.send_bytes(b"\r\n\x1b[31m[Courtesy: paramiko library required for interactive PTY terminal]\x1b[0m\r\n")

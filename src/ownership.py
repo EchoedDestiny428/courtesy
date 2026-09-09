@@ -117,14 +117,19 @@ def get_server_ownership(server_id: str) -> Dict[str, Any]:
     })
 
 
-def verify_or_register_user(raw_username: str, raw_pin: str) -> Dict[str, Any]:
+def verify_or_register_user(raw_username: str, raw_pin: str, client_ip: str = "") -> Dict[str, Any]:
     """
     Verifies user's 4-digit PIN, or registers them on first appearance.
-    Raises ValueError on validation failure or incorrect PIN.
+    Raises ValueError or HTTPException on validation failure or incorrect PIN.
     """
     username = _clean_username(raw_username)
     pin = _clean_pin(raw_pin)
     pin_hash = _hash_pin(pin)
+
+    # Brute-force lockout check
+    from src.auth import check_pin_brute_force, record_pin_failure, reset_pin_failures
+    if client_ip:
+        check_pin_brute_force(client_ip, username)
 
     data = load_ownership_data()
     users = data.setdefault("users", {})
@@ -132,7 +137,11 @@ def verify_or_register_user(raw_username: str, raw_pin: str) -> Dict[str, Any]:
     if username in users:
         expected_hash = users[username].get("pin_hash")
         if not hmac.compare_digest(expected_hash, pin_hash):
+            if client_ip:
+                record_pin_failure(client_ip, username)
             raise ValueError(f"Incorrect 4-digit PIN for user '{username}'.")
+        if client_ip:
+            reset_pin_failures(client_ip, username)
         return {"username": username, "status": "verified"}
     else:
         # Register new user
@@ -141,16 +150,18 @@ def verify_or_register_user(raw_username: str, raw_pin: str) -> Dict[str, Any]:
             "created_at": time.time()
         }
         save_ownership_data(data)
+        if client_ip:
+            reset_pin_failures(client_ip, username)
         logger.info(f"Registered new user '{username}' in ownership system.")
         return {"username": username, "status": "registered"}
 
 
-def claim_server(server_id: str, raw_username: str, raw_pin: str) -> Dict[str, Any]:
+def claim_server(server_id: str, raw_username: str, raw_pin: str, client_ip: str = "") -> Dict[str, Any]:
     """
     Claims server for username after verifying PIN.
     If server is already owned by someone else, returns failure.
     """
-    auth = verify_or_register_user(raw_username, raw_pin)
+    auth = verify_or_register_user(raw_username, raw_pin, client_ip=client_ip)
     username = auth["username"]
 
     data = load_ownership_data()
@@ -183,7 +194,7 @@ def claim_server(server_id: str, raw_username: str, raw_pin: str) -> Dict[str, A
     }
 
 
-def release_server(server_id: str, raw_username: str = "", raw_pin: Optional[str] = None, force: bool = False) -> Dict[str, Any]:
+def release_server(server_id: str, raw_username: str = "", raw_pin: Optional[str] = None, force: bool = False, client_ip: str = "") -> Dict[str, Any]:
     """
     Releases ownership of a server.
     If force is True, admin override bypasses username/PIN check.
@@ -205,7 +216,7 @@ def release_server(server_id: str, raw_username: str = "", raw_pin: Optional[str
                 "error": f"Cannot release: server is owned by '{owner}', not '{username}'."
             }
         if raw_pin is not None:
-            verify_or_register_user(username, raw_pin)
+            verify_or_register_user(username, raw_pin, client_ip=client_ip)
 
     servers[server_id] = None
     save_ownership_data(data)
