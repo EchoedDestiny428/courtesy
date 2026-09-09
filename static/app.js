@@ -157,7 +157,7 @@ const FALLBACK_SERVERS = [
 ];
 
 function showView(viewId) {
-  const views = ['view-portal', 'view-user-cluster', 'view-standard', 'view-admin'];
+  const views = ['view-portal', 'view-user-cluster', 'view-app-selector', 'view-pure-terminal', 'view-standard', 'view-admin'];
   const targetView = views.includes(viewId) ? viewId : 'view-portal';
   views.forEach(v => {
     const el = document.getElementById(v);
@@ -377,7 +377,7 @@ function renderUserClusterCard(srv) {
     badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800">Yours</span>`;
     actionsHtml = `
       <div class="flex items-center gap-2">
-        <button onclick="launchIdeForServer('${srv.id}')" class="flex-1 py-2 rounded-xl bg-black dark:bg-white text-white dark:text-black text-xs font-medium hover:bg-neutral-800 dark:hover:bg-neutral-200 transition text-center shadow-xs">
+        <button onclick="openAppSelector('${srv.id}')" class="flex-1 py-2 rounded-xl bg-black dark:bg-white text-white dark:text-black text-xs font-medium hover:bg-neutral-800 dark:hover:bg-neutral-200 transition text-center shadow-xs">
           Open
         </button>
         <button onclick="handleReleaseNode('${srv.id}')" class="px-3.5 py-2 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:border-rose-500 hover:text-rose-600 text-neutral-600 dark:text-neutral-400 text-xs font-medium transition" title="Release">
@@ -475,7 +475,7 @@ async function handleClaimAndLaunch(serverId) {
     }
 
     showToast(`Reserved ${serverId} for ${courtesyUser.username}`, '✓');
-    launchIdeForServer(serverId);
+    openAppSelector(serverId);
   } catch (e) {
     showToast(e.message || 'Failed to claim node', '⚠');
     loadUserClusterGrid();
@@ -520,6 +520,254 @@ function launchIdeForServer(serverId) {
     ip: effectiveIp,
     latency: lat
   });
+}
+
+// --- App Selector & Pure Terminal State & Handlers ---
+let activeAppSelectorServer = null;
+let activePureTerminalServer = null;
+let pureTerminalCwd = '';
+let pureTerminalHistory = [];
+let pureTerminalHistoryIndex = -1;
+
+function openAppSelector(serverId) {
+  activeAppSelectorServer = serverId;
+  const srv = currentServers.find(s => s.id === serverId) || { id: serverId };
+  const effectiveIp = srv.status?.resolved_ip || srv.ip || srv.host || `${serverId}.local`;
+
+  const nodeEl = document.getElementById('app-selector-node-id');
+  if (nodeEl) nodeEl.innerText = serverId;
+
+  const ipEl = document.getElementById('app-selector-node-ip');
+  if (ipEl) ipEl.innerText = `(${effectiveIp})`;
+
+  showView('view-app-selector');
+}
+
+function returnToUserCluster() {
+  showView('view-user-cluster');
+  loadUserClusterGrid();
+}
+
+function returnToAppSelector() {
+  if (activeAppSelectorServer) {
+    openAppSelector(activeAppSelectorServer);
+  } else {
+    returnToUserCluster();
+  }
+}
+
+function returnFromIde() {
+  if (activeAppSelectorServer) {
+    openAppSelector(activeAppSelectorServer);
+  } else {
+    returnToPortal();
+  }
+}
+
+function launchCourtesyAi() {
+  if (!activeAppSelectorServer) return;
+  launchIdeForServer(activeAppSelectorServer);
+}
+
+function launchPureTerminal() {
+  if (!activeAppSelectorServer) return;
+  openPureTerminal(activeAppSelectorServer);
+}
+
+// --- Pure Terminal Engine ---
+function openPureTerminal(serverId) {
+  activePureTerminalServer = serverId;
+  activeAppSelectorServer = serverId;
+  pureTerminalCwd = '';
+
+  const srv = currentServers.find(s => s.id === serverId) || { id: serverId };
+  const effectiveIp = srv.status?.resolved_ip || srv.ip || srv.host || `${serverId}.local`;
+  const lat = srv.status?.latency_ms != null ? `${Math.round(srv.status.latency_ms)}ms` : 'online';
+
+  const nameEl = document.getElementById('pure-terminal-server-id');
+  if (nameEl) nameEl.innerText = serverId;
+
+  const pillEl = document.getElementById('pure-terminal-status-pill');
+  if (pillEl) pillEl.innerText = `${effectiveIp} • ${lat}`;
+
+  const promptEl = document.getElementById('pure-terminal-prompt');
+  const user = courtesyUser.username || 'user';
+  if (promptEl) promptEl.innerText = `${user}@${serverId}:~$`;
+
+  const outputEl = document.getElementById('pure-terminal-output');
+  if (outputEl && !outputEl.innerHTML.trim()) {
+    outputEl.innerHTML = `
+      <div class="text-neutral-500 dark:text-neutral-400 font-mono text-[11px] pb-2 border-b border-neutral-200/60 dark:border-neutral-800/60 leading-relaxed">
+        Connected to <span class="text-black dark:text-white font-semibold">${escapeHtml(serverId)}</span> (${escapeHtml(effectiveIp)})<br>
+        Type commands, <span class="text-neutral-700 dark:text-neutral-300 font-semibold">'clear'</span> to clear, or <span class="text-neutral-700 dark:text-neutral-300 font-semibold">'exit'</span> to return.
+      </div>
+    `;
+  }
+
+  showView('view-pure-terminal');
+  setTimeout(focusPureTerminalInput, 80);
+}
+
+function focusPureTerminalInput() {
+  const input = document.getElementById('pure-terminal-input');
+  if (input) input.focus();
+}
+
+function clearPureTerminal() {
+  const outputEl = document.getElementById('pure-terminal-output');
+  if (outputEl) outputEl.innerHTML = '';
+  focusPureTerminalInput();
+}
+
+function handlePureTerminalKey(event) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    submitPureTerminalCommand();
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    if (pureTerminalHistory.length > 0) {
+      if (pureTerminalHistoryIndex === -1) {
+        pureTerminalHistoryIndex = pureTerminalHistory.length - 1;
+      } else if (pureTerminalHistoryIndex > 0) {
+        pureTerminalHistoryIndex--;
+      }
+      event.target.value = pureTerminalHistory[pureTerminalHistoryIndex];
+    }
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    if (pureTerminalHistoryIndex !== -1) {
+      if (pureTerminalHistoryIndex < pureTerminalHistory.length - 1) {
+        pureTerminalHistoryIndex++;
+        event.target.value = pureTerminalHistory[pureTerminalHistoryIndex];
+      } else {
+        pureTerminalHistoryIndex = -1;
+        event.target.value = '';
+      }
+    }
+  } else if (event.ctrlKey && (event.key === 'l' || event.key === 'L')) {
+    event.preventDefault();
+    clearPureTerminal();
+  }
+}
+
+async function submitPureTerminalCommand() {
+  const input = document.getElementById('pure-terminal-input');
+  const log = document.getElementById('pure-terminal-output');
+  const spinner = document.getElementById('pure-terminal-spinner');
+  if (!input || !log) return;
+
+  const rawCmd = input.value;
+  const cmd = rawCmd.trim();
+  input.value = '';
+
+  if (!cmd) {
+    const promptText = document.getElementById('pure-terminal-prompt')?.innerText || '$';
+    const blankRow = document.createElement('div');
+    blankRow.className = "flex items-center gap-2 py-0.5";
+    blankRow.innerHTML = `<span class="text-emerald-600 dark:text-emerald-400 font-semibold select-none">${promptText}</span>`;
+    log.appendChild(blankRow);
+    log.scrollTop = log.scrollHeight;
+    return;
+  }
+
+  pureTerminalHistory.push(cmd);
+  pureTerminalHistoryIndex = -1;
+
+  if (cmd.toLowerCase() === 'clear') {
+    clearPureTerminal();
+    return;
+  }
+
+  if (cmd.toLowerCase() === 'exit') {
+    returnToAppSelector();
+    return;
+  }
+
+  const promptText = document.getElementById('pure-terminal-prompt')?.innerText || '$';
+  const entry = document.createElement('div');
+  entry.className = "space-y-1 my-1.5";
+  entry.innerHTML = `
+    <div class="flex items-center gap-2">
+      <span class="text-emerald-600 dark:text-emerald-400 font-semibold select-none">${promptText}</span>
+      <span class="text-black dark:text-white font-mono font-medium">${escapeHtml(cmd)}</span>
+      <span class="text-[10px] text-neutral-400 ml-auto select-none">${new Date().toLocaleTimeString()}</span>
+    </div>
+    <div class="terminal-cmd-res text-[11px] text-neutral-400 animate-pulse">Running...</div>
+  `;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+
+  const resEl = entry.querySelector('.terminal-cmd-res');
+  if (spinner) spinner.classList.remove('hidden');
+
+  try {
+    const isCd = cmd.startsWith('cd ') || cmd === 'cd';
+    const reqCmd = isCd ? `${cmd} && pwd` : cmd;
+
+    const res = await fetch(`${apiBaseUrl}/api/terminal/exec`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        server_id: activePureTerminalServer || 'cst',
+        command: reqCmd,
+        cwd: pureTerminalCwd
+      })
+    });
+
+    const data = await res.json();
+    if (spinner) spinner.classList.add('hidden');
+    resEl.classList.remove('animate-pulse');
+
+    if (!res.ok) {
+      throw new Error(data.detail || 'Execution failed');
+    }
+
+    if (isCd && data.exit_code === 0 && data.stdout) {
+      const newCwd = data.stdout.trim().split('\n').pop().trim();
+      if (newCwd) {
+        pureTerminalCwd = newCwd;
+        const user = courtesyUser.username || 'user';
+        const displayCwd = pureTerminalCwd.replace(/^\/home\/[^\/]+/, '~');
+        const promptEl = document.getElementById('pure-terminal-prompt');
+        if (promptEl) promptEl.innerText = `${user}@${activePureTerminalServer}:${displayCwd}$`;
+      }
+    }
+
+    let badge = '';
+    if (data.exit_code !== 0) {
+      badge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-rose-500/15 text-rose-500 font-medium">exit ${data.exit_code}</span>`;
+    }
+
+    let outHtml = '';
+    if (isCd && data.exit_code === 0) {
+      outHtml = '';
+    } else if (data.stdout) {
+      outHtml = `<pre class="whitespace-pre-wrap font-mono text-neutral-800 dark:text-neutral-200 text-xs">${escapeHtml(data.stdout)}</pre>`;
+    }
+
+    let errHtml = '';
+    if (data.stderr) {
+      errHtml = `<pre class="whitespace-pre-wrap font-mono text-rose-500 text-xs">${escapeHtml(data.stderr)}</pre>`;
+    }
+
+    if (!badge && !outHtml && !errHtml) {
+      resEl.remove();
+    } else {
+      resEl.innerHTML = `
+        ${badge ? `<div class="mb-1">${badge}</div>` : ''}
+        ${outHtml}
+        ${errHtml}
+      `;
+    }
+
+  } catch (e) {
+    if (spinner) spinner.classList.add('hidden');
+    resEl.classList.remove('animate-pulse');
+    resEl.innerHTML = `<div class="text-rose-500 font-mono text-xs">${escapeHtml(e.message)}</div>`;
+  } finally {
+    log.scrollTop = log.scrollHeight;
+    focusPureTerminalInput();
+  }
 }
 
 // --- Admin Control Panel Handlers ---

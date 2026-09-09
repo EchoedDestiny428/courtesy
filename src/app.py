@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -16,7 +17,7 @@ from src.config import (
     load_config, get_servers, get_server_by_id, add_server,
     update_server, delete_server, get_routing_settings, get_general_settings
 )
-from src.collector import update_all_metrics, get_cached_metrics, get_cluster_summary, scan_all_servers
+from src.collector import update_all_metrics, get_cached_metrics, get_cluster_summary, scan_all_servers, IS_ON_CST
 from src.router import (
     resolve_route, track_request_start, track_request_end,
     ensure_vram_headroom, offload_server_models, _active_requests
@@ -669,6 +670,88 @@ async def api_workspace_exec(payload: Dict[str, Any]):
         }
     except asyncio.TimeoutError:
         return {"exit_code": -1, "stdout": "", "stderr": "Command timed out after 30s"}
+    except Exception as e:
+        return {"exit_code": -1, "stdout": "", "stderr": str(e)}
+
+
+@app.post("/api/terminal/exec")
+async def api_terminal_exec(payload: Dict[str, Any]):
+    """Executes a terminal command directly on a specified cluster node (or gateway) over SSH."""
+    server_id = (payload.get("server_id") or "cst").strip()
+    cmd = payload.get("command", "").strip()
+    cwd = payload.get("cwd", "").strip()
+
+    if not cmd:
+        raise HTTPException(status_code=400, detail="Command is required")
+
+    server = get_server_by_id(server_id)
+    if not server and server_id == "cst":
+        server = {"id": "cst", "ssh_host": "cst", "ssh_user": "cst"}
+
+    if not server:
+        raise HTTPException(status_code=404, detail=f"Server '{server_id}' not found")
+
+    touch_activity(server_id)
+
+    ssh_host = server.get("ssh_host", f"{server_id}.local")
+    ssh_user = server.get("ssh_user", server_id)
+    ssh_target = f"{ssh_user}@{ssh_host}" if ssh_user else ssh_host
+
+    effective_cmd = f"cd {cwd} && {cmd}" if cwd else cmd
+
+    try:
+        if IS_ON_CST:
+            if server_id == "cst":
+                proc = await asyncio.create_subprocess_shell(
+                    effective_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=35.0)
+                return {
+                    "exit_code": proc.returncode,
+                    "stdout": stdout.decode("utf-8", errors="replace"),
+                    "stderr": stderr.decode("utf-8", errors="replace")
+                }
+            else:
+                proc = await asyncio.create_subprocess_exec(
+                    "ssh", "-o", "ConnectTimeout=6", "-o", "BatchMode=yes", ssh_target,
+                    effective_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=35.0)
+                return {
+                    "exit_code": proc.returncode,
+                    "stdout": stdout.decode("utf-8", errors="replace"),
+                    "stderr": stderr.decode("utf-8", errors="replace")
+                }
+        else:
+            if not shutil.which("ssh"):
+                return {"exit_code": -1, "stdout": "", "stderr": "SSH binary not found locally"}
+            if server_id == "cst":
+                proc = await asyncio.create_subprocess_exec(
+                    "ssh", "-o", "ConnectTimeout=6", "-o", "BatchMode=yes", "cst@cst",
+                    effective_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+            else:
+                remote_ssh = f"ssh -o ConnectTimeout=6 -o BatchMode=yes {ssh_target} {effective_cmd}"
+                proc = await asyncio.create_subprocess_exec(
+                    "ssh", "-o", "ConnectTimeout=6", "-o", "BatchMode=yes", "cst@cst",
+                    remote_ssh,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=35.0)
+            return {
+                "exit_code": proc.returncode,
+                "stdout": stdout.decode("utf-8", errors="replace"),
+                "stderr": stderr.decode("utf-8", errors="replace")
+            }
+    except asyncio.TimeoutError:
+        return {"exit_code": -1, "stdout": "", "stderr": "Command timed out after 35s"}
     except Exception as e:
         return {"exit_code": -1, "stdout": "", "stderr": str(e)}
 
