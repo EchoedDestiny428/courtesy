@@ -12,10 +12,30 @@ import os
 import secrets
 import threading
 import time
+from pathlib import Path
 from typing import Dict, Optional, Tuple
 from fastapi import HTTPException, Header, Request
 
 logger = logging.getLogger("courtesy.auth")
+
+# Auto-load .env file if present in project root
+_ENV_FILE = Path(__file__).parent.parent / ".env"
+if _ENV_FILE.exists():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_ENV_FILE)
+    except ImportError:
+        try:
+            with open(_ENV_FILE, "r", encoding="utf-8") as _f:
+                for _line in _f:
+                    _line = _line.strip()
+                    if _line and not _line.startswith("#") and "=" in _line:
+                        _k, _v = _line.split("=", 1)
+                        _k, _v = _k.strip(), _v.strip()
+                        if _k and _k not in os.environ:
+                            os.environ[_k] = _v.strip("'\"")
+        except Exception:
+            pass
 
 # Admin credentials - configurable via environment variable
 ADMIN_USERNAME = os.environ.get("COURTESY_ADMIN_USER", "admin")
