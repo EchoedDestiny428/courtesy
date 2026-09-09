@@ -219,14 +219,17 @@ def release_server(server_id: str, raw_username: str = "", raw_pin: Optional[str
     }
 
 
-def touch_activity(server_id: str, raw_username: str) -> None:
+def touch_activity(server_id: str, raw_username: str = "") -> None:
     """Updates the last_active timestamp for an active user session."""
     try:
-        username = _clean_username(raw_username)
         data = load_ownership_data()
         servers = data.setdefault("servers", {})
         existing = servers.get(server_id)
-        if existing and existing.get("owner", "").lower() == username.lower():
+        if existing and existing.get("owner"):
+            if raw_username:
+                username = _clean_username(raw_username)
+                if existing.get("owner", "").lower() != username.lower():
+                    return
             existing["last_active"] = time.time()
             save_ownership_data(data)
     except Exception:

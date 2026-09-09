@@ -691,7 +691,8 @@ async def api_terminal_exec(payload: Dict[str, Any]):
     if not server:
         raise HTTPException(status_code=404, detail=f"Server '{server_id}' not found")
 
-    touch_activity(server_id)
+    username = payload.get("username", "")
+    touch_activity(server_id, username)
 
     ssh_host = server.get("ssh_host", f"{server_id}.local")
     ssh_user = server.get("ssh_user", server_id)

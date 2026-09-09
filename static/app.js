@@ -710,7 +710,8 @@ async function submitPureTerminalCommand() {
       body: JSON.stringify({
         server_id: activePureTerminalServer || 'cst',
         command: reqCmd,
-        cwd: pureTerminalCwd
+        cwd: pureTerminalCwd,
+        username: courtesyUser.username || ''
       })
     });
 
