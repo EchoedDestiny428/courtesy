@@ -341,7 +341,7 @@ async function loadUserClusterGrid(isManualRefresh = false) {
   const claimedCount = currentServers.filter(s => s.ownership?.is_claimed).length;
 
   if (summaryPill) {
-    summaryPill.innerText = `${total} Nodes • ${onlineCount} Online • ${claimedCount} Reserved`;
+    summaryPill.innerText = `${onlineCount}/${total} Online • ${claimedCount} In Use`;
   }
 
   currentServers.forEach(srv => {
@@ -368,28 +368,28 @@ function renderUserClusterCard(srv) {
   let actionsHtml = '';
 
   if (isGateway) {
-    badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">Gateway Node</span>`;
-    actionsHtml = `<button disabled class="w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 text-neutral-400 dark:text-neutral-600 text-xs font-mono cursor-not-allowed">Orchestrator Host</button>`;
+    badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">Gateway</span>`;
+    actionsHtml = `<button disabled class="w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 text-neutral-400 dark:text-neutral-600 text-xs font-mono cursor-not-allowed">Gateway</button>`;
   } else if (!isOnline) {
     badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-neutral-100 text-neutral-400 dark:bg-neutral-800 dark:text-neutral-500">Offline</span>`;
-    actionsHtml = `<button disabled class="w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 text-neutral-400 dark:text-neutral-600 text-xs font-medium cursor-not-allowed">Node Unreachable</button>`;
+    actionsHtml = `<button disabled class="w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 text-neutral-400 dark:text-neutral-600 text-xs font-medium cursor-not-allowed">Offline</button>`;
   } else if (isMine) {
-    badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800">Reserved by You</span>`;
+    badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800">Yours</span>`;
     actionsHtml = `
       <div class="flex items-center gap-2">
         <button onclick="launchIdeForServer('${srv.id}')" class="flex-1 py-2 rounded-xl bg-black dark:bg-white text-white dark:text-black text-xs font-medium hover:bg-neutral-800 dark:hover:bg-neutral-200 transition text-center shadow-xs">
-          Open IDE
+          Open
         </button>
-        <button onclick="handleReleaseNode('${srv.id}')" class="px-3.5 py-2 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:border-rose-500 hover:text-rose-600 text-neutral-600 dark:text-neutral-400 text-xs font-medium transition" title="Release node reservation">
+        <button onclick="handleReleaseNode('${srv.id}')" class="px-3.5 py-2 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:border-rose-500 hover:text-rose-600 text-neutral-600 dark:text-neutral-400 text-xs font-medium transition" title="Release">
           Release
         </button>
       </div>
     `;
   } else if (isOther) {
-    badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">Claimed: ${escapeHtml(ownership.owner)}</span>`;
+    badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">In Use: ${escapeHtml(ownership.owner)}</span>`;
     actionsHtml = `
       <button disabled class="w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-neutral-400 dark:text-neutral-600 text-xs font-mono cursor-not-allowed text-center">
-        In Use by ${escapeHtml(ownership.owner)}
+        In Use
       </button>
     `;
   } else {
@@ -397,7 +397,7 @@ function renderUserClusterCard(srv) {
     badgeHtml = `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">Available</span>`;
     actionsHtml = `
       <button onclick="handleClaimAndLaunch('${srv.id}')" class="w-full py-2 rounded-xl bg-black dark:bg-white text-white dark:text-black text-xs font-medium hover:bg-neutral-800 dark:hover:bg-neutral-200 transition text-center shadow-xs">
-        Claim &amp; Launch IDE
+        Claim
       </button>
     `;
   }
@@ -631,31 +631,31 @@ async function loadAdminClusterData() {
           </span>
         </div>
 
-        <!-- Reservation Info -->
+        <!-- Status -->
         <div class="mt-2 text-xs font-mono flex items-center justify-between">
-          <span class="text-neutral-400">Reservation:</span>
+          <span class="text-neutral-400">Status</span>
           ${ownership.is_claimed 
-            ? `<span class="font-semibold text-amber-600 dark:text-amber-400">Reserved by ${escapeHtml(ownership.owner)} ${ownership.active_mins_ago != null ? `(${ownership.active_mins_ago}m ago)` : ''}</span>`
-            : `<span class="text-emerald-600 dark:text-emerald-400 font-medium">Unreserved / Available</span>`
+            ? `<span class="font-semibold text-amber-600 dark:text-amber-400">In Use: ${escapeHtml(ownership.owner)}</span>`
+            : `<span class="text-emerald-600 dark:text-emerald-400 font-medium">Available</span>`
           }
         </div>
       </div>
 
       <!-- Specs (Only CPU, GPU, RAM) -->
       <div class="rounded-xl bg-neutral-50 dark:bg-neutral-950/70 border border-neutral-100 dark:border-neutral-800/80 p-2.5 space-y-1 font-mono text-xs">
-        <div class="flex justify-between text-neutral-600 dark:text-neutral-300"><span>CPU:</span><span class="truncate max-w-[220px]">${escapeHtml(specs.cpu)}</span></div>
-        <div class="flex justify-between text-neutral-600 dark:text-neutral-300"><span>GPU:</span><span class="truncate max-w-[220px] font-semibold">${escapeHtml(specs.gpu)}</span></div>
-        <div class="flex justify-between text-neutral-600 dark:text-neutral-300"><span>RAM:</span><span>${escapeHtml(specs.ram)}</span></div>
+        <div class="flex justify-between text-neutral-600 dark:text-neutral-300"><span>CPU</span><span class="truncate max-w-[220px]">${escapeHtml(specs.cpu)}</span></div>
+        <div class="flex justify-between text-neutral-600 dark:text-neutral-300"><span>GPU</span><span class="truncate max-w-[220px] font-semibold">${escapeHtml(specs.gpu)}</span></div>
+        <div class="flex justify-between text-neutral-600 dark:text-neutral-300"><span>RAM</span><span>${escapeHtml(specs.ram)}</span></div>
       </div>
 
       <!-- Actions -->
       <div class="flex items-center gap-2 pt-1">
         ${ownership.is_claimed 
-          ? `<button onclick="handleAdminForceRelease('${srv.id}')" class="flex-1 py-1.5 rounded-xl border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 text-xs font-medium transition">Force Release</button>`
-          : `<button disabled class="flex-1 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-900 text-neutral-400 dark:text-neutral-600 text-xs font-mono cursor-not-allowed">Node Free</button>`
+          ? `<button onclick="handleAdminForceRelease('${srv.id}')" class="flex-1 py-1.5 rounded-xl border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 text-xs font-medium transition">Release</button>`
+          : `<button disabled class="flex-1 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-900 text-neutral-400 dark:text-neutral-600 text-xs font-mono cursor-not-allowed">Free</button>`
         }
-        <button onclick="offloadSingleNode('${srv.id}')" class="px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:border-black dark:hover:border-white text-xs font-medium transition" title="Offload VRAM on this node">
-          Flush VRAM
+        <button onclick="offloadSingleNode('${srv.id}')" class="px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:border-black dark:hover:border-white text-xs font-medium transition" title="Flush">
+          Flush
         </button>
       </div>
     `;
@@ -2465,9 +2465,12 @@ function applyTheme(theme) {
     metaColorScheme.content = isDark ? 'dark' : 'light';
   }
 
-  // Update theme toggle icons (sun when dark to switch to light, moon when light to switch to dark)
-  document.querySelectorAll('.theme-toggle-icon').forEach(iconEl => {
-    iconEl.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
+  // Update theme toggle buttons dynamically (sun when night to switch to morning, moon when morning to switch to night)
+  document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+    btn.innerHTML = isDark 
+      ? '<i data-lucide="sun" class="w-3.5 h-3.5 theme-toggle-icon"></i>' 
+      : '<i data-lucide="moon" class="w-3.5 h-3.5 theme-toggle-icon"></i>';
+    btn.title = isDark ? "Switch to Morning Mode (Light)" : "Switch to Night Mode (Dark)";
   });
 
   const hljsTheme = document.getElementById('hljs-theme');

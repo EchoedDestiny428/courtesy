@@ -203,6 +203,7 @@ function createWindow() {
 
   ipcMain.handle('cluster:scanLocalNodes', async () => {
     const nodes = [
+      { id: 'csthink', dns: 'csthink.local', defaultIp: '10.11.16.16' },
       { id: 'cst1', dns: 'cst1.local', defaultIp: '10.11.16.36' },
       { id: 'cst5', dns: 'cst5.local', defaultIp: '10.11.2.22' },
       { id: 'cst6', dns: 'cst6.local', defaultIp: '10.11.16.29' },
@@ -218,7 +219,17 @@ function createWindow() {
         }
       } catch (e) {}
 
-      const isM2000 = (node.id === 'cst5');
+      const probe = await probeNodeSocket(resolvedIp, node.id);
+      let gpuSummary = '2x Quadro P2000 (10GB)';
+      let gpuCount = 2;
+      if (node.id === 'csthink') {
+        gpuSummary = '1x GeForce RTX 4080 (16GB)';
+        gpuCount = 1;
+      } else if (node.id === 'cst5') {
+        gpuSummary = '2x Quadro M2000 (8GB)';
+        gpuCount = 2;
+      }
+
       return {
         id: node.id,
         name: node.id,
@@ -228,8 +239,8 @@ function createWindow() {
         online: probe.online,
         latencyMs: probe.latencyMs,
         latency: probe.online ? `${probe.latencyMs}ms` : 'offline',
-        gpuCount: 2,
-        gpuSummary: isM2000 ? '2x Quadro M2000 (8GB)' : '2x Quadro P2000 (10GB)',
+        gpuCount: gpuCount,
+        gpuSummary: gpuSummary,
         available: probe.online
       };
     }));
