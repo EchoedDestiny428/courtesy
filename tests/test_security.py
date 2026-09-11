@@ -20,6 +20,7 @@ from src.auth import (
     check_pin_brute_force,
     record_pin_failure,
     reset_pin_failures,
+    DEFAULT_ADMIN_PASS,
 )
 from src.security import get_safe_workspace_path
 from src.ownership import verify_or_register_user
@@ -155,8 +156,8 @@ def test_admin_login_flow():
     res_bad = client.post("/api/auth/login", json={"username": "admin", "password": "wrong_password_123"})
     assert res_bad.status_code == 401
 
-    # Valid default password (cst)
-    res_ok = client.post("/api/auth/login", json={"username": "admin", "password": "cst"})
+    # Valid default password
+    res_ok = client.post("/api/auth/login", json={"username": "admin", "password": DEFAULT_ADMIN_PASS})
     assert res_ok.status_code == 200
     data = res_ok.json()
     assert data.get("status") == "success"
@@ -196,4 +197,103 @@ def test_terminal_websocket_unauthenticated_rejected():
     with client.websocket_connect("/ws/terminal/cst1") as websocket:
         data = websocket.receive_bytes()
         assert b"Terminal access denied" in data
+
+
+def test_servers_ip_hidden_for_non_admin():
+    """Verify that /api/servers masks IP addresses for unauthenticated or non-admin requests."""
+    res = client.get("/api/servers")
+    assert res.status_code == 200
+    servers = res.json()
+    assert len(servers) > 0
+    for s in servers:
+        assert s.get("ip") is None
+        status = s.get("status", {})
+        assert status.get("resolved_ip") is None
+        # host should not be a raw IP format
+        host_val = s.get("host", "")
+        if host_val:
+            assert not (all(p.isdigit() for p in host_val.split(".")) and len(host_val.split(".")) == 4)
+
+
+def test_servers_ip_visible_for_admin():
+    """Verify that /api/servers includes live IP addresses when request carries valid admin token."""
+    admin_token = create_admin_session()
+    res = client.get("/api/servers", headers={"Authorization": f"Bearer {admin_token}"})
+    assert res.status_code == 200
+    servers = res.json()
+    assert len(servers) > 0
+    # At least one configured server should have its host or resolved_ip visible
+    has_host_or_ip = any(s.get("host") or s.get("status", {}).get("resolved_ip") for s in servers)
+    assert has_host_or_ip
+
+
+def test_servers_scan_ip_hidden_for_non_admin():
+    """Verify that /api/servers/scan masks IP addresses for unauthenticated or non-admin requests."""
+    res = client.get("/api/servers/scan")
+    assert res.status_code == 200
+    servers = res.json()
+    assert len(servers) > 0
+    for s in servers:
+        assert s.get("ip") is None
+        status = s.get("status", {})
+        assert status.get("resolved_ip") is None
+
+
+def test_servers_scan_ip_visible_for_admin():
+    """Verify that /api/servers/scan preserves server info when request carries valid admin token."""
+    admin_token = create_admin_session()
+    res = client.get("/api/servers/scan", headers={"Authorization": f"Bearer {admin_token}"})
+    assert res.status_code == 200
+    servers = res.json()
+    assert len(servers) > 0
+
+
+def test_workspace_create_delete_requires_admin():
+    """Verify that file/dir creation, renaming, and deletion require valid admin credentials."""
+    # Unauthenticated create
+    res_c = client.post("/api/workspace/create", json={"path": "sandbox_test.txt", "content": "hello"})
+    assert res_c.status_code in (401, 403)
+
+    # Unauthenticated rename
+    res_r = client.post("/api/workspace/rename", json={"old_path": "sandbox_test.txt", "new_path": "sandbox_renamed.txt"})
+    assert res_r.status_code in (401, 403)
+
+    # Unauthenticated delete
+    res_d = client.post("/api/workspace/delete", json={"path": "sandbox_test.txt"})
+    assert res_d.status_code in (401, 403)
+
+    # Authenticated create, rename & delete
+    token = create_admin_session()
+    res_c_auth = client.post(
+        "/api/workspace/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"path": "sandbox_test.txt", "content": "hello secure world"}
+    )
+    assert res_c_auth.status_code == 200
+    assert res_c_auth.json().get("success") is True
+
+    res_r_auth = client.post(
+        "/api/workspace/rename",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"old_path": "sandbox_test.txt", "new_path": "sandbox_renamed.txt"}
+    )
+    assert res_r_auth.status_code == 200
+    assert res_r_auth.json().get("success") is True
+
+    res_d_auth = client.post(
+        "/api/workspace/delete",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"path": "sandbox_renamed.txt"}
+    )
+    assert res_d_auth.status_code == 200
+    assert res_d_auth.json().get("success") is True
+
+
+def test_safe_workspace_path_unspecified_base_escapes():
+    """Verify that when base_folder is empty, paths outside current working directory are strictly rejected."""
+    outside_path = Path(os.getcwd()).parent.resolve() / "unauthorized_file.txt"
+    with pytest.raises(HTTPException) as exc_info:
+        get_safe_workspace_path(str(outside_path))
+    assert exc_info.value.status_code == 403
+
 

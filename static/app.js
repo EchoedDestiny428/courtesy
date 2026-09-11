@@ -80,78 +80,72 @@ const FALLBACK_SERVERS = [
     id: 'csthink',
     name: 'csthink',
     role: 'inference',
-    ip: '10.11.16.16',
     specs: {
       cpu: 'Intel Xeon w3-2423 (12 Cores)',
       ram: '32 GB',
       gpus: [{ name: 'NVIDIA GeForce RTX 4080', vram_total_mb: 16384 }]
     },
-    status: { online: true, latency_ms: 0.3, resolved_ip: '10.11.16.16' },
+    status: { online: true, latency_ms: 0.3, dns: 'csthink.local' },
     ownership: { is_claimed: false, owner: null }
   },
   {
     id: 'cst1',
     name: 'cst1',
     role: 'inference',
-    ip: '10.11.16.36',
     specs: {
       cpu: 'Intel Core i7-8086K (12 Cores)',
       ram: '32 GB',
       gpus: [{ name: 'NVIDIA Quadro P2000', vram_total_mb: 5120 }, { name: 'NVIDIA Quadro P2000', vram_total_mb: 5120 }]
     },
-    status: { online: true, latency_ms: 18, resolved_ip: '10.11.16.36' },
+    status: { online: true, latency_ms: 18, dns: 'cst1.local' },
     ownership: { is_claimed: false, owner: null }
   },
   {
     id: 'cst7',
     name: 'cst7',
     role: 'inference',
-    ip: '10.11.2.12',
     specs: {
       cpu: 'Intel Core i7-8086K (12 Cores)',
       ram: '32 GB',
       gpus: [{ name: 'NVIDIA Quadro P2000', vram_total_mb: 5120 }, { name: 'NVIDIA Quadro P2000', vram_total_mb: 5120 }]
     },
-    status: { online: true, latency_ms: 19, resolved_ip: '10.11.2.12' },
+    status: { online: true, latency_ms: 19, dns: 'cst7.local' },
     ownership: { is_claimed: false, owner: null }
   },
   {
     id: 'cst6',
     name: 'cst6',
     role: 'inference',
-    ip: '10.11.16.29',
     specs: {
       cpu: 'Intel Core i7-8086K (12 Cores)',
       ram: '32 GB',
       gpus: [{ name: 'NVIDIA Quadro P2000', vram_total_mb: 5120 }, { name: 'NVIDIA Quadro P2000', vram_total_mb: 5120 }]
     },
-    status: { online: true, latency_ms: 19, resolved_ip: '10.11.16.29' },
+    status: { online: true, latency_ms: 19, dns: 'cst6.local' },
     ownership: { is_claimed: false, owner: null }
   },
   {
     id: 'cst5',
     name: 'cst5',
     role: 'inference',
-    ip: '10.11.2.22',
     specs: {
       cpu: 'Intel Core i7-8086K (12 Cores)',
       ram: '32 GB',
       gpus: [{ name: 'NVIDIA Quadro M2000', vram_total_mb: 4096 }, { name: 'NVIDIA Quadro M2000', vram_total_mb: 4096 }]
     },
-    status: { online: true, latency_ms: 16, resolved_ip: '10.11.2.22' },
+    status: { online: true, latency_ms: 16, dns: 'cst5.local' },
     ownership: { is_claimed: false, owner: null }
   },
   {
     id: 'cst',
     name: 'cst',
     role: 'gateway',
-    ip: '100.107.249.92',
     specs: {
       cpu: 'Cortex-A72 (4 Cores)',
       ram: '8 GB',
       gpus: []
     },
-    status: { online: true, latency_ms: 1, resolved_ip: '100.107.249.92' },
+    status: { online: true, latency_ms: 1, dns: 'cst.local' },
     ownership: { is_claimed: false, owner: null }
   }
 ];
@@ -351,8 +345,10 @@ async function loadUserClusterGrid(isManualRefresh = false) {
 
   isScanningNodes = true;
   try {
+    const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
+    const scanHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
     // Actively send request to parse and probe available cluster devices
-    const res = await fetch(`${apiBaseUrl}/api/servers/scan`, { signal: AbortSignal.timeout(10000) });
+    const res = await fetch(`${apiBaseUrl}/api/servers/scan`, { headers: scanHeaders, signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const servers = await res.json();
     if (Array.isArray(servers) && servers.length > 0) {
@@ -361,7 +357,9 @@ async function loadUserClusterGrid(isManualRefresh = false) {
   } catch (e) {
     console.warn('[Courtesy] Active device scan failed, falling back to /api/servers or cache:', e);
     try {
-      const fbRes = await fetch(`${apiBaseUrl}/api/servers`, { signal: AbortSignal.timeout(3000) });
+      const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
+      const fbHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const fbRes = await fetch(`${apiBaseUrl}/api/servers`, { headers: fbHeaders, signal: AbortSignal.timeout(3000) });
       if (fbRes.ok) {
         const fbServers = await fbRes.json();
         if (Array.isArray(fbServers) && fbServers.length > 0) {
@@ -431,7 +429,9 @@ function renderUserClusterCard(srv) {
     `;
   }
 
-  const effectiveIp = srv.status?.resolved_ip || srv.ip || srv.host || '';
+  const isAdmin = Boolean(sessionStorage.getItem('admin_token') || adminSessionToken);
+  const effectiveIp = srv.status?.resolved_ip || srv.ip || srv.host || `${srv.id}.local`;
+  const showIp = isAdmin && effectiveIp && !effectiveIp.endsWith('.local') && effectiveIp !== '127.0.0.1';
 
   return `
     <div class="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/90 p-4 shadow-xs flex flex-col justify-between space-y-3.5 transition hover:border-neutral-300 dark:hover:border-neutral-700">
@@ -442,7 +442,7 @@ function renderUserClusterCard(srv) {
           <div class="flex items-center gap-2">
             <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-neutral-400'}"></span>
             <span class="font-mono font-semibold text-sm text-black dark:text-white">${srv.id}</span>
-            <span class="text-[11px] font-mono text-neutral-400 dark:text-neutral-500">(${effectiveIp})</span>
+            ${showIp ? `<span class="text-[11px] font-mono text-neutral-400 dark:text-neutral-500">(${escapeHtml(effectiveIp)})</span>` : ''}
           </div>
           <div class="text-[11px] font-mono ${isOnline ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-neutral-400'}">
             ${lat}
@@ -580,13 +580,15 @@ let pureTerminalHistoryIndex = -1;
 function openAppSelector(serverId) {
   activeAppSelectorServer = serverId;
   const srv = currentServers.find(s => s.id === serverId) || { id: serverId };
+  const isAdmin = Boolean(sessionStorage.getItem('admin_token') || adminSessionToken);
   const effectiveIp = srv.status?.resolved_ip || srv.ip || srv.host || `${serverId}.local`;
+  const showIp = isAdmin && effectiveIp && !effectiveIp.endsWith('.local') && effectiveIp !== '127.0.0.1';
 
   const nodeEl = document.getElementById('app-selector-node-id');
   if (nodeEl) nodeEl.innerText = serverId;
 
   const ipEl = document.getElementById('app-selector-node-ip');
-  if (ipEl) ipEl.innerText = `(${effectiveIp})`;
+  if (ipEl) ipEl.innerText = showIp ? `(${effectiveIp})` : '';
 
   showView('view-app-selector');
 }
@@ -681,14 +683,16 @@ function openPureTerminal(serverId) {
   activeAppSelectorServer = serverId;
 
   const srv = currentServers.find(s => s.id === serverId) || { id: serverId };
+  const isAdmin = Boolean(sessionStorage.getItem('admin_token') || adminSessionToken);
   const effectiveIp = srv.status?.resolved_ip || srv.ip || srv.host || `${serverId}.local`;
+  const showIp = isAdmin && effectiveIp && !effectiveIp.endsWith('.local') && effectiveIp !== '127.0.0.1';
   const lat = srv.status?.latency_ms != null ? `${Math.round(srv.status.latency_ms)}ms` : 'online';
 
   const nameEl = document.getElementById('pure-terminal-server-id');
   if (nameEl) nameEl.innerText = serverId;
 
   const pillEl = document.getElementById('pure-terminal-status-pill');
-  if (pillEl) pillEl.innerText = `${effectiveIp} • ${lat}`;
+  if (pillEl) pillEl.innerText = showIp ? `${effectiveIp} • ${lat}` : `${lat}`;
 
   showView('view-pure-terminal');
 
@@ -1718,7 +1722,9 @@ function startStandardMode(activeServer) {
   const srv = activeIdeServer;
   const ideNodeBadge = document.getElementById('ide-connected-node');
   if (ideNodeBadge) {
-    ideNodeBadge.innerText = `${srv.id} (${srv.ip}${srv.latency ? ' • ' + srv.latency : ''})`;
+    const isAdmin = Boolean(sessionStorage.getItem('admin_token') || adminSessionToken);
+    const showIp = isAdmin && srv.ip && !srv.ip.endsWith('.local') && srv.ip !== '127.0.0.1';
+    ideNodeBadge.innerText = `${srv.id} (${showIp ? srv.ip + ' • ' : ''}${srv.latency || 'online'})`;
   }
   updateIdeModelUI();
   updateIdeSidebarUI();
@@ -3887,9 +3893,12 @@ async function createNewFilePrompt(parentRelative = '') {
   if (!relPath || !relPath.trim()) return;
 
   try {
+    const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const resp = await fetch(`${apiBaseUrl}/api/workspace/create`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         path: relPath.trim(),
         is_dir: false,
@@ -3902,7 +3911,7 @@ async function createNewFilePrompt(parentRelative = '') {
       await loadWorkspaceFileTree();
       openFileInEditor(data.full_path, data.name, "");
     } else {
-      showToast(`Create failed: ${data.error}`, "❌");
+      showToast(`Create failed: ${data.detail || data.error}`, "❌");
     }
   } catch (e) {
     showToast(`Error creating file: ${e.message}`, "❌");
@@ -3915,9 +3924,12 @@ async function createNewFolderPrompt(parentRelative = '') {
   if (!relPath || !relPath.trim()) return;
 
   try {
+    const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const resp = await fetch(`${apiBaseUrl}/api/workspace/create`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         path: relPath.trim(),
         is_dir: true,
@@ -3929,7 +3941,7 @@ async function createNewFolderPrompt(parentRelative = '') {
       showToast(`Created directory ${relPath}`, "📁");
       await loadWorkspaceFileTree();
     } else {
-      showToast(`Create failed: ${data.error}`, "❌");
+      showToast(`Create failed: ${data.detail || data.error}`, "❌");
     }
   } catch (e) {
     showToast(`Error creating folder: ${e.message}`, "❌");
@@ -3941,9 +3953,12 @@ async function deleteWorkspaceItemPrompt(itemPath, isDir = false) {
   if (!confirm(`Are you sure you want to permanently delete "${name}"?`)) return;
 
   try {
+    const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const resp = await fetch(`${apiBaseUrl}/api/workspace/delete`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         path: itemPath,
         folder: currentWorkspaceFolder
@@ -3979,9 +3994,12 @@ async function renameWorkspaceItemPrompt(oldPath, oldName, isDir = false) {
   const newPath = parentDir ? `${parentDir}/${newName.trim()}` : newName.trim();
 
   try {
+    const token = sessionStorage.getItem('admin_token') || adminSessionToken || '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const resp = await fetch(`${apiBaseUrl}/api/workspace/rename`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         old_path: oldPath,
         new_path: newPath,

@@ -1,4 +1,4 @@
-﻿// Courtesy IDE — Workspace Module
+// Courtesy IDE — Workspace Module
 // Handles all folder selection, file list, read/write, diff, and command execution.
 
 import { getState, setState } from './state.js';
@@ -198,8 +198,11 @@ export async function refreshGitStatus() {
 // ── File Create / Delete / Rename ─────────────────────────────────────────────
 export async function createFile(relPath, isDir = false) {
   const { workspaceFolder } = getState();
+  const token = sessionStorage.getItem('admin_token') || '';
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${getApiBase()}/api/workspace/create`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers,
     body: JSON.stringify({ path: relPath, is_dir: isDir, folder: workspaceFolder })
   });
   return res.ok ? await res.json() : { success: false, error: `HTTP ${res.status}` };
@@ -207,8 +210,11 @@ export async function createFile(relPath, isDir = false) {
 
 export async function deleteItem(itemPath) {
   const { workspaceFolder } = getState();
+  const token = sessionStorage.getItem('admin_token') || '';
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${getApiBase()}/api/workspace/delete`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers,
     body: JSON.stringify({ path: itemPath, folder: workspaceFolder })
   });
   if (res.ok) {
@@ -221,8 +227,11 @@ export async function deleteItem(itemPath) {
 
 export async function renameItem(oldPath, newPath) {
   const { workspaceFolder } = getState();
+  const token = sessionStorage.getItem('admin_token') || '';
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${getApiBase()}/api/workspace/rename`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers,
     body: JSON.stringify({ old_path: oldPath, new_path: newPath, folder: workspaceFolder })
   });
   return res.ok ? await res.json() : { success: false };

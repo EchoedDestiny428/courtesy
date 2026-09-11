@@ -105,6 +105,12 @@ def get_safe_workspace_path(path_str: str, base_folder: str = "") -> Path:
         except ValueError:
             logger.warning(f"Security Alert: Blocked path escape outside base folder: {resolved_target}")
             raise HTTPException(status_code=403, detail="Access denied: Path escapes designated project boundary.")
+    else:
+        try:
+            resolved_target.relative_to(base_path)
+        except ValueError:
+            logger.warning(f"Security Alert: Blocked path escape outside current working directory: {resolved_target}")
+            raise HTTPException(status_code=403, detail="Access denied: Path escapes current working directory.")
 
     return resolved_target
 

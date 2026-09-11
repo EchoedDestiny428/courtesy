@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 import select
+import shlex
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -117,13 +118,33 @@ app = FastAPI(
 )
 
 # CORS configuration - configurable via COURTESY_ALLOWED_ORIGINS
-_raw_origins = os.environ.get("COURTESY_ALLOWED_ORIGINS", "*").strip()
-allowed_origins = ["*"] if _raw_origins == "*" else [o.strip() for o in _raw_origins.split(",") if o.strip()]
+_raw_origins = os.environ.get("COURTESY_ALLOWED_ORIGINS", "").strip()
+if _raw_origins == "*":
+    # Per CORS specification, credentials cannot be enabled with wildcard origin
+    allowed_origins = ["*"]
+    allow_creds = False
+elif _raw_origins:
+    allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    allow_creds = True
+else:
+    # Explicit localhost, 127.0.0.1, and cluster origins to safely allow credentials
+    allowed_origins = [
+        "http://localhost",
+        "http://localhost:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:3000",
+        "http://cst.local",
+        "http://cst.local:8000",
+    ]
+    allow_creds = True
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|cst|.*\.local)(:\d+)?$" if (allow_creds and not _raw_origins) else None,
+    allow_credentials=allow_creds,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -162,20 +183,48 @@ async def api_cluster_summary():
     return get_cluster_summary()
 
 
+def check_is_admin_request(request: Request) -> bool:
+    """Helper to check if request carries a valid admin session token."""
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "").strip() if auth_header else ""
+    if not token:
+        token = request.query_params.get("admin_token", "")
+    return is_valid_admin_token(token)
+
+
+def sanitize_server_for_user(s: Dict[str, Any]) -> Dict[str, Any]:
+    """Hides IP address on user-facing server lists. Only visible to admin."""
+    s_copy = dict(s)
+    node_dns = f"{s_copy.get('id', 'node')}.local"
+    s_copy["ip"] = None
+    s_copy["host"] = node_dns
+    if "ssh_host" in s_copy:
+        s_copy["ssh_host"] = node_dns
+    if "status" in s_copy and isinstance(s_copy["status"], dict):
+        st = dict(s_copy["status"])
+        st["resolved_ip"] = None
+        st["host"] = node_dns
+        s_copy["status"] = st
+    return s_copy
+
+
 @app.get("/api/servers")
-async def api_get_servers():
-    """Returns all configured servers augmented with current live telemetry."""
+async def api_get_servers(request: Request):
+    """Returns all configured servers augmented with current live telemetry. Hides IP addresses unless request is authenticated by an admin."""
+    is_admin = check_is_admin_request(request)
     servers = get_servers()
     metrics = get_cached_metrics()
     result = []
     for s in servers:
         s_copy = dict(s)
         s_metric = metrics.get(s["id"], {})
+        resolved_ip = s_metric.get("resolved_ip", s.get("ip", s.get("host"))) if is_admin else None
+        host_val = (s_metric.get("resolved_ip") or s.get("host")) if is_admin else f"{s['id']}.local"
         s_copy["status"] = {
             "online": s_metric.get("online", False),
             "latency_ms": s_metric.get("latency_ms"),
             "dns": s_metric.get("dns", f"{s['id']}.local"),
-            "resolved_ip": s_metric.get("resolved_ip", s.get("ip", s.get("host"))),
+            "resolved_ip": resolved_ip,
             "probe_type": s_metric.get("probe_type"),
             "verified_name": s_metric.get("verified_name", s["id"]),
             "ram_total_gb": s_metric.get("ram_total_gb", 0),
@@ -186,20 +235,29 @@ async def api_get_servers():
             "models": s_metric.get("models", []),
             "running_models": s_metric.get("running_models", [])
         }
-        if s_metric.get("resolved_ip"):
-            s_copy["host"] = s_metric.get("resolved_ip")
+        s_copy["host"] = host_val
+        if not is_admin:
+            s_copy["ip"] = None
+            if "ssh_host" in s_copy:
+                s_copy["ssh_host"] = f"{s['id']}.local"
         s_copy["ownership"] = get_server_ownership(s["id"])
         result.append(s_copy)
     return result
 
 
 @app.get("/api/servers/scan")
-async def api_scan_servers():
-    """Actively scans .local DNS and sends packet probes to all cluster nodes, returning fresh statuses."""
+async def api_scan_servers(request: Request):
+    """Actively scans .local DNS and sends packet probes to all cluster nodes, returning fresh statuses. Hides IP addresses unless request is authenticated by an admin."""
+    is_admin = check_is_admin_request(request)
     servers = await scan_all_servers()
+    result = []
     for s in servers:
-        s["ownership"] = get_server_ownership(s["id"])
-    return servers
+        s_copy = dict(s)
+        s_copy["ownership"] = get_server_ownership(s_copy["id"])
+        if not is_admin:
+            s_copy = sanitize_server_for_user(s_copy)
+        result.append(s_copy)
+    return result
 
 
 
@@ -815,7 +873,7 @@ async def api_terminal_exec(request: Request, payload: Dict[str, Any]):
     ssh_user = server.get("ssh_user", server_id)
     ssh_target = f"{ssh_user}@{ssh_host}" if ssh_user else ssh_host
 
-    effective_cmd = f"cd {cwd} && {cmd}" if cwd else cmd
+    effective_cmd = f"cd {shlex.quote(cwd)} && {cmd}" if cwd else cmd
 
     try:
         if IS_ON_CST:
@@ -855,7 +913,8 @@ async def api_terminal_exec(request: Request, payload: Dict[str, Any]):
                     stderr=asyncio.subprocess.PIPE
                 )
             else:
-                remote_ssh = f"ssh -o ConnectTimeout=6 -o BatchMode=yes {ssh_target} {effective_cmd}"
+                quoted_cmd = shlex.quote(effective_cmd)
+                remote_ssh = f"ssh -o ConnectTimeout=6 -o BatchMode=yes {ssh_target} {quoted_cmd}"
                 proc = await asyncio.create_subprocess_exec(
                     "ssh", "-o", "ConnectTimeout=6", "-o", "BatchMode=yes", "cst@cst",
                     remote_ssh,
@@ -875,7 +934,7 @@ async def api_terminal_exec(request: Request, payload: Dict[str, Any]):
 
 
 @app.post("/api/workspace/create")
-async def api_workspace_create(payload: Dict[str, Any]):
+async def api_workspace_create(payload: Dict[str, Any], admin_token: str = Depends(require_admin_auth)):
     """Creates a new file or directory within workspace sandbox."""
     target_path = payload.get("path", "").strip()
     base_folder = payload.get("folder", "").strip()
@@ -901,7 +960,7 @@ async def api_workspace_create(payload: Dict[str, Any]):
 
 
 @app.post("/api/workspace/delete")
-async def api_workspace_delete(payload: Dict[str, Any]):
+async def api_workspace_delete(payload: Dict[str, Any], admin_token: str = Depends(require_admin_auth)):
     """Deletes a file or directory within workspace sandbox."""
     target_path = payload.get("path", "").strip()
     base_folder = payload.get("folder", "").strip()
@@ -922,7 +981,7 @@ async def api_workspace_delete(payload: Dict[str, Any]):
 
 
 @app.post("/api/workspace/rename")
-async def api_workspace_rename(payload: Dict[str, Any]):
+async def api_workspace_rename(payload: Dict[str, Any], admin_token: str = Depends(require_admin_auth)):
     """Renames or moves a file or directory within workspace sandbox."""
     old_path = payload.get("old_path", "").strip()
     new_path = payload.get("new_path", "").strip()
