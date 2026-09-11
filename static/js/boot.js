@@ -46,12 +46,17 @@ window.applyTheme    = applyTheme;
 // Workspace
 window.pickWorkspaceFolder  = pickWorkspaceFolder;
 window.setWorkspaceFolder   = (p) => setWorkspaceFolder(p).then(() => {
+  if (typeof window.addActiveWorkspace === 'function') window.addActiveWorkspace(p);
   if (typeof window.updateIdeWorkspaceUI === 'function') window.updateIdeWorkspaceUI();
-  if (typeof window.loadWorkspaceChats === 'function') window.loadWorkspaceChats();
+  if (typeof window.renderWorkspacesSidebar === 'function') window.renderWorkspacesSidebar();
 });
 window.closeWorkspaceFolder = () => {
-  closeWorkspaceFolder();
-  if (typeof window.updateIdeWorkspaceUI === 'function') window.updateIdeWorkspaceUI();
+  if (typeof window.closeActiveConversation === 'function') {
+    window.closeActiveConversation();
+  } else {
+    closeWorkspaceFolder();
+    if (typeof window.updateIdeWorkspaceUI === 'function') window.updateIdeWorkspaceUI();
+  }
 };
 window.getFolderName            = getFolderName;
 window.getWorkspaceFileList     = getFileList;
@@ -61,7 +66,7 @@ window.applyWorkspaceFileDiff   = applyDiff;
 window.runWorkspaceCommand      = runCommand;
 window.getRecentWorkspaces      = getRecentWorkspaces;
 
-// Chat — expose new module fns, but actual DOM rendering stays in app.js for now
+// Chat & Workspaces — expose new module fns
 window.createNewChatModern = createNewChat;
 window.selectChatModern    = selectChat;
 window.deleteChatModern    = deleteChat;
@@ -130,8 +135,9 @@ subscribe('theme', (val) => {
 // ── Workspace events → app.js UI handlers ─────────────────────────────────────
 on('workspace:changed', ({ folder }) => {
   window.currentWorkspaceFolder = folder;
+  if (typeof window.addActiveWorkspace === 'function') window.addActiveWorkspace(folder);
   if (typeof window.updateIdeWorkspaceUI === 'function') window.updateIdeWorkspaceUI();
-  if (typeof window.loadWorkspaceChats === 'function') window.loadWorkspaceChats();
+  if (typeof window.renderWorkspacesSidebar === 'function') window.renderWorkspacesSidebar();
   if (typeof window.loadWorkspaceFileTree === 'function') window.loadWorkspaceFileTree();
 });
 on('workspace:indexed', ({ files }) => {

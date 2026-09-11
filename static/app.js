@@ -1407,16 +1407,138 @@ function updateIdeSidebarUI() {
   }
 }
 
-function getWorkspaceStorageKey() {
-  if (!currentWorkspaceFolder) return 'courtesy_chats___default__';
-  const cleanPath = currentWorkspaceFolder.replace(/[\\/]+$/, '').toLowerCase();
+function getActiveWorkspaces() {
+  try {
+    const raw = localStorage.getItem('courtesy_active_workspaces');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.error('Failed to parse active workspaces:', e);
+  }
+
+  // Auto-migration from currentWorkspaceFolder or recent workspaces
+  const list = [];
+  if (currentWorkspaceFolder) {
+    list.push({
+      path: currentWorkspaceFolder,
+      name: getFolderName(currentWorkspaceFolder),
+      expanded: true
+    });
+  }
+  const recents = getRecentWorkspaces();
+  if (Array.isArray(recents)) {
+    recents.forEach(p => {
+      if (p && !list.some(w => w.path.toLowerCase() === p.toLowerCase())) {
+        list.push({
+          path: p,
+          name: getFolderName(p),
+          expanded: true
+        });
+      }
+    });
+  }
+  if (list.length > 0) {
+    saveActiveWorkspaces(list);
+  }
+  return list;
+}
+
+function saveActiveWorkspaces(workspaces) {
+  try {
+    localStorage.setItem('courtesy_active_workspaces', JSON.stringify(workspaces));
+  } catch (e) {
+    console.error('Failed to save active workspaces:', e);
+  }
+}
+
+function addActiveWorkspace(folderPath) {
+  if (!folderPath) return;
+  const normalized = folderPath.replace(/\\/g, '/');
+  const list = getActiveWorkspaces();
+  const existing = list.find(w => w.path.toLowerCase() === normalized.toLowerCase());
+  if (existing) {
+    existing.expanded = true;
+  } else {
+    list.unshift({
+      path: normalized,
+      name: getFolderName(normalized),
+      expanded: true
+    });
+  }
+  saveActiveWorkspaces(list);
+  recordRecentWorkspace(normalized);
+  renderWorkspacesSidebar();
+}
+
+function removeWorkspaceFolder(folderPath, e) {
+  if (e) e.stopPropagation();
+  let list = getActiveWorkspaces();
+  list = list.filter(w => w.path.toLowerCase() !== folderPath.toLowerCase());
+  saveActiveWorkspaces(list);
+
+  if (currentWorkspaceFolder && currentWorkspaceFolder.toLowerCase() === folderPath.toLowerCase()) {
+    closeActiveConversation();
+    if (list.length > 0) {
+      currentWorkspaceFolder = list[0].path;
+      localStorage.setItem('workspace_folder', currentWorkspaceFolder);
+    } else {
+      currentWorkspaceFolder = '';
+      localStorage.removeItem('workspace_folder');
+    }
+  }
+
+  renderWorkspacesSidebar();
+  updateIdeWorkspaceUI();
+  showToast('Workspace removed', '📁');
+}
+
+function toggleWorkspaceExpanded(folderPath) {
+  const list = getActiveWorkspaces();
+  const ws = list.find(w => w.path.toLowerCase() === folderPath.toLowerCase());
+  if (ws) {
+    ws.expanded = !ws.expanded;
+    saveActiveWorkspaces(list);
+    renderWorkspacesSidebar();
+  }
+}
+
+function getWorkspaceStorageKey(folderPath) {
+  const target = folderPath || currentWorkspaceFolder;
+  if (!target) return 'courtesy_chats___default__';
+  const cleanPath = target.replace(/[\\/]+$/, '').toLowerCase();
   return `courtesy_chats_${encodeURIComponent(cleanPath)}`;
 }
 
-function createChatObject(title = 'New Conversation') {
+function getWorkspaceChats(folderPath) {
+  const storageKey = getWorkspaceStorageKey(folderPath);
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error('Failed to parse chats from localStorage:', e);
+  }
+  return [];
+}
+
+function saveWorkspaceChatsForFolder(folderPath, chats) {
+  const storageKey = getWorkspaceStorageKey(folderPath);
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(chats));
+  } catch (e) {
+    console.error('Failed to save chats to localStorage:', e);
+  }
+}
+
+function createChatObject(title = 'New Conversation', workspacePath = '') {
   return {
     id: `chat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     title: title,
+    workspacePath: workspacePath || currentWorkspaceFolder || '',
     createdAt: Date.now(),
     updatedAt: Date.now(),
     model: ideSelectedModel || '14b',
@@ -1425,157 +1547,249 @@ function createChatObject(title = 'New Conversation') {
 }
 
 function getActiveChat() {
-  return workspaceChats.find(c => c.id === activeChatId) || null;
-}
-
-function loadWorkspaceChats() {
-  const storageKey = getWorkspaceStorageKey();
-  let chats = [];
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (raw) chats = JSON.parse(raw);
-  } catch (e) {
-    console.error('Failed to parse chats from localStorage:', e);
-  }
-
-  if (!Array.isArray(chats) || chats.length === 0) {
-    const fresh = createChatObject('New Conversation');
-    chats = [fresh];
-    activeChatId = fresh.id;
-    workspaceChats = chats;
-    saveWorkspaceChats();
-  } else {
-    workspaceChats = chats;
-    const savedActiveId = localStorage.getItem(`courtesy_active_chat_${storageKey}`);
-    if (savedActiveId && workspaceChats.some(c => c.id === savedActiveId)) {
-      activeChatId = savedActiveId;
-    } else {
-      activeChatId = workspaceChats[0].id;
-    }
-  }
-
-  renderChatsSidebar();
-  loadActiveChatMessages();
+  if (!activeChatId) return null;
+  const chats = getWorkspaceChats(currentWorkspaceFolder);
+  return chats.find(c => c.id === activeChatId) || workspaceChats.find(c => c.id === activeChatId) || null;
 }
 
 function saveWorkspaceChats() {
-  const storageKey = getWorkspaceStorageKey();
-  try {
-    localStorage.setItem(storageKey, JSON.stringify(workspaceChats));
-    if (activeChatId) {
-      localStorage.setItem(`courtesy_active_chat_${storageKey}`, activeChatId);
+  if (currentWorkspaceFolder) {
+    saveWorkspaceChatsForFolder(currentWorkspaceFolder, workspaceChats);
+  } else {
+    const storageKey = getWorkspaceStorageKey('');
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(workspaceChats));
+    } catch (e) {}
+  }
+}
+
+function selectWorkspaceChat(chatId, folderPath) {
+  currentWorkspaceFolder = folderPath;
+  localStorage.setItem('workspace_folder', folderPath);
+  workspaceChats = getWorkspaceChats(folderPath);
+  activeChatId = chatId;
+
+  getWorkspaceFileList(folderPath).then(files => {
+    cachedWorkspaceFiles = files || [];
+    ideFileTreeData = files || [];
+  });
+
+  loadActiveChatMessages();
+  updateIdeWorkspaceUI();
+  renderWorkspacesSidebar();
+
+  setTimeout(() => {
+    const input = document.getElementById('ide-chat-input');
+    if (input) input.focus();
+  }, 100);
+}
+
+function createNewChatInWorkspace(folderPath, e) {
+  if (e) e.stopPropagation();
+  let targetFolder = folderPath;
+  if (!targetFolder) {
+    const workspaces = getActiveWorkspaces();
+    if (workspaces.length > 0) targetFolder = workspaces[0].path;
+    else {
+      pickWorkspaceFolder();
+      return;
     }
-  } catch (e) {
-    console.error('Failed to save chats to localStorage:', e);
+  }
+
+  const chats = getWorkspaceChats(targetFolder);
+  const newChat = createChatObject('New Conversation', targetFolder);
+  chats.unshift(newChat);
+  saveWorkspaceChatsForFolder(targetFolder, chats);
+
+  selectWorkspaceChat(newChat.id, targetFolder);
+}
+
+function deleteWorkspaceChat(chatId, folderPath, e) {
+  if (e) e.stopPropagation();
+  let chats = getWorkspaceChats(folderPath);
+  chats = chats.filter(c => c.id !== chatId);
+  saveWorkspaceChatsForFolder(folderPath, chats);
+
+  if (activeChatId === chatId) {
+    closeActiveConversation();
+  } else {
+    renderWorkspacesSidebar();
+  }
+  showToast('Chat deleted', '🗑️');
+}
+
+function closeActiveConversation() {
+  activeChatId = null;
+  ideChatHistory = [];
+  updateIdeWorkspaceUI();
+  renderWorkspacesSidebar();
+}
+
+function createChatInDefaultWorkspace() {
+  const workspaces = getActiveWorkspaces();
+  if (workspaces.length > 0) {
+    const target = currentWorkspaceFolder || workspaces[0].path;
+    createNewChatInWorkspace(target);
+  } else {
+    pickWorkspaceFolder();
+  }
+}
+
+function loadWorkspaceChats() {
+  renderWorkspacesSidebar();
+  if (activeChatId) {
+    loadActiveChatMessages();
   }
 }
 
 function createNewChat() {
-  const active = getActiveChat();
-  if (active && (!active.messages || active.messages.length === 0) && active.title === 'New Conversation') {
-    loadActiveChatMessages();
-    const input = document.getElementById('ide-chat-input');
-    if (input) input.focus();
-    return;
-  }
-
-  const newChat = createChatObject('New Conversation');
-  workspaceChats.unshift(newChat);
-  activeChatId = newChat.id;
-  saveWorkspaceChats();
-  renderChatsSidebar();
-  loadActiveChatMessages();
-
-  const input = document.getElementById('ide-chat-input');
-  if (input) {
-    input.value = '';
-    input.focus();
-  }
+  createChatInDefaultWorkspace();
 }
 
 function selectChat(chatId) {
-  if (activeChatId === chatId) return;
-  activeChatId = chatId;
-  saveWorkspaceChats();
-  renderChatsSidebar();
-  loadActiveChatMessages();
-
-  const input = document.getElementById('ide-chat-input');
-  if (input) input.focus();
+  const workspaces = getActiveWorkspaces();
+  for (const ws of workspaces) {
+    const chats = getWorkspaceChats(ws.path);
+    if (chats.some(c => c.id === chatId)) {
+      selectWorkspaceChat(chatId, ws.path);
+      return;
+    }
+  }
 }
 
 function deleteChat(chatId, e) {
-  if (e) e.stopPropagation();
-  const idx = workspaceChats.findIndex(c => c.id === chatId);
-  if (idx < 0) return;
-
-  workspaceChats.splice(idx, 1);
-  if (workspaceChats.length === 0) {
-    const fresh = createChatObject('New Conversation');
-    workspaceChats = [fresh];
-    activeChatId = fresh.id;
-  } else if (activeChatId === chatId) {
-    activeChatId = workspaceChats[0].id;
+  const workspaces = getActiveWorkspaces();
+  for (const ws of workspaces) {
+    const chats = getWorkspaceChats(ws.path);
+    if (chats.some(c => c.id === chatId)) {
+      deleteWorkspaceChat(chatId, ws.path, e);
+      return;
+    }
   }
-
-  saveWorkspaceChats();
-  renderChatsSidebar();
-  loadActiveChatMessages();
-  showToast('Chat deleted', '🗑️');
-}
-
-function formatChatTime(timestamp) {
-  if (!timestamp) return 'Just now';
-  const diff = Date.now() - timestamp;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d ago`;
-  return new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 function renderChatsSidebar() {
-  const listEl = document.getElementById('ide-chats-list');
-  const countEl = document.getElementById('sidebar-chat-count');
-  if (countEl) countEl.innerText = workspaceChats.length.toString();
-  if (!listEl) return;
+  renderWorkspacesSidebar();
+}
 
-  listEl.innerHTML = '';
-  workspaceChats.forEach(chat => {
-    const isActive = (chat.id === activeChatId);
-    const item = document.createElement('div');
-    item.className = `chat-item group relative flex items-center justify-between px-2.5 py-2 rounded-xl cursor-pointer text-xs transition select-none ${
-      isActive 
-        ? 'bg-neutral-200/90 dark:bg-neutral-800 text-black dark:text-white font-medium shadow-xs' 
-        : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800/50 hover:text-black dark:hover:text-white'
-    }`;
-    item.onclick = () => selectChat(chat.id);
+function renderWorkspacesSidebar() {
+  const container = document.getElementById('ide-workspaces-list');
+  const countEl = document.getElementById('sidebar-workspace-count');
+  const workspaces = getActiveWorkspaces();
 
-    const safeTitle = escapeHtml(chat.title || 'Conversation');
-    const timeStr = formatChatTime(chat.updatedAt || chat.createdAt);
-    const modelBadge = (chat.model || '14b').toUpperCase();
+  if (countEl) countEl.innerText = workspaces.length.toString();
+  if (!container) return;
 
-    item.innerHTML = `
-      <div class="flex items-center gap-2 min-w-0 flex-1 pr-1">
-        <i data-lucide="message-square" class="w-3.5 h-3.5 flex-shrink-0 opacity-70"></i>
-        <div class="min-w-0 flex-1">
-          <div class="truncate text-xs leading-tight">${safeTitle}</div>
-          <div class="text-[10px] font-mono text-neutral-400 dark:text-neutral-500 leading-tight mt-0.5">
-            ${timeStr} • ${modelBadge}
-          </div>
-        </div>
+  container.innerHTML = '';
+
+  if (workspaces.length === 0) {
+    container.innerHTML = `
+      <div class="px-3 py-6 text-center text-xs text-neutral-400 dark:text-neutral-500 space-y-2 select-none">
+        <p class="text-[11px] font-mono">No active workspaces.</p>
+        <button onclick="pickWorkspaceFolder()"
+          class="px-3 py-1.5 rounded-xl border border-dashed border-neutral-300 dark:border-neutral-700 hover:border-black dark:hover:border-white text-neutral-700 dark:text-neutral-300 hover:text-black dark:hover:text-white transition flex items-center gap-1.5 mx-auto font-mono text-[11px]">
+          <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
+          <span>Add Folder</span>
+        </button>
       </div>
-      <button onclick="deleteChat('${chat.id}', event)"
-        class="opacity-0 group-hover:opacity-100 p-1 hover:bg-neutral-300/80 dark:hover:bg-neutral-700 text-neutral-400 hover:text-rose-600 rounded transition flex-shrink-0"
-        title="Delete Conversation">
-        <i data-lucide="trash-2" class="w-3 h-3"></i>
-      </button>
     `;
-    listEl.appendChild(item);
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  workspaces.forEach(ws => {
+    const chats = getWorkspaceChats(ws.path);
+    const isExpanded = ws.expanded !== false;
+    const isCurrentWs = (currentWorkspaceFolder && currentWorkspaceFolder.toLowerCase() === ws.path.toLowerCase());
+    const safePath = escapeHtml(ws.path);
+    const safeName = escapeHtml(ws.name || getFolderName(ws.path));
+
+    const group = document.createElement('div');
+    group.className = 'workspace-group rounded-xl border border-neutral-200/80 dark:border-neutral-800/80 bg-white/70 dark:bg-neutral-900/40 overflow-hidden transition-all duration-150';
+
+    // Workspace Folder Header
+    const header = document.createElement('div');
+    header.className = `workspace-header flex items-center justify-between px-2.5 py-2 cursor-pointer transition group select-none ${
+      isCurrentWs ? 'bg-neutral-100/80 dark:bg-neutral-800/60' : 'hover:bg-neutral-100/50 dark:hover:bg-neutral-800/40'
+    }`;
+    header.title = ws.path;
+    header.onclick = () => toggleWorkspaceExpanded(ws.path);
+
+    header.innerHTML = `
+      <div class="flex items-center gap-1.5 min-w-0 flex-1 pr-1">
+        <button class="p-0.5 text-neutral-400 hover:text-black dark:hover:text-white transition flex-shrink-0" title="${isExpanded ? 'Collapse' : 'Expand'}">
+          <i data-lucide="${isExpanded ? 'chevron-down' : 'chevron-right'}" class="w-3 h-3"></i>
+        </button>
+        <i data-lucide="folder" class="w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400 flex-shrink-0"></i>
+        <span class="text-xs font-semibold text-black dark:text-white truncate font-mono">${safeName}</span>
+        <span class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-neutral-200/60 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 flex-shrink-0 ml-0.5">${chats.length}</span>
+      </div>
+      <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0" onclick="event.stopPropagation()">
+        <button onclick="createNewChatInWorkspace('${safePath}', event)"
+          class="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-500 hover:text-black dark:hover:text-white rounded transition"
+          title="New Conversation in ${safeName}">
+          <i data-lucide="plus" class="w-3 h-3"></i>
+        </button>
+        <button onclick="removeWorkspaceFolder('${safePath}', event)"
+          class="p-1 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-neutral-400 hover:text-rose-600 rounded transition"
+          title="Remove Workspace">
+          <i data-lucide="x" class="w-3 h-3"></i>
+        </button>
+      </div>
+    `;
+    group.appendChild(header);
+
+    // Nested Conversations List
+    if (isExpanded) {
+      const chatsContainer = document.createElement('div');
+      chatsContainer.className = 'workspace-chats-list px-1.5 pb-1.5 space-y-0.5 border-t border-neutral-100 dark:border-neutral-800/60 pt-1';
+
+      if (chats.length === 0) {
+        chatsContainer.innerHTML = `
+          <button onclick="createNewChatInWorkspace('${safePath}')"
+            class="w-full text-left px-2 py-1.5 rounded-lg text-[11px] text-neutral-400 dark:text-neutral-500 hover:text-black dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800/40 flex items-center gap-1.5 transition font-mono">
+            <i data-lucide="plus" class="w-3 h-3"></i>
+            <span>New Conversation</span>
+          </button>
+        `;
+      } else {
+        chats.forEach(chat => {
+          const isActive = (chat.id === activeChatId && isCurrentWs);
+          const item = document.createElement('div');
+          item.className = `chat-item group relative flex items-center justify-between px-2 py-1.5 rounded-lg cursor-pointer text-xs transition select-none ${
+            isActive
+              ? 'bg-black text-white dark:bg-white dark:text-black font-medium shadow-xs'
+              : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800/50 hover:text-black dark:hover:text-white'
+          }`;
+          item.onclick = () => selectWorkspaceChat(chat.id, ws.path);
+
+          const safeTitle = escapeHtml(chat.title || 'Conversation');
+          const timeStr = formatChatTime(chat.updatedAt || chat.createdAt);
+          const modelBadge = (chat.model || '14b').toUpperCase();
+
+          item.innerHTML = `
+            <div class="flex items-center gap-1.5 min-w-0 flex-1 pr-1">
+              <i data-lucide="message-square" class="w-3 h-3 flex-shrink-0 ${isActive ? 'opacity-90' : 'opacity-50'}"></i>
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-xs leading-tight">${safeTitle}</div>
+                <div class="text-[9px] font-mono leading-tight mt-0.5 ${isActive ? 'text-neutral-300 dark:text-neutral-600' : 'text-neutral-400 dark:text-neutral-500'}">
+                  ${timeStr} • ${modelBadge}
+                </div>
+              </div>
+            </div>
+            <button onclick="deleteWorkspaceChat('${chat.id}', '${safePath}', event)"
+              class="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-neutral-200/80 dark:hover:bg-neutral-700 ${isActive ? 'text-neutral-300 hover:text-white dark:text-neutral-600 dark:hover:text-black' : 'text-neutral-400 hover:text-rose-600'} rounded transition flex-shrink-0"
+              title="Delete Conversation">
+              <i data-lucide="trash-2" class="w-3 h-3"></i>
+            </button>
+          `;
+          chatsContainer.appendChild(item);
+        });
+      }
+      group.appendChild(chatsContainer);
+    }
+
+    container.appendChild(group);
   });
 
   if (window.lucide) lucide.createIcons();
@@ -1728,6 +1942,9 @@ function startStandardMode(activeServer) {
   }
   updateIdeModelUI();
   updateIdeSidebarUI();
+
+  // DEFAULT: NOTHING OPEN!
+  activeChatId = null;
   loadWorkspaceChats();
   updateIdeWorkspaceUI();
 }
@@ -1736,33 +1953,68 @@ function updateIdeWorkspaceUI() {
   const emptyState = document.getElementById('ide-empty-state');
   const workspaceView = document.getElementById('ide-workspace-view');
   const topbarFolderBtn = document.getElementById('topbar-folder-name');
-  const closeFolderBtn = document.getElementById('btn-topbar-close-folder');
-  const sidebarWorkspaceTitle = document.getElementById('sidebar-workspace-title');
+  const closeChatBtn = document.getElementById('btn-topbar-close-chat') || document.getElementById('btn-topbar-close-folder');
+  const emptyTitle = document.getElementById('ide-empty-title');
+  const emptySubtitle = document.getElementById('ide-empty-subtitle');
+  const emptyActions = document.getElementById('ide-empty-actions');
 
-  if (!currentWorkspaceFolder) {
-    // 1. Default Screen: No folder chosen
+  const workspaces = getActiveWorkspaces();
+
+  if (!activeChatId) {
+    // 1. DEFAULT NOTHING OPEN STATE
     if (emptyState) emptyState.classList.remove('hidden');
     if (workspaceView) workspaceView.classList.add('hidden');
-    if (topbarFolderBtn) topbarFolderBtn.innerText = 'Open Folder';
-    if (closeFolderBtn) closeFolderBtn.classList.add('hidden');
-    if (sidebarWorkspaceTitle) {
-      sidebarWorkspaceTitle.innerText = 'No folder open';
-      sidebarWorkspaceTitle.title = 'No workspace open';
+    if (closeChatBtn) closeChatBtn.classList.add('hidden');
+
+    if (workspaces.length === 0) {
+      if (topbarFolderBtn) topbarFolderBtn.innerText = 'Add Workspace';
+      if (emptyTitle) emptyTitle.innerText = 'Open a folder to start';
+      if (emptySubtitle) emptySubtitle.innerText = 'Select a project directory to explore code and converse with Courtesy';
+      if (emptyActions) {
+        emptyActions.innerHTML = `
+          <button onclick="pickWorkspaceFolder()"
+            class="px-5 py-2.5 rounded-xl bg-black dark:bg-white hover:bg-neutral-800 dark:hover:bg-neutral-200 text-white dark:text-black font-medium text-xs shadow-sm flex items-center gap-2 transition hover:scale-[1.02] active:scale-[0.98]">
+            <i data-lucide="folder-open" class="w-4 h-4"></i>
+            <span>Open Folder</span>
+            <span class="ml-1 text-[10px] text-neutral-400 dark:text-neutral-600 font-mono bg-neutral-800 dark:bg-neutral-200 px-1.5 py-0.5 rounded">Ctrl+O</span>
+          </button>
+        `;
+      }
+    } else {
+      const defaultWs = currentWorkspaceFolder || workspaces[0].path;
+      const wsName = getFolderName(defaultWs);
+      if (topbarFolderBtn) topbarFolderBtn.innerText = currentWorkspaceFolder ? wsName : 'Workspaces';
+      if (emptyTitle) emptyTitle.innerText = 'No conversation open';
+      if (emptySubtitle) emptySubtitle.innerText = 'Select a conversation from the sidebar or start a new one within a workspace.';
+      if (emptyActions) {
+        emptyActions.innerHTML = `
+          <button onclick="createNewChatInWorkspace('${escapeHtml(defaultWs)}')"
+            class="px-4 py-2 rounded-xl bg-black dark:bg-white hover:bg-neutral-800 dark:hover:bg-neutral-200 text-white dark:text-black font-medium text-xs shadow-sm flex items-center gap-2 transition hover:scale-[1.02] active:scale-[0.98]">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>New in ${escapeHtml(wsName)}</span>
+          </button>
+          <button onclick="pickWorkspaceFolder()"
+            class="px-4 py-2 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-white text-neutral-700 dark:text-neutral-300 hover:text-black dark:hover:text-white font-medium text-xs shadow-sm flex items-center gap-2 transition hover:scale-[1.02] active:scale-[0.98]">
+            <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
+            <span>Add Workspace</span>
+          </button>
+        `;
+      }
     }
   } else {
-    // 2. Active Workspace: Show Antigravity conversation and bottom input bar
+    // 2. ACTIVE CONVERSATION STATE
     if (emptyState) emptyState.classList.add('hidden');
     if (workspaceView) {
       workspaceView.classList.remove('hidden');
       workspaceView.classList.add('animate-seq-fade');
     }
-    const shortName = getFolderName(currentWorkspaceFolder);
-    if (topbarFolderBtn) topbarFolderBtn.innerText = shortName;
-    if (closeFolderBtn) closeFolderBtn.classList.remove('hidden');
-    if (sidebarWorkspaceTitle) {
-      sidebarWorkspaceTitle.innerText = shortName;
-      sidebarWorkspaceTitle.title = currentWorkspaceFolder;
-    }
+    if (closeChatBtn) closeChatBtn.classList.remove('hidden');
+
+    const shortName = getFolderName(currentWorkspaceFolder || 'Workspace');
+    const activeChat = getActiveChat();
+    const chatTitle = activeChat?.title || 'Conversation';
+
+    if (topbarFolderBtn) topbarFolderBtn.innerText = `${shortName} / ${chatTitle}`;
 
     const folderNameBadge = document.getElementById('ide-active-folder-name');
     if (folderNameBadge) folderNameBadge.innerText = shortName;
@@ -1771,17 +2023,14 @@ function updateIdeWorkspaceUI() {
     if (welcomeTitle) welcomeTitle.innerHTML = `Workspace: <span class="font-mono text-black dark:text-white">${shortName}</span>`;
 
     const fileCountEl = document.getElementById('ide-welcome-file-count');
-    if (fileCountEl) fileCountEl.innerText = 'Scanning workspace files...';
-
-    getWorkspaceFileList(currentWorkspaceFolder).then(files => {
-      cachedWorkspaceFiles = files || [];
-      if (fileCountEl) {
-        const count = cachedWorkspaceFiles.length;
+    if (fileCountEl) {
+      const count = (cachedWorkspaceFiles || []).length;
+      if (count > 0) {
         fileCountEl.innerText = `${count} ${count === 1 ? 'file' : 'files'} indexed • Ready for queries`;
+      } else {
+        fileCountEl.innerText = 'Workspace active • Ready for queries';
       }
-    }).catch(() => {
-      if (fileCountEl) fileCountEl.innerText = 'Workspace active • Ready for queries';
-    });
+    }
 
     recordRecentWorkspace(currentWorkspaceFolder);
 
@@ -1797,10 +2046,11 @@ function updateIdeWorkspaceUI() {
 }
 
 function closeWorkspaceFolder() {
-  currentWorkspaceFolder = '';
-  localStorage.removeItem('workspace_folder');
-  loadWorkspaceChats();
-  updateIdeWorkspaceUI();
+  closeActiveConversation();
+}
+
+function handleTopbarBreadcrumbClick() {
+  pickWorkspaceFolder();
 }
 
 let isIdeStreaming = false;
@@ -5629,18 +5879,15 @@ document.addEventListener('DOMContentLoaded', () => {
   syncEditorGutter();
   initResizers();
 
-  // Restore saved workspace folder and project list (no dummy courtesy folder)
+  // Restore saved workspace folder and active workspaces (default: nothing open)
+  activeChatId = null;
   const savedFolder = localStorage.getItem('workspace_folder') || '';
   if (savedFolder && savedFolder !== 'courtesy') {
     currentWorkspaceFolder = savedFolder;
-    renderProjectsList();
-    switchWorkspace(savedFolder);
-  } else {
-    currentWorkspaceFolder = '';
-    renderProjectsList();
-    const label = document.getElementById('current-folder-label');
-    if (label) label.innerText = 'Select Workspace Folder';
+    addActiveWorkspace(savedFolder);
   }
+  renderWorkspacesSidebar();
+  updateIdeWorkspaceUI();
 
   // Route to saved admin session or landing launch portal
   const savedToken = sessionStorage.getItem('admin_token');

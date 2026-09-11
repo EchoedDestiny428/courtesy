@@ -1,4 +1,4 @@
-﻿// Courtesy IDE — Chat Engine Module
+// Courtesy IDE — Chat Engine Module
 // Manages all conversation lifecycle: create, select, delete, rename, send, stream.
 
 import { getState, setState, getStateRaw, createChatObject, loadChatsFromStorage, saveChatsToStorage, saveActiveChatId, loadActiveChatId } from './state.js';
@@ -10,19 +10,18 @@ export function initChat(apiBaseUrl) { _apiBaseUrl = apiBaseUrl; }
 function getApiBase() { return _apiBaseUrl || window.apiBaseUrl || 'http://100.107.249.92:8000'; }
 
 // ── Load/Save ─────────────────────────────────────────────────────────────────
-export function loadChats() {
-  const { workspaceFolder, selectedModel } = getState();
-  let chats = loadChatsFromStorage(workspaceFolder);
+export function loadChats(autoSelect = false) {
+  const { workspaceFolder } = getState();
+  let chats = loadChatsFromStorage(workspaceFolder) || [];
 
-  if (!Array.isArray(chats) || chats.length === 0) {
-    const fresh = createChatObject('New Conversation', selectedModel);
-    chats = [fresh];
-    saveChatsToStorage(chats, workspaceFolder);
-  }
-
-  let activeChatId = loadActiveChatId(workspaceFolder);
-  if (!activeChatId || !chats.some(c => c.id === activeChatId)) {
-    activeChatId = chats[0].id;
+  let activeChatId = null;
+  if (autoSelect && chats.length > 0) {
+    const saved = loadActiveChatId(workspaceFolder);
+    if (saved && chats.some(c => c.id === saved)) {
+      activeChatId = saved;
+    } else {
+      activeChatId = chats[0].id;
+    }
   }
 
   setState({ workspaceChats: chats, activeChatId });
