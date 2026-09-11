@@ -11,7 +11,7 @@ import { initKeymap, showKeymapModal } from './modules/keymap.js';
 import { initWorkspace, pickWorkspaceFolder, setWorkspaceFolder, closeWorkspaceFolder,
          getFolderName, getFileList, readFile, writeFile, applyDiff,
          runCommand, refreshGitStatus, getRecentWorkspaces, searchWorkspace,
-         createFile, deleteItem, renameItem } from './modules/workspace.js';
+         createFile, deleteItem, renameItem, isPathStrictlyInWorkspace } from './modules/workspace.js';
 import { initChat, loadChats, saveChats, createNewChat, selectChat, deleteChat,
          renameChat, sendMessage, stopStreaming, getActiveChat, formatChatTime } from './modules/chat.js';
 import { initTelemetry, openTelemetryTray, toggleTelemetryTray, closeTelemetryTray, flushActiveNodeVram } from './modules/telemetry.js';
@@ -65,6 +65,8 @@ window.writeWorkspaceFileContent= writeFile;
 window.applyWorkspaceFileDiff   = applyDiff;
 window.runWorkspaceCommand      = runCommand;
 window.getRecentWorkspaces      = getRecentWorkspaces;
+window.isPathStrictlyInWorkspace= isPathStrictlyInWorkspace;
+window.enhanceCodeBlocks        = enhanceCodeBlocks;
 
 // Chat & Workspaces — expose new module fns
 window.createNewChatModern = createNewChat;

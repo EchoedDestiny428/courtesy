@@ -137,9 +137,10 @@ export async function sendMessage(text) {
   saveChats();
   emit('chat:message-added', { role: 'user', content: cleanText, chatId: activeChat.id });
 
-  // Build system prompt with workspace context
+  // Build system prompt with workspace context and sandboxing rules
   const filesSnippet = cachedFiles.slice(0, 35).map(f => f.name || (f.path || '').split(/[/\\]/).pop()).join(', ');
-  const systemPrompt = `You are Courtesy, an elite autonomous Antigravity AI coding assistant and pair programmer.\nActive Workspace Folder: ${workspaceFolder || 'Workspace'}\nFiles in Workspace: ${filesSnippet || 'Standard project'}\nProvide clean, production-ready code blocks with filename headers and clear explanations.`;
+  const isAutoWrite = Boolean(activeChat?.settings?.skipWritePermissions);
+  const systemPrompt = `You are Courtesy, an elite autonomous Antigravity AI coding assistant and pair programmer.\nActive Workspace Folder: ${workspaceFolder || 'Workspace'}\nFiles in Workspace: ${filesSnippet || 'Standard project'}\n\nWORKSPACE & FILE RULES:\n- You are strictly permitted to add and modify files WITHIN the active workspace folder (${workspaceFolder || 'Workspace'}) only.\n- You must NEVER attempt to access or modify files outside of this active workspace directory.\n- Permission Status: By default, Courtesy prompts the user for permission before modifying/writing any file (${isAutoWrite ? 'Auto-write permission enabled for this chat' : 'User confirmation requested before each write'}).\n- When creating or updating files, always format code in markdown code blocks with the target file path in a comment on line 1, e.g.:\n\`\`\`js\n// filename: src/utils/helpers.js\nexport function ...\n\`\`\`\nProvide concise explanations of your changes alongside the code.`;
 
   const modelName = selectedModel === '7b' ? 'qwen2.5-coder:7b' : 'qwen2.5-coder:14b';
   const historyMessages = activeChat.messages.map(m => ({ role: m.role, content: m.content }));

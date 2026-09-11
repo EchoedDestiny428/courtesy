@@ -1542,14 +1542,121 @@ function createChatObject(title = 'New Conversation', workspacePath = '') {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     model: ideSelectedModel || '14b',
-    messages: []
+    messages: [],
+    settings: {
+      skipWritePermissions: false
+    }
   };
 }
 
 function getActiveChat() {
   if (!activeChatId) return null;
   const chats = getWorkspaceChats(currentWorkspaceFolder);
-  return chats.find(c => c.id === activeChatId) || workspaceChats.find(c => c.id === activeChatId) || null;
+  const found = chats.find(c => c.id === activeChatId) || workspaceChats.find(c => c.id === activeChatId) || null;
+  if (found) {
+    if (!found.settings) found.settings = { skipWritePermissions: false };
+    else if (typeof found.settings.skipWritePermissions === 'undefined') found.settings.skipWritePermissions = false;
+  }
+  return found;
+}
+
+// ── Path Sandboxing: Strictly restrict AI file modifications to workspace ────
+function isPathStrictlyInWorkspace(targetPath, workspaceFolder) {
+  const ws = workspaceFolder || currentWorkspaceFolder;
+  if (!targetPath || !ws) return false;
+
+  const wsNorm = ws.replace(/\\/g, '/').replace(/\/+$/, '');
+  let targetNorm = targetPath.replace(/\\/g, '/').trim();
+
+  let fullPath = targetNorm;
+  if (!fullPath.toLowerCase().startsWith(wsNorm.toLowerCase())) {
+    fullPath = wsNorm + '/' + fullPath.replace(/^(\.\/|\/)/, '');
+  }
+
+  const segments = fullPath.split('/');
+  const resolved = [];
+  for (const seg of segments) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') {
+      if (resolved.length === 0) return false;
+      resolved.pop();
+    } else {
+      resolved.push(seg);
+    }
+  }
+
+  const resolvedStr = (fullPath.startsWith('/') ? '/' : '') + resolved.join('/');
+  const wsResolved = (wsNorm.startsWith('/') ? '/' : '') + wsNorm.split('/').filter(s => s && s !== '.').join('/');
+
+  return resolvedStr.toLowerCase().startsWith((wsResolved + '/').toLowerCase()) || resolvedStr.toLowerCase() === wsResolved.toLowerCase();
+}
+
+// ── Per-Conversation Settings & Permissions ─────────────────────────────────
+function openConversationSettingsModal() {
+  const activeChat = getActiveChat();
+  if (!activeChat) {
+    showToast('No active conversation', 'ℹ️');
+    return;
+  }
+  activeChat.settings = activeChat.settings || { skipWritePermissions: false };
+
+  const modal = document.getElementById('modal-conversation-settings');
+  const titleEl = document.getElementById('settings-modal-chat-title');
+  const wsEl = document.getElementById('settings-modal-workspace-name');
+  const toggle = document.getElementById('setting-skip-write-permissions');
+
+  if (titleEl) titleEl.innerText = activeChat.title || 'Untitled Conversation';
+  if (wsEl) wsEl.innerText = getFolderName(currentWorkspaceFolder || 'Workspace');
+  if (toggle) toggle.checked = Boolean(activeChat.settings.skipWritePermissions);
+
+  if (modal) {
+    modal.classList.remove('hidden');
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
+function closeConversationSettingsModal() {
+  const modal = document.getElementById('modal-conversation-settings');
+  if (modal) modal.classList.add('hidden');
+  updateConversationSettingsButtonUI();
+}
+
+function toggleConversationSkipWritePermission(checked) {
+  const activeChat = getActiveChat();
+  if (!activeChat) return;
+  activeChat.settings = activeChat.settings || {};
+  activeChat.settings.skipWritePermissions = Boolean(checked);
+  saveWorkspaceChats();
+  updateConversationSettingsButtonUI();
+  showToast(
+    checked ? 'Auto-approve file writes enabled for this conversation' : 'File write permission prompts enabled',
+    checked ? '⚡' : '🛡️'
+  );
+}
+
+function updateConversationSettingsButtonUI() {
+  const activeChat = getActiveChat();
+  const statusEl = document.getElementById('ide-conv-settings-status');
+  const btnEl = document.getElementById('btn-conversation-settings');
+  if (!statusEl || !btnEl) return;
+
+  if (!activeChatId || !activeChat) {
+    btnEl.classList.add('hidden');
+    return;
+  }
+  btnEl.classList.remove('hidden');
+
+  const isSkipped = Boolean(activeChat?.settings?.skipWritePermissions);
+  if (isSkipped) {
+    statusEl.innerText = 'Auto-Write';
+    btnEl.className = 'flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 dark:bg-amber-400/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition cursor-pointer select-none text-[10px] font-mono';
+    btnEl.title = 'File writes are auto-approved for this conversation (Click to modify)';
+  } else {
+    statusEl.innerText = 'Protected';
+    btnEl.className = 'flex items-center gap-1 px-1.5 py-0.5 rounded-md hover:bg-neutral-200/70 dark:hover:bg-neutral-800 text-neutral-500 hover:text-black dark:hover:text-white transition cursor-pointer select-none text-[10px] font-mono';
+    btnEl.title = 'Courtesy requests permission before each file write (Click to modify)';
+  }
+  if (window.lucide) lucide.createIcons();
 }
 
 function saveWorkspaceChats() {
@@ -1577,6 +1684,7 @@ function selectWorkspaceChat(chatId, folderPath) {
   loadActiveChatMessages();
   updateIdeWorkspaceUI();
   renderWorkspacesSidebar();
+  updateConversationSettingsButtonUI();
 
   setTimeout(() => {
     const input = document.getElementById('ide-chat-input');
@@ -1623,6 +1731,7 @@ function closeActiveConversation() {
   ideChatHistory = [];
   updateIdeWorkspaceUI();
   renderWorkspacesSidebar();
+  updateConversationSettingsButtonUI();
 }
 
 function createChatInDefaultWorkspace() {
@@ -1874,6 +1983,10 @@ function renderIdeMessageItem(msg, id) {
         }
       });
     }
+
+    if (typeof window.enhanceCodeBlocks === 'function') {
+      try { window.enhanceCodeBlocks(assistantMsg); } catch(e) {}
+    }
   }
 }
 
@@ -2042,6 +2155,7 @@ function updateIdeWorkspaceUI() {
 
   renderRecentWorkspaces();
   updateIdeModelUI();
+  updateConversationSettingsButtonUI();
   if (window.lucide) lucide.createIcons();
 }
 
@@ -2189,7 +2303,8 @@ async function sendIdeChat() {
     if (cachedWorkspaceFiles && cachedWorkspaceFiles.length > 0) {
       filesSnippet = cachedWorkspaceFiles.slice(0, 35).map(f => f.name || f.path.split(/[\\/]/).pop()).join(', ');
     }
-    const systemPrompt = `You are Courtesy, an elite autonomous Antigravity AI coding assistant and pair programmer.\nActive Workspace Folder: ${currentWorkspaceFolder || 'Workspace'}\nFiles in Workspace: ${filesSnippet || 'Standard project'}\nProvide clean, production-ready code blocks with filename headers and clear explanations.`;
+    const isAutoWrite = Boolean(activeChat?.settings?.skipWritePermissions);
+    const systemPrompt = `You are Courtesy, an elite autonomous Antigravity AI coding assistant and pair programmer.\nActive Workspace Folder: ${currentWorkspaceFolder || 'Workspace'}\nFiles in Workspace: ${filesSnippet || 'Standard project'}\n\nWORKSPACE & FILE RULES:\n- You are strictly permitted to add and modify files WITHIN the active workspace folder (${currentWorkspaceFolder || 'Workspace'}) only.\n- You must NEVER attempt to access or modify files outside of this active workspace directory.\n- Permission Status: By default, Courtesy prompts the user for permission before modifying/writing any file (${isAutoWrite ? 'Auto-write permission enabled for this chat' : 'User confirmation requested before each write'}).\n- When creating or updating files, always format code in markdown code blocks with the target file path in a comment on line 1, e.g.:\n\`\`\`js\n// filename: src/utils/helpers.js\nexport function ...\n\`\`\`\nProvide concise explanations of your changes alongside the code.`;
 
     const modelName = (ideSelectedModel === '7b') ? 'qwen2.5-coder:7b' : 'qwen2.5-coder:14b';
 
@@ -2287,6 +2402,9 @@ async function sendIdeChat() {
     ideAbortController = null;
     if (sendBtn) sendBtn.classList.remove('hidden');
     if (stopBtn) stopBtn.classList.add('hidden');
+    if (contentEl && typeof window.enhanceCodeBlocks === 'function') {
+      try { window.enhanceCodeBlocks(contentEl); } catch(e) {}
+    }
     if (window.lucide) lucide.createIcons();
   }
 }

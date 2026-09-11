@@ -111,6 +111,37 @@ function _filterIgnoredPaths(files) {
   });
 }
 
+// ── Path Sandboxing & Security ──────────────────────────────────────────────────
+export function isPathStrictlyInWorkspace(targetPath, workspaceFolder) {
+  const ws = workspaceFolder || getState().workspaceFolder;
+  if (!targetPath || !ws) return false;
+
+  const wsNorm = ws.replace(/\\/g, '/').replace(/\/+$/, '');
+  let targetNorm = targetPath.replace(/\\/g, '/').trim();
+
+  let fullPath = targetNorm;
+  if (!fullPath.toLowerCase().startsWith(wsNorm.toLowerCase())) {
+    fullPath = wsNorm + '/' + fullPath.replace(/^(\.\/|\/)/, '');
+  }
+
+  const segments = fullPath.split('/');
+  const resolved = [];
+  for (const seg of segments) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') {
+      if (resolved.length === 0) return false;
+      resolved.pop();
+    } else {
+      resolved.push(seg);
+    }
+  }
+
+  const resolvedStr = (fullPath.startsWith('/') ? '/' : '') + resolved.join('/');
+  const wsResolved = (wsNorm.startsWith('/') ? '/' : '') + wsNorm.split('/').filter(s => s && s !== '.').join('/');
+
+  return resolvedStr.toLowerCase().startsWith((wsResolved + '/').toLowerCase()) || resolvedStr.toLowerCase() === wsResolved.toLowerCase();
+}
+
 // ── File Read / Write / Diff ───────────────────────────────────────────────────
 export async function readFile(filePath) {
   if (!filePath) return '';
@@ -129,6 +160,11 @@ export async function readFile(filePath) {
 
 export async function writeFile(filePath, content) {
   if (!filePath) return false;
+  const { workspaceFolder } = getState();
+  if (workspaceFolder && !isPathStrictlyInWorkspace(filePath, workspaceFolder)) {
+    console.warn(`[Courtesy Security] Blocked file write outside workspace: ${filePath}`);
+    return false;
+  }
   emit('workspace:file-saving', { path: filePath });
   if (window.electronAPI?.writeFile) {
     try { const r = await window.electronAPI.writeFile(filePath, content); if (r && !r.error) { emit('workspace:file-saved', { path: filePath }); return true; } } catch(e) {}
@@ -145,6 +181,11 @@ export async function writeFile(filePath, content) {
 
 export async function applyDiff(filePath, target, replacement) {
   if (!filePath) return false;
+  const { workspaceFolder } = getState();
+  if (workspaceFolder && !isPathStrictlyInWorkspace(filePath, workspaceFolder)) {
+    console.warn(`[Courtesy Security] Blocked diff outside workspace: ${filePath}`);
+    return false;
+  }
   if (window.electronAPI?.applyDiff) {
     try { const r = await window.electronAPI.applyDiff(filePath, target, replacement); if (r && !r.error) { emit('workspace:file-saved', { path: filePath }); return true; } } catch(e) {}
   }

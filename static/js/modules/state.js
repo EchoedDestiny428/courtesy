@@ -1,4 +1,4 @@
-﻿// Courtesy IDE — Central State Store
+// Courtesy IDE — Central State Store
 // All modules read/write state through here. Never maintain local copies.
 
 const _state = {
@@ -156,6 +156,9 @@ export function createChatObject(title = 'New Conversation', model = null) {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     model: model || _state.selectedModel || '14b',
-    messages: []
+    messages: [],
+    settings: {
+      skipWritePermissions: false
+    }
   };
 }
